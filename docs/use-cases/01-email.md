@@ -129,7 +129,7 @@ A draft is written into the person's Gmail Drafts folder. **Daylark never sends 
 | EM-121 | write an email to my landlord about the leak / email john about friday | New draft. Recipient from the person; if a name matches several people, ask "Which John: john@a.com or john@b.com?" | 🆕 |
 | EM-122 | reply to the second one | Ordinal reference to a listed email, then EM-120 | 🆕 |
 | EM-123 | make it shorter / more formal / add that i'm free after 3 | Edit the wording in the chat; on approval update the draft Daylark created (never anyone else's) | 🆕 |
-| EM-124 | send it / send that now / just send it | Decline: "I only save drafts; open Gmail and press Send." Never sends, whatever the wording | 🆕 |
+| EM-124 | send it / send that now / just send it | Decline kindly: "I only save drafts, so you get a moment to read it again. Open Gmail and press Send when you're ready." Never sends, whatever the wording. (A send option may come later, from feedback: R25.0) | 🆕 |
 | EM-125 | cc my boss / add sam | Ask for the address if unknown; show the recipients before approval | 🆕 |
 | EM-126 | reply all | Show every recipient that would be included; ask approval | 🆕 |
 | EM-127 | draft an email to everyone on the team | Ask for the list; never invent recipients | 🆕 |

@@ -125,7 +125,7 @@ Decided by the owner on 2026-09-20 (now in `RULES.md` as R20.5, R22, R23, R24):
 
 | # | Decision | Outcome |
 | --- | --- | --- |
-| D-1 | Drafting | **Create a Gmail draft for emails; never send; chat-only wording for other messages** (R25). Needs your confirmation of the permission trade-off below |
+| D-1 | Drafting | **Create a Gmail draft for emails; never send; chat-only wording for other messages** (R25). Trade-off accepted; not built yet |
 | D-7 | Clickable answer choices for clarifying questions | **Yes.** Built: the plumbing and the first source (ordinal questions); model-provided choices come with the next router version |
 | D-2 | One-time codes and reset links in email | **Leave them alone.** Never shown, quoted or acted on (R24). Stated in the Privacy Policy and Terms |
 | D-3 | Ambiguous asks: default or ask? | **Always ask when in doubt** (R22). The owner-defined 30-day default for an unstated window stays (R22.1) |
@@ -155,5 +155,5 @@ Still open:
 - Everyone who has already signed in must reconnect Google to grant the new permission.
 - `gmail.compose` is a restricted Google permission like today's read-only one, but the Google review looks harder at apps that can write to a mailbox.
 
-**Nothing has been changed in the app yet.** Please confirm you accept this trade-off before it is built (see `docs/TODO.md`).
+**Accepted by the owner (2026-09-20).** Daylark could send, and deliberately only drafts: people sometimes need to sleep on an email, and a send option inside a chat would invite impulse decisions. Sending may be offered later, based on feedback, as a separate decision. **Nothing has been changed in the app yet.**
 
