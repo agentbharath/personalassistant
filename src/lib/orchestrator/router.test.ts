@@ -124,3 +124,57 @@ describe("code checks structure and never judges the message (R19.5)", () => {
     expect(canon({ confidence: 0.97 }).confidence).toBe(canon({ confidence: 0.9 }).confidence);
   });
 });
+
+describe("router v7: drafts, redirects and choices (R22, R23, R25)", () => {
+  const draft = (over: Record<string, unknown> = {}) => ({ action: "create", kind: "reply", to: "sarah", replyTo: "sarah's email", instruction: "say I'll be there", version: null, ...over });
+  const redirect = (over: Record<string, unknown> = {}) => ({ category: "speculation", reply: "I can't tell you how they came by theirs, but I can help you find vintage shops near you.", distress: false, pivot: { capability: "web", ask: null }, ...over });
+
+  it("is version 7, asks when in doubt, and teaches drafting, redirecting and choices", () => {
+    expect(ROUTER_VERSION).toBe("router-v7");
+    expect(ROUTER_SYSTEM).toMatch(/When in doubt, ask/);
+    expect(ROUTER_SYSTEM).toMatch(/email_draft/);
+    expect(ROUTER_SYSTEM).toMatch(/Never just "I can't answer that"/);
+    expect(ROUTER_SYSTEM).toMatch(/one-time codes and links alone/);
+  });
+
+  it("reads a draft request into its parts, and asks when the draft details are missing", () => {
+    expect(canon({ operation: "email_draft", draft: draft() })).toMatchObject({ operation: "email_draft", draft: { action: "create", kind: "reply", to: "sarah" } });
+    expect(canon({ operation: "email_draft", draft: null })).toMatchObject({ operation: "clarify" });
+    expect(canon({ operation: "email_draft", draft: draft({ action: "revert", kind: null, to: null, replyTo: null, version: "the first one" }) }).draft).toMatchObject({ action: "revert", version: "the first one" });
+  });
+
+  it("keeps a redirect's message and a real pivot", () => {
+    expect(canon({ operation: "redirect", redirect: redirect() })).toMatchObject({ operation: "redirect", redirect: { category: "speculation", distress: false, pivot: { capability: "web", ask: null } } });
+  });
+
+  it("never sends a task pivot to someone in distress, whatever the model returned", () => {
+    const plan = canon({ operation: "redirect", redirect: redirect({ category: "emotional", distress: true }) }).redirect;
+    expect(plan).toMatchObject({ distress: true, pivot: null });
+  });
+
+  it("never turns a redirect into a bare refusal: a missing message is replaced with real help", () => {
+    const plan = canon({ operation: "redirect", redirect: redirect({ reply: "   " }) }).redirect!;
+    expect(plan.reply).not.toMatch(/^I can'?t answer that\.?$/i);
+    expect(plan.reply).toMatch(/email, calendar and spending/);
+    expect(canon({ operation: "redirect", redirect: null }).redirect?.reply).toMatch(/email, calendar and spending/);
+  });
+
+  it("offers two to six distinct, short choices, or none", () => {
+    expect(canon({ operation: "clarify", confidence: 0.4, clarification: "3 AM or 3 PM?", choices: ["3 AM", "3 PM"] }).choices).toEqual(["3 AM", "3 PM"]);
+    expect(canon({ operation: "clarify", confidence: 0.4, clarification: "Which?", choices: ["Only one"] }).choices).toBeNull();
+    expect(canon({ operation: "clarify", confidence: 0.4, clarification: "Which?", choices: ["a", "a", "b", "c", "d", "e", "f", "g", "h"] }).choices).toEqual(["a", "b", "c", "d", "e", "f"]);
+    expect(canon({ operation: "clarify", confidence: 0.4, clarification: "Which?", choices: null }).choices).toBeNull();
+  });
+
+  it("treats confidence below 0.8 as doubt, so it asks", () => {
+    expect(canon({ confidence: 0.79, clarification: "Which one?" })).toMatchObject({ confidence: 0.4, clarification: "Which one?" });
+    expect(canon({ confidence: 0.8, clarification: "Which one?" }).clarification).toBeNull();
+  });
+
+  it("reads the new fields from the model's answer, and tolerates an answer without them", async () => {
+    const complete = vi.fn().mockResolvedValueOnce(reply(out({ operation: "redirect", redirect: redirect(), choices: null, draft: null })))
+      .mockResolvedValueOnce(reply(out({ operation: "email" })));
+    expect((await routeMessage(input("how come people own vintage items but not me"), { complete }))?.redirect?.category).toBe("speculation");
+    expect((await routeMessage(input("all iherb receipts"), { complete }))?.operation).toBe("email");
+  });
+});

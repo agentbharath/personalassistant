@@ -141,3 +141,34 @@ describe("unsure means ask, and nothing runs (R19.6)", () => {
     for (const mock of [mocks.answerFinance, mocks.runBillsCommand, mocks.answerCalendar, mocks.prepareCalendarCreate, mocks.prepareCalendarDelete, mocks.handleEmailConversationTurn, mocks.saveLearning]) expect(mock).not.toHaveBeenCalled();
   });
 });
+
+describe("drafts, redirects and choices (R22, R23, R25)", () => {
+  it("answers a drafting request honestly while drafting is not released, and never makes up a draft", async () => {
+    const result = await dispatchDecision(decision({ operation: "email_draft", draft: { action: "create", kind: "reply", to: "sarah", replyTo: null, instruction: "say yes", version: null } }), ctx);
+    expect(result?.answer).toMatch(/can't save email drafts yet/);
+    expect(result?.answer).toMatch(/summarise the email/);
+    expect(result?.agents).toEqual(["email"]);
+  });
+
+  it("shows a redirect's own message, so an off-topic message is helped, not refused", async () => {
+    const plan = { category: "speculation" as const, reply: "I can't tell you how they came by theirs, but I can help you find vintage shops near you.", pivot: { capability: "web" as const, ask: null }, distress: false };
+    const result = await dispatchDecision(decision({ operation: "redirect", redirect: plan }), ctx);
+    expect(result).toMatchObject({ answer: plan.reply, status: "completed" });
+    expect(mocks.answerCasual).not.toHaveBeenCalled();
+  });
+
+  it("waits for the one missing detail when the pivot needs it", async () => {
+    const plan = { category: "unrelated" as const, reply: "Happy to look around. Which city or ZIP should I use?", pivot: { capability: "web" as const, ask: "Which city or ZIP?" }, distress: false };
+    expect((await dispatchDecision(decision({ operation: "redirect", redirect: plan }), ctx))?.status).toBe("waiting_for_user");
+  });
+
+  it("passes the choices for a clarifying question along to be shown as buttons", async () => {
+    const result = await dispatchDecision(decision({ operation: "clarify", clarification: "Is that 3 AM or 3 PM?", choices: ["3 AM", "3 PM"], confidence: 0.4 }), ctx);
+    expect(result).toMatchObject({ answer: "Is that 3 AM or 3 PM?", status: "waiting_for_user", choices: ["3 AM", "3 PM"] });
+  });
+
+  it("offers no buttons when there are none", async () => {
+    const result = await dispatchDecision(decision({ operation: "clarify", clarification: "Which one?", choices: null, confidence: 0.4 }), ctx);
+    expect(result).not.toHaveProperty("choices");
+  });
+});

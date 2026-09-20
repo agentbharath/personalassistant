@@ -56,6 +56,7 @@ async function answerApproval(approve: boolean, userId: string, conversationId: 
   }
   return null;
 }
+const DRAFTS_NOT_AVAILABLE = "I can't save email drafts yet, because Daylark's Gmail access is read-only for now. I can summarise the email so you can write the reply yourself.";
 const NEEDS_CONVERSATION = "I need a saved conversation before I can prepare that. Please start a new chat and try again.";
 
 /**
@@ -64,11 +65,11 @@ const NEEDS_CONVERSATION = "I need a saved conversation before I can prepare tha
  */
 export async function dispatchDecision(decision: RouterDecision, ctx: DispatchContext): Promise<OrchestratorResult | null> {
   const { requestId, input, userId, context, conversationId } = ctx;
-  const done = (answer: string, agents: string[], status: OrchestratorResult["status"] = "completed"): OrchestratorResult => ({ requestId, answer, agents, confidence: decision.confidence, status });
+  const done = (answer: string, agents: string[], status: OrchestratorResult["status"] = "completed", choices?: string[] | null): OrchestratorResult => ({ requestId, answer, agents, confidence: decision.confidence, status, ...(choices?.length ? { choices } : {}) });
 
   // R19.6: unsure means ask, and nothing runs.
   if (decision.operation === "clarify" || (decision.clarification && decision.confidence < ROUTER_CONFIDENCE_THRESHOLD)) {
-    return done(decision.clarification ?? "Could you say a bit more about what you'd like me to do?", [], "waiting_for_user");
+    return done(decision.clarification ?? "Could you say a bit more about what you'd like me to do?", [], "waiting_for_user", decision.choices);
   }
 
   switch (decision.operation) {
@@ -141,6 +142,10 @@ export async function dispatchDecision(decision: RouterDecision, ctx: DispatchCo
     }
     case "email_write_declined":
       return done(EMAIL_READ_ONLY_NOTICE, ["email"]);
+    case "email_draft":
+      // R25: saving drafts is decided and its safe foundation is built, but it stays off (and unbuilt in the chat) until it is released with
+      // the matching Privacy Policy and Terms. Until then a drafting request gets an honest answer, never a made-up draft.
+      return done(DRAFTS_NOT_AVAILABLE, ["email"]);
     case "approve":
     case "deny": {
       const outcome = await answerApproval(decision.operation === "approve", userId, conversationId);
@@ -153,6 +158,11 @@ export async function dispatchDecision(decision: RouterDecision, ctx: DispatchCo
     case "casual":
       prepareAgentStage(["orchestrator"], "fast");
       return done(await answerCasual(input, context, "banter"), []);
+    case "redirect": {
+      // R23: the reply was written by the model as help, not a refusal. Code only makes sure one exists (the router already did).
+      const plan = decision.redirect;
+      return done(plan?.reply ?? "That's outside what I can help with, but I'm good with your email, calendar and spending. What would you like to do?", [], plan?.pivot?.ask ? "waiting_for_user" : "completed");
+    }
     case "unsupported":
       prepareAgentStage(["orchestrator"], "fast");
       return done(await answerCasual(input, context, "boundary"), []);

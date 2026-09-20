@@ -31,7 +31,9 @@ Read `docs/use-cases/README.md` first. It holds 436 use cases, the schema propos
 
 ## Model and quality (approval and cost quote first, R21)
 - [ ] Set up a separate, spend-capped Anthropic API key for evals, plus an assistant-side cost prompt before any live run (offered earlier, not decided).
-- [ ] Verify router prompt v6 with a live eval run.
+- [x] Router v7 written (free): drafts, redirect, choices, ask-when-in-doubt (threshold 0.8); 84 new router cases (190 total) covering drafts, redirects, not-available asks, email codes, asks with choices and calibration cases that must not become questions; the grader is tested. 901 tests pass.
+- [ ] **Run the router v7 live eval once (needs your approval).** 190 cases, about $1.19 at most (cost check, no calls made). Then fix only what fails and re-run only those cases.
+- [ ] (Superseded: verify router v6. v7 replaces it.)
 - [ ] Convert the email interpreter and email turn to model-filled fields (R20.4), running live evals incrementally.
 - [ ] Turn bad-answer ratings into eval cases: `npm run feedback:export`, then write the expected behaviour for each row.
 

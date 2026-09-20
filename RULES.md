@@ -174,6 +174,7 @@ Decided by the owner: intent is classified by a model before any agent is chosen
 - **R19.6 Unsure means ask.** Below 0.7 confidence the router's one question is asked and nothing runs (R12).
 - **R19.7 Repeatable.** Temperature 0, a schema, a versioned prompt (`router-vN`), and a per-user encrypted cache keyed by the message, the last turns and the saved state. The same input in the same context resolves the same way.
 - **R19.8 Fallback (superseded by R20.5).** ~~Only when the router call fails does the older rule chain run.~~ Since 2026-09-20 there is no rule-based fallback: see R20.5.
+- **R19.10 router-v7 (2026-09-20, written, not yet verified live).** Adds `email_draft` (R25) and `redirect` (R23, with categories and a validated pivot), tap-to-answer `choices` on clarifying questions (R22), and raises the ask threshold from 0.7 to 0.8 (R22). `unsupported` is no longer chosen; a redirect replaces it. Code still checks structure only: a redirect always has a real message, and a redirect for someone in distress never carries a task pivot. Until the live eval passes, v7 is unverified.
 - **R19.9 Evals.** `evals/router.jsonl` holds one row per operation and wording. Changing the router prompt means bumping its version and passing `npm run eval:live`.
 
 ## R20. Rules never judge what a user means

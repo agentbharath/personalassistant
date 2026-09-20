@@ -4,6 +4,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { describe, expect, it } from "vitest";
 import type { EmailState } from "@/lib/conversations/email-state";
 import { ROUTER_SYSTEM, ROUTER_VERSION, routeMessage, type RouterDecision } from "@/lib/orchestrator/router";
+import { checkDecision, type RouterExpect } from "./router-check";
 import { caseHash, estimateLiveCost, liveMode, loadLedger, pendingCases, planText, recordVerified, saveLedger } from "./ledger";
 
 // R21: opt-in and incremental. `npm run eval:cost` prints the plan and calls nothing.
@@ -11,7 +12,7 @@ import { caseHash, estimateLiveCost, liveMode, loadLedger, pendingCases, planTex
 const mode = liveMode();
 const REPEAT = Number(process.env.LIVE_EVAL_REPEAT ?? 0);
 
-type Case = { id: string; rule: string; input: string; pending?: boolean; state?: { topic: string; sender: string; action: string; results: number }; context?: Array<{ role: "user" | "assistant"; content: string }>; expect: { operation: string; sender?: string; matter?: string; merchant?: string; term?: string; agents?: string[]; paidOn?: string | null; lesson?: Record<string, unknown> } };
+type Case = { id: string; rule: string; input: string; pending?: boolean; state?: { topic: string; sender: string; action: string; results: number }; context?: Array<{ role: "user" | "assistant"; content: string }>; expect: RouterExpect };
 const cases = readFileSync(resolve(process.cwd(), "evals/router.jsonl"), "utf8").trim().split("\n").map((line) => JSON.parse(line) as Case);
 const idOf = (item: Case) => item.id;
 const hashOf = (item: Case) => caseHash(item);
@@ -22,18 +23,6 @@ const toState = (state?: Case["state"]): EmailState | null => state ? {
   results: Array.from({ length: state.results }, (_, index) => ({ id: `m${index}`, subject: `Order Confirmed #${index}`, from: "iHerb <noreply@info.iherb.com>", date: "" })),
   updatedAt: 1,
 } : null;
-
-const lower = (value: unknown) => (typeof value === "string" ? value.toLowerCase() : value);
-function check(decision: RouterDecision | null, want: Case["expect"]) {
-  if (!decision) return ["router returned null (the model call failed, so the rules would answer)"];
-  const problems: string[] = [];
-  if (decision.operation !== want.operation) problems.push(`operation: wanted ${want.operation}, got ${decision.operation}${decision.clarification ? ` (asked: ${decision.clarification})` : ""}`);
-  for (const key of ["sender", "matter", "merchant", "term"] as const) if (want[key] !== undefined && lower(decision[key]) !== lower(want[key])) problems.push(`${key}: wanted ${want[key]}, got ${decision[key]}`);
-  if (want.paidOn !== undefined && decision.paidOn !== want.paidOn) problems.push(`paidOn: wanted ${want.paidOn}, got ${decision.paidOn}`);
-  if (want.lesson) for (const [key, value] of Object.entries(want.lesson)) if (lower((decision.lesson as Record<string, unknown> | null)?.[key]) !== lower(value)) problems.push(`lesson.${key}: wanted ${String(value)}, got ${String((decision.lesson as Record<string, unknown> | null)?.[key])}`);
-  if (want.agents && !want.agents.every((agent) => decision.agents.includes(agent as never))) problems.push(`agents: wanted ${want.agents.join(",")}, got ${decision.agents.join(",")}`);
-  return problems;
-}
 
 async function runAll(items: Case[], complete: Parameters<typeof routeMessage>[1]["complete"]) {
   const out: Array<RouterDecision | null> = [];
@@ -54,7 +43,7 @@ describe.skipIf(mode === "off")("live: the router (R19.9, R21)", () => {
     const results = await runAll(pending, complete as never);
     const passed: Case[] = [];
     const failed = pending.flatMap((item, index) => {
-      const problems = check(results[index], item.expect);
+      const problems = checkDecision(results[index], item.expect);
       if (!problems.length) passed.push(item);
       return problems.length ? [`${item.id}: ${item.input}\n    ${problems.join("\n    ")}`] : [];
     });
