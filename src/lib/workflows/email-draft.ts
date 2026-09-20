@@ -22,6 +22,19 @@ export async function createDraftApproval(userId: string, conversationId: string
   if (approvalError) throw approvalError;
 }
 
+/** The draft action waiting for Confirm in this conversation, if any: what the last preview showed. "Make it shorter" changes this before anything is saved. */
+export async function pendingDraftPayload(userId: string, conversationId: string): Promise<DraftPayload | null> {
+  const admin = createAdminClient();
+  const { data } = await admin.from("workflow_checkpoints").select("id,checkpoint").eq("user_id", userId).eq("conversation_id", conversationId).eq("workflow_type", WORKFLOW).eq("state", "pending_approval").order("created_at", { ascending: false }).limit(1);
+  const checkpoint = data?.[0];
+  if (!checkpoint) return null;
+  const { data: approval } = await admin.from("approvals").select("expires_at,status").eq("workflow_checkpoint_id", checkpoint.id).eq("status", "pending").maybeSingle();
+  if (!approval || new Date(approval.expires_at as string).getTime() <= Date.now()) return null;
+  const ciphertext = (checkpoint.checkpoint as { payloadCiphertext?: string }).payloadCiphertext;
+  if (!ciphertext) return null;
+  try { return JSON.parse(decryptText(ciphertext)) as DraftPayload; } catch { return null; }
+}
+
 type Outcome = { answer: string; status: "completed" | "waiting_for_user" };
 
 /** Runs an approved draft action. Exported for tests; `resolvePendingEmailDraft` is the entry point. */

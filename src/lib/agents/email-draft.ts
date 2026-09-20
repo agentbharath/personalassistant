@@ -8,7 +8,7 @@ import type { WriterInput } from "@/lib/drafts/writer";
 import { GoogleConnectionRequiredError } from "@/lib/auth/google-credential-broker";
 import { GoogleGmailAccessError, readGmailMessage, searchGmail, type EmailContent, type EmailSearchResult } from "@/lib/tools/email/google-gmail";
 import type { EmailState } from "@/lib/conversations/email-state";
-import { createDraftApproval } from "@/lib/workflows/email-draft";
+import { createDraftApproval, pendingDraftPayload, resolvePendingEmailDraft } from "@/lib/workflows/email-draft";
 
 export type DraftIntent = NonNullable<RouterDecision["draft"]>;
 /** The router's fields with the empty ones as "", so the rest of the code reads plain text. */
@@ -29,8 +29,11 @@ export type DraftDeps = {
   write: typeof writeDraftForUser;
   latest: typeof latestDraft;
   approve: (userId: string, conversationId: string, payload: DraftPayload) => Promise<void>;
+  /** The preview waiting for Confirm, and a way to drop it. */
+  pending: (userId: string, conversationId: string) => Promise<DraftPayload | null>;
+  cancelPending: (userId: string, conversationId: string) => Promise<unknown>;
 };
-const defaults: DraftDeps = { enabled: draftsEnabled, search: searchGmail, read: readGmailMessage, write: writeDraftForUser, latest: latestDraft, approve: createDraftApproval };
+const defaults: DraftDeps = { enabled: draftsEnabled, search: searchGmail, read: readGmailMessage, write: writeDraftForUser, latest: latestDraft, approve: createDraftApproval, pending: pendingDraftPayload, cancelPending: (userId, conversationId) => resolvePendingEmailDraft(userId, conversationId, "cancel") };
 
 const quote = (text: string) => text.split("\n").map((line) => (line ? `> ${line}` : ">")).join("\n");
 const day = (date: string) => { const parsed = Date.parse(date); return Number.isNaN(parsed) ? "" : new Date(parsed).toLocaleDateString("en-US", { month: "short", day: "numeric" }); };
@@ -61,6 +64,9 @@ export async function prepareEmailDraft(raw: DraftIntent, ctx: DraftContext, dep
   const conversationId = ctx.conversationId;
   try {
     if (intent.action === "create") return intent.kind === "reply" ? await prepareReply(intent, ctx, conversationId, deps) : await prepareNew(intent, ctx, conversationId, deps);
+    // A preview that is still waiting for Confirm is the draft "this" means: changing it rewrites the preview, and nothing has been saved yet.
+    const waiting = await deps.pending(ctx.userId, conversationId);
+    if (waiting && waiting.action !== "discard" && waiting.action !== "revert") return await changeWaiting(intent, waiting, ctx, conversationId, deps);
     const current = await deps.latest(ctx.userId, conversationId);
     if (!current) return ask(NO_DRAFT);
     const last = current.versions.at(-1)!;
@@ -85,6 +91,27 @@ export async function prepareEmailDraft(raw: DraftIntent, ctx: DraftContext, dep
     if (error instanceof GoogleConnectionRequiredError || (error instanceof GoogleGmailAccessError && error.reason === "insufficient_scope")) return ask(DRAFT_RECONNECT);
     throw error;
   }
+}
+
+/** Edit or scrap the preview that is still waiting. A new preview replaces it, so Confirm saves the latest wording. */
+async function changeWaiting(intent: Intent, waiting: DraftPayload, ctx: DraftContext, conversationId: string, deps: DraftDeps): Promise<DraftReply> {
+  if (intent.action === "discard") {
+    await deps.cancelPending(ctx.userId, conversationId);
+    return { answer: "Scrapped that draft. Nothing was saved or sent.", status: "completed" };
+  }
+  if (intent.action === "revert") return ask("Nothing has been saved yet, so there is no earlier version to go back to. Tell me what to change, or choose **Cancel**.");
+  if (!intent.instruction.trim()) return ask("What would you like to change?");
+  const current = waiting.action === "create" ? { subject: waiting.spec.subject, body: waiting.spec.body } : waiting.action === "edit" ? { subject: waiting.subject, body: waiting.body } : null;
+  if (!current) return ask(NO_DRAFT);
+  const written = await deps.write(ctx.userId, { kind: "edit", instruction: intent.instruction, ownerName: ctx.ownerName, current });
+  if (!written) return ask(WRITER_DOWN);
+  if (waiting.action === "create") {
+    const spec: DraftSpec = { ...waiting.spec, subject: written.subject, body: written.body };
+    await deps.approve(ctx.userId, conversationId, { action: "create", spec });
+    return ask(preview(spec.inReplyTo ? "Draft reply — not sent" : "Draft email — not sent", [`**To:** ${spec.to.join(", ")}`, `**Subject:** ${spec.subject}`], spec.body));
+  }
+  await deps.approve(ctx.userId, conversationId, { action: "edit", draftId: waiting.draftId, subject: written.subject, body: written.body });
+  return ask(preview("Changed draft — not sent", [`**Subject:** ${written.subject}`], written.body).replace("I'll save this in your Gmail Drafts.", "I'll update the same Gmail draft."));
 }
 
 async function prepareNew(intent: Intent, ctx: DraftContext, conversationId: string, deps: DraftDeps): Promise<DraftReply> {

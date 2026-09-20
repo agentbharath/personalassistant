@@ -21,7 +21,7 @@ vi.mock("@/lib/auth/google-credential-broker", () => ({ GoogleConnectionRequired
 vi.mock("@/lib/tools/email/google-gmail", () => ({ GoogleGmailAccessError: class extends Error { reason = "unavailable"; } }));
 vi.mock("@/lib/drafts/service", () => ({ ...service, DraftsDisabledError: class extends Error {}, DraftNotFoundError: class extends Error {} }));
 
-import { resolvePendingEmailDraft, runDraftPayload } from "./email-draft";
+import { pendingDraftPayload, resolvePendingEmailDraft, runDraftPayload } from "./email-draft";
 
 const payload = { action: "create" as const, spec: { to: ["a@b.com"], subject: "Lease", body: "Hi" } };
 const pending = (extra: object = {}) => {
@@ -100,5 +100,18 @@ describe("Confirm and Cancel on a draft (free, fake database)", () => {
     expect(result?.answer).toMatch(/Reconnect Google and approve drafts/);
     expect(result?.status).toBe("waiting_for_user");
     expect(state.writes.some((write) => write.table === "approvals" && (write.values as { status?: string }).status === "pending")).toBe(true);
+  });
+});
+
+describe("the preview waiting for Confirm (free, fake database)", () => {
+  it("returns what the last preview showed, so a change can rewrite it", async () => {
+    pending();
+    expect(await pendingDraftPayload("u1", "c1")).toEqual(payload);
+  });
+
+  it("returns nothing when no preview is waiting, or it has expired", async () => {
+    expect(await pendingDraftPayload("u1", "c1")).toBeNull();
+    pending({ expires_at: new Date(Date.now() - 1000).toISOString() });
+    expect(await pendingDraftPayload("u1", "c1")).toBeNull();
   });
 });
