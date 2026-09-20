@@ -33,6 +33,9 @@ vi.mock("@/lib/supabase/admin", () => ({
         update: (patch: Row) => { op = "update"; payload = patch; return api; },
         delete: () => { op = "delete"; return api; },
         eq: (column: string, value: unknown) => { filters.push((row) => row[column] === value); return api; },
+        gte: (column: string, value: unknown) => { filters.push((row) => row[column] === undefined || String(row[column]) >= String(value)); return api; },
+        order: () => api,
+        limit: () => api,
         is: (column: string, value: unknown) => { filters.push((row) => (row[column] ?? null) === value); return api; },
         single: async () => {
           if (op === "insert") { if (world.failInsert) return { data: null, error: new Error("insert failed") }; const row = { id: `row-${world.nextId++}`, discarded_at: null, ...payload }; world.rows.push(row); return { data: { id: row.id }, error: null }; }
@@ -79,7 +82,7 @@ function installFakeGmail() {
 }
 
 process.env.APP_ENCRYPTION_KEY = "test-key-for-draft-tests";
-import { DraftNotFoundError, DraftsDisabledError, createDraft, discardDraft, editDraft, listVersions, revertDraft } from "./service";
+import { DraftNotFoundError, DraftsDisabledError, createDraft, discardDraft, draftsOnThread, editDraft, listVersions, recentDraftsTo, revertDraft } from "./service";
 
 const spec = { to: ["sarah@example.com"], subject: "Friday", body: "I'll be there." };
 
@@ -207,5 +210,28 @@ describe("only drafts Daylark created, for the right person", () => {
     expect(world.requests.every((request) => allowed.test(request))).toBe(true);
     expect(world.requests.some((request) => /send|trash|modify|messages/.test(request))).toBe(false);
     expect(new Set(world.capabilities)).toEqual(new Set(["email_drafts"]));
+  });
+});
+
+describe("finding drafts Daylark already saved (free, fake Gmail and database)", () => {
+  it("finds the drafts saved on an email thread, by Daylark's own record, and no others", async () => {
+    await createDraft("u1", "c1", { ...spec, subject: "Re: Lease", inReplyTo: { messageId: "<a@m>", threadId: "t-lease" } });
+    await createDraft("u1", "c1", { ...spec, subject: "Other", inReplyTo: { messageId: "<b@m>", threadId: "t-other" } });
+    expect(await draftsOnThread("u1", "t-lease")).toEqual([{ id: expect.any(String), subject: "Re: Lease" }]);
+    expect(await draftsOnThread("u2", "t-lease")).toEqual([]);
+    expect(world.requests.filter((request) => request.startsWith("GET"))).toEqual([]); // it never lists the mailbox
+  });
+
+  it("does not offer a draft that was already discarded", async () => {
+    const created = await createDraft("u1", "c1", { ...spec, inReplyTo: { messageId: "<a@m>", threadId: "t-lease" } });
+    await discardDraft("u1", created.id);
+    expect(await draftsOnThread("u1", "t-lease")).toEqual([]);
+  });
+
+  it("finds recent drafts addressed to a person, whatever the case of the address", async () => {
+    await createDraft("u1", "c1", { ...spec, to: ["Sarah@Example.com"], subject: "Friday" });
+    await createDraft("u1", "c1", { ...spec, to: ["bob@example.com"], subject: "Other" });
+    expect(await recentDraftsTo("u1", "sarah@example.com")).toEqual([{ id: expect.any(String), subject: "Friday" }]);
+    expect(await recentDraftsTo("u1", "nobody@example.com")).toEqual([]);
   });
 });

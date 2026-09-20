@@ -128,3 +128,26 @@ export async function latestDraft(userId: string, conversationId: string) {
   const versions = readVersions(data as Row);
   return versions.length ? { id: data.id as string, versions } : null;
 }
+
+export type ExistingDraft = { id: string; subject: string };
+
+/** Drafts Daylark saved on this Gmail thread that are still in Gmail. Only Daylark's own record is read: other drafts in the mailbox are never listed. */
+export async function draftsOnThread(userId: string, threadId: string): Promise<ExistingDraft[]> {
+  requireEnabled();
+  const { data, error } = await table().select("id, gmail_draft_id, gmail_thread_id, versions_ciphertext").eq("user_id", userId).eq("gmail_thread_id", threadId).is("discarded_at", null).order("created_at", { ascending: false }).limit(3);
+  if (error) throw error;
+  return (data ?? []).flatMap((row) => { const last = readVersions(row as Row).at(-1); return last ? [{ id: row.id as string, subject: last.subject }] : []; });
+}
+
+/** Drafts Daylark saved in the last two weeks that are addressed to this person. */
+export async function recentDraftsTo(userId: string, address: string): Promise<ExistingDraft[]> {
+  requireEnabled();
+  const since = new Date(Date.now() - 14 * 86_400_000).toISOString();
+  const { data, error } = await table().select("id, gmail_draft_id, gmail_thread_id, versions_ciphertext").eq("user_id", userId).is("discarded_at", null).gte("created_at", since).order("created_at", { ascending: false }).limit(30);
+  if (error) throw error;
+  const wanted = address.toLowerCase();
+  return (data ?? []).flatMap((row) => {
+    const last = readVersions(row as Row).at(-1);
+    return last && last.to.some((to) => to.toLowerCase() === wanted) ? [{ id: row.id as string, subject: last.subject }] : [];
+  }).slice(0, 3);
+}

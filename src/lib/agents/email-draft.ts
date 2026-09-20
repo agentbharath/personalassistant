@@ -2,7 +2,7 @@ import type { RouterDecision } from "@/lib/orchestrator/router";
 import type { DraftPayload } from "@/lib/drafts/payload";
 import type { DraftSpec } from "@/lib/drafts/mime";
 import { formatPerson, lookupPerson, parsePeople, searchTerm, type Person } from "@/lib/drafts/people";
-import { draftsEnabled, latestDraft } from "@/lib/drafts/service";
+import { draftsEnabled, draftsOnThread, latestDraft, recentDraftsTo, type ExistingDraft } from "@/lib/drafts/service";
 import { writeDraftForUser } from "@/lib/drafts/writer-runtime";
 import type { WriterInput } from "@/lib/drafts/writer";
 import { GoogleConnectionRequiredError } from "@/lib/auth/google-credential-broker";
@@ -29,11 +29,14 @@ export type DraftDeps = {
   write: typeof writeDraftForUser;
   latest: typeof latestDraft;
   approve: (userId: string, conversationId: string, payload: DraftPayload) => Promise<void>;
+  /** Drafts Daylark already saved on this email thread, or to this person. */
+  onThread: (userId: string, threadId: string) => Promise<ExistingDraft[]>;
+  recentTo: (userId: string, address: string) => Promise<ExistingDraft[]>;
   /** The newest draft preview shown in this chat, whether it was confirmed, cancelled, expired or is still waiting, and a way to drop a waiting one. */
   lastPreview: (userId: string, conversationId: string) => Promise<{ state: DraftPreviewState; payload: DraftPayload } | null>;
   cancelPending: (userId: string, conversationId: string) => Promise<unknown>;
 };
-const defaults: DraftDeps = { enabled: draftsEnabled, search: searchGmail, read: readGmailMessage, write: writeDraftForUser, latest: latestDraft, approve: createDraftApproval, lastPreview: lastDraftPreview, cancelPending: (userId, conversationId) => resolvePendingEmailDraft(userId, conversationId, "cancel") };
+const defaults: DraftDeps = { enabled: draftsEnabled, search: searchGmail, read: readGmailMessage, write: writeDraftForUser, latest: latestDraft, approve: createDraftApproval, onThread: draftsOnThread, recentTo: recentDraftsTo, lastPreview: lastDraftPreview, cancelPending: (userId, conversationId) => resolvePendingEmailDraft(userId, conversationId, "cancel") };
 
 const quote = (text: string) => text.split("\n").map((line) => (line ? `> ${line}` : ">")).join("\n");
 const day = (date: string) => { const parsed = Date.parse(date); return Number.isNaN(parsed) ? "" : new Date(parsed).toLocaleDateString("en-US", { month: "short", day: "numeric" }); };
@@ -108,7 +111,7 @@ async function changeUnsaved(intent: Intent, waiting: DraftPayload, state: Draft
   if (!written) return ask(WRITER_DOWN);
   if (waiting.action === "create") {
     const spec: DraftSpec = { ...waiting.spec, subject: written.subject, body: written.body };
-    await deps.approve(ctx.userId, conversationId, { action: "create", spec });
+    await deps.approve(ctx.userId, conversationId, { action: "create", spec, ...(waiting.replaces ? { replaces: waiting.replaces } : {}) });
     return ask(preview(spec.inReplyTo ? "Draft reply — not sent" : "Draft email — not sent", [`**To:** ${spec.to.join(", ")}`, `**Subject:** ${spec.subject}`], spec.body));
   }
   await deps.approve(ctx.userId, conversationId, { action: "edit", draftId: waiting.draftId, subject: written.subject, body: written.body });
@@ -132,7 +135,9 @@ async function prepareNew(intent: Intent, ctx: DraftContext, conversationId: str
   if (!written) return ask(WRITER_DOWN);
   const spec: DraftSpec = { to: [recipient.address], subject: written.subject, body: written.body };
   await deps.approve(ctx.userId, conversationId, { action: "create", spec });
-  return ask(preview("Draft email — not sent", [`**To:** ${formatPerson(recipient)}`, `**Subject:** ${spec.subject}`], spec.body));
+  const earlier = await deps.recentTo(ctx.userId, recipient.address).catch(() => []);
+  const note = earlier.length ? [`_You already have a saved draft to this person (“${earlier[0].subject}”). This one will be saved as a separate draft; say “scrap it” if you'd rather not have it._`] : [];
+  return ask(preview("Draft email — not sent", [`**To:** ${formatPerson(recipient)}`, `**Subject:** ${spec.subject}`, ...note], spec.body));
 }
 
 const reSubject = (subject: string) => (/^\s*re:/i.test(subject) ? subject.trim() : `Re: ${subject.trim() || "(no subject)"}`);
@@ -152,8 +157,11 @@ async function prepareReply(intent: Intent, ctx: DraftContext, conversationId: s
     body: written.body,
     ...(original.reply.messageId ? { inReplyTo: { messageId: original.reply.messageId, references: original.reply.references, threadId: original.threadId } } : {}),
   };
-  await deps.approve(ctx.userId, conversationId, { action: "create", spec });
-  return ask(preview("Draft reply — not sent", [`**To:** ${formatPerson(recipient)}`, `**Subject:** ${spec.subject}`, `_Replying to “${original.subject}” from ${original.from.replace(/<[^>]*>/, "").trim() || original.from}${day(original.date) ? `, ${day(original.date)}` : ""}_`], spec.body));
+  // A reply already saved on this email would leave two competing drafts on one thread, so the new one replaces it once the person confirms.
+  const earlier = (await deps.onThread(ctx.userId, original.threadId).catch(() => []))[0];
+  await deps.approve(ctx.userId, conversationId, { action: "create", spec, ...(earlier ? { replaces: earlier.id } : {}) });
+  const replaceNote = earlier ? [`_You already saved a draft reply to this email (“${earlier.subject}”). Confirming saves this one and deletes the earlier one. If you have edited the earlier one in Gmail, I leave it alone. Choose **Cancel** to keep the earlier one._`] : [];
+  return ask(preview("Draft reply — not sent", [`**To:** ${formatPerson(recipient)}`, `**Subject:** ${spec.subject}`, ...replaceNote, `_Replying to “${original.subject}” from ${original.from.replace(/<[^>]*>/, "").trim() || original.from}${day(original.date) ? `, ${day(original.date)}` : ""}_`], spec.body));
 }
 
 async function findReplyTarget(intent: Intent, ctx: DraftContext, deps: DraftDeps): Promise<{ messageId: string } | { ask: string; choices?: string[] }> {

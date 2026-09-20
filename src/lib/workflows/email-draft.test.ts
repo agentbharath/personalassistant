@@ -47,6 +47,28 @@ describe("running an approved draft action (free, fake service)", () => {
     expect(result.answer).toMatch(/I never send email/);
   });
 
+  it("deletes the earlier draft it replaces, but only after the new one is saved", async () => {
+    const order: string[] = [];
+    service.createDraft.mockImplementation(async () => { order.push("create"); return { id: "d2", versionIndex: 0 }; });
+    service.discardDraft.mockImplementation(async () => { order.push("discard"); return { status: "discarded" }; });
+    const result = await runDraftPayload("u1", "c1", { ...payload, replaces: "old1" });
+    expect(order).toEqual(["create", "discard"]);
+    expect(service.discardDraft).toHaveBeenCalledWith("u1", "old1", { force: false });
+    expect(result.answer).toMatch(/deleted the earlier draft reply/);
+  });
+
+  it("leaves the earlier draft alone when the person edited it in Gmail, and says so", async () => {
+    service.discardDraft.mockResolvedValue({ status: "conflict", liveBody: "their edit" });
+    const result = await runDraftPayload("u1", "c1", { ...payload, replaces: "old1" });
+    expect(result.answer).toMatch(/left your earlier draft alone because you have edited it in Gmail/);
+  });
+
+  it("keeps the new draft even if deleting the earlier one fails", async () => {
+    service.discardDraft.mockRejectedValue(new Error("gmail down"));
+    const result = await runDraftPayload("u1", "c1", { ...payload, replaces: "old1" });
+    expect(result.answer).toMatch(/Saved to your Gmail Drafts/);
+  });
+
   it("keeps a person's own edit in Gmail as a version before it changes a draft", async () => {
     await runDraftPayload("u1", "c1", { action: "edit", draftId: "d1", subject: "S", body: "B" });
     expect(service.editDraft).toHaveBeenCalledWith("u1", "d1", { body: "B", subject: "S" }, { keepLive: true });

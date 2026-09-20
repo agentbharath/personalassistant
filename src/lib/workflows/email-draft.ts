@@ -51,7 +51,13 @@ type Outcome = { answer: string; status: "completed" | "waiting_for_user" };
 export async function runDraftPayload(userId: string, conversationId: string, payload: DraftPayload): Promise<Outcome> {
   if (payload.action === "create") {
     await createDraft(userId, conversationId, payload.spec);
-    return { answer: `Saved to your Gmail Drafts as “${payload.spec.subject}”. It has **not** been sent, and I never send email: you read it and send it yourself. [Open your drafts](${DRAFTS_URL}).\n\nWant changes? Say “make it shorter” or “add that I'm free after 3”. To undo a change, say “go back to the previous version”.`, status: "completed" };
+    let replaced = "";
+    if (payload.replaces) {
+      // The earlier draft goes only after the new one is safely saved, and never if the person edited it in Gmail since.
+      const outcome = await discardDraft(userId, payload.replaces, { force: false }).catch(() => null);
+      replaced = outcome?.status === "discarded" ? " I deleted the earlier draft reply to this email." : outcome?.status === "conflict" ? " I left your earlier draft alone because you have edited it in Gmail, so there are now two drafts on this email." : "";
+    }
+    return { answer: `Saved to your Gmail Drafts as “${payload.spec.subject}”. It has **not** been sent, and I never send email: you read it and send it yourself.${replaced} [Open your drafts](${DRAFTS_URL}).\n\nWant changes? Say “make it shorter” or “add that I'm free after 3”. To undo a change, say “go back to the previous version”.`, status: "completed" };
   }
   if (payload.action === "edit") {
     // If the person edited the draft in Gmail since Daylark wrote it, their edit is kept as a version first, so nothing is lost.

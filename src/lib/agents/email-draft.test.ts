@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { EmailContent, EmailSearchResult } from "@/lib/tools/email/google-gmail";
 
-vi.mock("@/lib/drafts/service", () => ({ draftsEnabled: () => true, latestDraft: vi.fn() }));
+vi.mock("@/lib/drafts/service", () => ({ draftsEnabled: () => true, latestDraft: vi.fn(), draftsOnThread: vi.fn(), recentDraftsTo: vi.fn() }));
 vi.mock("@/lib/drafts/writer-runtime", () => ({ writeDraftForUser: vi.fn() }));
 vi.mock("@/lib/tools/email/google-gmail", () => ({ GoogleGmailAccessError: class extends Error { reason = "unavailable"; }, readGmailMessage: vi.fn(), searchGmail: vi.fn() }));
 vi.mock("@/lib/workflows/email-draft", () => ({ createDraftApproval: vi.fn(), lastDraftPreview: vi.fn(), resolvePendingEmailDraft: vi.fn() }));
@@ -24,6 +24,8 @@ beforeEach(() => {
     latest: vi.fn().mockResolvedValue(null),
     approve: vi.fn().mockResolvedValue(undefined),
     lastPreview: vi.fn().mockResolvedValue(null),
+    onThread: vi.fn().mockResolvedValue([]),
+    recentTo: vi.fn().mockResolvedValue([]),
     cancelPending: vi.fn().mockResolvedValue(null),
   } as unknown as DraftDeps;
 });
@@ -200,5 +202,45 @@ describe("changing a draft that was shown but not saved (free)", () => {
   it("does not change a pending delete or restore; it looks at the saved draft instead", async () => {
     last("pending", { action: "discard", draftId: "d1" });
     expect((await prepareEmailDraft(intent({ action: "edit", instruction: "shorter" }), ctx, deps)).answer).toMatch(/don't have a draft/);
+  });
+});
+
+describe("a draft already saved for what the person is asking (free)", () => {
+  it("says a new reply replaces the earlier one on the same email, and asks for Confirm before anything is deleted", async () => {
+    (deps.search as ReturnType<typeof vi.fn>).mockResolvedValueOnce([found("Sarah Kim <sarah@kim.com>", "m9", 300)]);
+    (deps.onThread as ReturnType<typeof vi.fn>).mockResolvedValue([{ id: "old1", subject: "Re: Lease" }]);
+    const reply = await prepareEmailDraft(intent({ kind: "reply", to: "sarah", instruction: "say yes" }), ctx, deps);
+    expect(deps.onThread).toHaveBeenCalledWith("u1", "t1");
+    expect(deps.approve).toHaveBeenCalledWith("u1", "c1", { action: "create", spec: expect.objectContaining({ subject: "Re: Lease" }), replaces: "old1" });
+    expect(reply.answer).toContain("You already saved a draft reply to this email (“Re: Lease”)");
+    expect(reply.answer).toContain("deletes the earlier one");
+    expect(reply.answer).toContain("**Cancel** to keep the earlier one");
+  });
+
+  it("does not mention a replacement when there is no earlier draft on that email", async () => {
+    (deps.search as ReturnType<typeof vi.fn>).mockResolvedValueOnce([found("Sarah Kim <sarah@kim.com>", "m9", 300)]);
+    const reply = await prepareEmailDraft(intent({ kind: "reply", to: "sarah", instruction: "say yes" }), ctx, deps);
+    expect(reply.answer).not.toMatch(/already saved a draft/);
+    expect(deps.approve).toHaveBeenCalledWith("u1", "c1", { action: "create", spec: expect.anything() });
+  });
+
+  it("only mentions, and never replaces, an earlier draft to the same person for a new email", async () => {
+    (deps.recentTo as ReturnType<typeof vi.fn>).mockResolvedValue([{ id: "old2", subject: "Lease question" }]);
+    const reply = await prepareEmailDraft(intent({ to: "sam@lee.com", instruction: "ask about the lease" }), ctx, deps);
+    expect(reply.answer).toContain("You already have a saved draft to this person (“Lease question”)");
+    expect(reply.answer).toContain("separate draft");
+    expect(deps.approve).toHaveBeenCalledWith("u1", "c1", { action: "create", spec: expect.anything() });
+  });
+
+  it("keeps the replacement when the person changes the waiting preview", async () => {
+    (deps.lastPreview as ReturnType<typeof vi.fn>).mockResolvedValue({ state: "pending", payload: { action: "create", spec: { to: ["a@b.com"], subject: "Re: Lease", body: "Hi" }, replaces: "old1" } });
+    await prepareEmailDraft(intent({ action: "edit", instruction: "shorter" }), ctx, deps);
+    expect(deps.approve).toHaveBeenCalledWith("u1", "c1", expect.objectContaining({ action: "create", replaces: "old1" }));
+  });
+
+  it("still writes the draft when looking for an earlier one fails", async () => {
+    (deps.recentTo as ReturnType<typeof vi.fn>).mockRejectedValue(new Error("db"));
+    const reply = await prepareEmailDraft(intent({ to: "sam@lee.com", instruction: "hi" }), ctx, deps);
+    expect(reply.answer).toContain("Draft email — not sent");
   });
 });
