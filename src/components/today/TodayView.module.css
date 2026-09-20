@@ -79,3 +79,5 @@
 .entry { display: flex; align-items: center; justify-content: space-between; gap: var(--s-4); }
 .entry .what { display: grid; gap: 0; }
 @media (prefers-reduced-motion: reduce) { .catName::before { transition: none; } }
+
+.note { color: var(--muted); font-size: var(--text-sm); }

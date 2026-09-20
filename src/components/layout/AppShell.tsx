@@ -17,10 +17,12 @@ type Props = {
   recent: ConversationSummary[];
   activeConversationId?: string;
   activeView?: "chat" | "perch" | "history" | "settings";
+  /** False when the owner turned Perch off in Settings: the navigation then leaves it out. */
+  perchEnabled?: boolean;
   children: ReactNode;
 };
 
-export function AppShell({ title, email, signOutAction, recent, activeConversationId, activeView = "chat", children }: Props) {
+export function AppShell({ title, email, signOutAction, recent, activeConversationId, activeView = "chat", perchEnabled = true, children }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const search = useSearchParams().toString();
@@ -66,7 +68,7 @@ export function AppShell({ title, email, signOutAction, recent, activeConversati
 
   return <div className={`${styles.shell} ${open ? styles.open : ""} ${collapsed ? styles.collapsed : ""}`}>
     <div className={styles.sidebarWrap} id="sidebar" inert={(narrow ? !open : collapsed) || undefined}>
-      <Sidebar activeConversationId={activeConversationId} activeView={activeView} recent={recent} onNavigate={close} onClose={close} />
+      <Sidebar activeConversationId={activeConversationId} activeView={activeView} perchEnabled={perchEnabled} recent={recent} onNavigate={close} onClose={close} />
     </div>
     <div className={styles.scrim} onClick={close} aria-hidden="true" />
     <div className={styles.workspace} inert={open || undefined}>

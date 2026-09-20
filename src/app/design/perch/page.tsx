@@ -26,9 +26,10 @@ const MOCK: DailyView = {
 
 const NOW = Date.parse("2026-09-21T18:00:00Z");
 const day = (days: number) => NOW - days * 86_400_000;
-const MOCK_WAITING: WaitingResult = { state: "ok", pending: 0, items: [
-  { threadId: "18c2f3a1b2c3d4e5", messageId: "m1", from: "Sam Lee <sam@example.com>", subject: "Signed lease?", receivedAt: day(9), reason: "Sam asks if you can send the signed lease by Friday." },
-  { threadId: "18c2f3a1b2c3d4e6", messageId: "m2", from: "Priya Nair <priya@example.com>", subject: "Dinner on Saturday", receivedAt: day(3), reason: "Priya is asking whether 7 pm on Saturday works for you." },
+const MOCK_WAITING: WaitingResult = { state: "ok", pending: 0, prefs: { saved: true, perchEnabled: true, remindersEnabled: true, kinds: ["person", "business", "recruiter"] }, items: [
+  { threadId: "18c2f3a1b2c3d4e5", messageId: "m1", from: "Sam Lee <sam@example.com>", subject: "Signed lease?", receivedAt: day(9), reason: "Sam asks if you can send the signed lease by Friday.", kind: "person" },
+  { threadId: "18c2f3a1b2c3d4e6", messageId: "m2", from: "Priya Nair <priya@example.com>", subject: "Dinner on Saturday", receivedAt: day(3), reason: "Priya is asking whether 7 pm on Saturday works for you.", kind: "person" },
+  { threadId: "18c2f3a1b2c3d4e7", messageId: "m3", from: "Stevens Creek Striders <info@meetup.com>", subject: "Saturday: Can you make the trail run?", receivedAt: day(1), reason: "The group is asking you to RSVP for the Saturday trail run.", kind: "invitation" },
 ] };
 
 /** Development-only Perch view with mock data. */
@@ -39,5 +40,5 @@ export default async function DesignPerchPage({ searchParams }: { searchParams: 
   const view: DailyView = connect
     ? { ...MOCK, meetingsToday: { state: "needs_connection" }, meetingsAhead: { state: "needs_connection" }, bills: { state: "ok", value: { overdue: [], dueToday: [], dueThisWeek: [], noDueDate: [] } }, spending: { state: "ok", value: null } }
     : MOCK;
-  return <AppShell title="Perch" email="you@example.com" signOutAction={signOut} recent={MOCK_RECENT} activeView="perch"><TodayView view={view} replies={<WaitingCard result={connect ? { state: "ok", items: [], pending: 0 } : MOCK_WAITING} now={NOW} />} /></AppShell>;
+  return <AppShell title="Perch" email="you@example.com" signOutAction={signOut} recent={MOCK_RECENT} activeView="perch"><TodayView view={view} replies={<WaitingCard result={connect ? { state: "setup", prefs: { saved: false, perchEnabled: true, remindersEnabled: true, kinds: ["person", "business", "recruiter"] } } : MOCK_WAITING} now={NOW} />} /></AppShell>;
 }

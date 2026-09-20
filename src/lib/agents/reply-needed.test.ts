@@ -1,6 +1,6 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { describe, expect, it, vi } from "vitest";
-import { REPLY_JSON_SCHEMA, REPLY_JUDGE_SYSTEM, buildReplyMessage, judgeReply, replyCacheMaterial, replyCandidates, type MailRef } from "./reply-needed";
+import { REPLY_JSON_SCHEMA, REPLY_JUDGE_SYSTEM, REPLY_KINDS, buildReplyMessage, judgeReply, replyCacheMaterial, replyCandidates, type MailRef } from "./reply-needed";
 
 const mail = (id: string, threadId: string, receivedAt: number): MailRef => ({ id, threadId, from: "Sam <sam@x.com>", subject: "Hi", receivedAt, snippet: "" });
 const reply = (value: unknown) => ({ content: [{ type: "text", text: typeof value === "string" ? value : JSON.stringify(value) }] }) as unknown as Anthropic.Message;
@@ -32,19 +32,19 @@ describe("the model judges whether a reply is needed (free, fake model)", () => 
   });
 
   it("returns the model's judgement and its one-line reason", async () => {
-    const complete = vi.fn().mockResolvedValue(reply({ needsReply: true, reason: "Sam asks for the signed lease by Friday." }));
-    expect(await judgeReply(input, { complete })).toEqual({ needsReply: true, reason: "Sam asks for the signed lease by Friday." });
+    const complete = vi.fn().mockResolvedValue(reply({ needsReply: true, kind: "person", reason: "Sam asks for the signed lease by Friday." }));
+    expect(await judgeReply(input, { complete })).toEqual({ needsReply: true, kind: "person", reason: "Sam asks for the signed lease by Friday." });
     expect(complete.mock.calls[0][0].temperature).toBe(0);
   });
 
   it("drops the reason when no reply is needed", async () => {
-    expect(await judgeReply(input, { complete: async () => reply({ needsReply: false, reason: "newsletter" }) })).toEqual({ needsReply: false, reason: "" });
+    expect(await judgeReply(input, { complete: async () => reply({ needsReply: false, kind: "none", reason: "newsletter" }) })).toEqual({ needsReply: false, kind: "none", reason: "" });
   });
 
   it("judges a message once: the second time comes from the cache", async () => {
     const store = new Map<string, string>();
     const cache = { get: async (key: string) => store.get(key) ?? null, set: async (key: string, value: string) => { store.set(key, value); } };
-    const complete = vi.fn().mockResolvedValue(reply({ needsReply: true, reason: "x" }));
+    const complete = vi.fn().mockResolvedValue(reply({ needsReply: true, kind: "business", reason: "x" }));
     await judgeReply(input, { complete, cache });
     await judgeReply(input, { complete, cache });
     expect(complete).toHaveBeenCalledTimes(1);
@@ -57,6 +57,16 @@ describe("the model judges whether a reply is needed (free, fake model)", () => 
     expect(await judgeReply(input, { complete: async () => { throw new Error("down"); } })).toBeNull();
     expect(await judgeReply(input, { complete: async () => reply("nope") })).toBeNull();
     expect(await judgeReply(input, { complete: async () => reply({ needsReply: "maybe" }) })).toBeNull();
+  });
+
+  it("tells the model that mail from an address that takes no replies never needs one, and defines each kind", () => {
+    expect(REPLY_JUDGE_SYSTEM).toMatch(/does not take replies/);
+    for (const kind of REPLY_KINDS) expect(REPLY_JUDGE_SYSTEM).toContain(`- ${kind}:`);
+  });
+
+  it("keeps the model's kind, and falls back to person if it says needsReply with no kind", async () => {
+    expect((await judgeReply(input, { complete: async () => reply({ needsReply: true, kind: "invitation", reason: "RSVP" }) }))?.kind).toBe("invitation");
+    expect((await judgeReply(input, { complete: async () => reply({ needsReply: true, kind: "none", reason: "asks" }) }))?.kind).toBe("person");
   });
 
   it("sends only the start of a long message", () => {

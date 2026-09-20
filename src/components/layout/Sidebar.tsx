@@ -13,6 +13,7 @@ import styles from "./Sidebar.module.css";
 export type SidebarProps = {
   activeConversationId?: string;
   activeView?: "chat" | "perch" | "history" | "settings";
+  perchEnabled?: boolean;
   recent: ConversationSummary[];
   /** Called after any navigation, so the mobile drawer can close. */
   onNavigate?: () => void;
@@ -20,7 +21,7 @@ export type SidebarProps = {
   onClose?: () => void;
 };
 
-export function Sidebar({ activeConversationId, activeView = "chat", recent, onNavigate, onClose }: SidebarProps) {
+export function Sidebar({ activeConversationId, activeView = "chat", perchEnabled = true, recent, onNavigate, onClose }: SidebarProps) {
   const { hiddenConversationIds, applyChanges, renamingId } = useConversationDeletion();
   const listRef = useRef<HTMLDivElement>(null);
   const [fit, setFit] = useState(8);
@@ -70,7 +71,7 @@ export function Sidebar({ activeConversationId, activeView = "chat", recent, onN
         </section>}
     </div>
     <div className={styles.foot}>
-      <Link className={`${styles.all} ${activeView === "perch" ? styles.allActive : ""}`} href={{ pathname: "/perch" }} title="Your day at a glance: meetings, bills and spending" onClick={onNavigate}><CalendarIcon width={16} height={16} />Perch<span className={styles.allHint}>your day</span></Link>
+      {perchEnabled && <Link className={`${styles.all} ${activeView === "perch" ? styles.allActive : ""}`} href={{ pathname: "/perch" }} title="Your day at a glance: meetings, bills and spending" onClick={onNavigate}><CalendarIcon width={16} height={16} />Perch<span className={styles.allHint}>your day</span></Link>}
       <Link className={`${styles.all} ${activeView === "history" ? styles.allActive : ""}`} href={{ pathname: "/history" }} onClick={onNavigate}><ClockIcon width={16} height={16} />All history</Link>
       <Link className={`${styles.all} ${activeView === "settings" ? styles.allActive : ""}`} href={{ pathname: "/settings" }} onClick={onNavigate}><SettingsIcon width={16} height={16} />Settings</Link>
       <p className={styles.note}>Private by design. Anything that changes your data needs your approval.</p>

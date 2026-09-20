@@ -1,9 +1,11 @@
 import { Suspense } from "react";
+import { redirect } from "next/navigation";
 import { AppShell } from "@/components/layout/AppShell";
 import { RepliesSection } from "@/components/today/RepliesSection";
 import { TodayView } from "@/components/today/TodayView";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { loadDailyView } from "@/lib/today/load";
+import { isPerchEnabled } from "@/lib/replies/dismissals";
 import { listConversations } from "@/lib/conversations/store";
 import { createClient } from "@/lib/supabase/server";
 import { signOut } from "../auth/actions";
@@ -15,6 +17,8 @@ export default async function PerchPage() {
   const { data } = await supabase.auth.getClaims();
   const email = typeof data?.claims?.email === "string" ? data.claims.email : "Google connected";
   const userId = typeof data?.claims?.sub === "string" ? data.claims.sub : undefined;
+  // Perch was turned off in Settings: leave it out, and nothing is read.
+  if (!(await isPerchEnabled(userId))) redirect("/");
   const [view, recent] = userId ? await Promise.all([loadDailyView(userId), listConversations(userId, { limit: 40 }).catch(() => [])]) : [null, []];
 
   return <AppShell title="Perch" email={email} signOutAction={signOut} recent={recent} activeView="perch">
