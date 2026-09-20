@@ -339,7 +339,9 @@ export async function routeMessage(input: RouterInput, deps: RouterDeps): Promis
       model: "claude-haiku-4-5-20251001",
       max_tokens: 700,
       temperature: 0,
-      system: ROUTER_SYSTEM,
+      // Prompt caching: the instructions and examples are identical on every call, so the API can reuse them at a tenth of the input price.
+      // If the prompt is below the model's minimum cacheable size the API simply ignores this, so it is safe either way.
+      system: [{ type: "text", text: ROUTER_SYSTEM, cache_control: { type: "ephemeral" } }],
       messages: [{ role: "user", content: buildRouterMessage(input) }],
       output_config: { format: { type: "json_schema", schema: ROUTER_JSON_SCHEMA } },
     });

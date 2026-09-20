@@ -20,7 +20,7 @@ describe("what the router is asked (R19.2, R19.7)", () => {
     const params = complete.mock.calls[0][0];
     expect(params.temperature).toBe(0);
     expect(params.output_config.format.type).toBe("json_schema");
-    expect(params.system).toBe(ROUTER_SYSTEM);
+    expect(params.system).toEqual([{ type: "text", text: ROUTER_SYSTEM, cache_control: { type: "ephemeral" } }]);
     expect(params.tools).toBeUndefined();
     expect(ROUTER_VERSION).toMatch(/^router-v\d+$/);
   });

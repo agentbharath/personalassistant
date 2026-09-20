@@ -116,7 +116,7 @@ export async function dispatchDecision(decision: RouterDecision, ctx: DispatchCo
     }
     case "calendar_query":
       prepareAgentStage(["calendar"], "fast");
-      return done(await answerCalendar(input, userId), ["calendar"]);
+      return done(await answerCalendar(input, userId, context), ["calendar"]);
     case "calendar_create":
       prepareAgentStage(["general", "calendar"], "balanced");
       return done(await prepareCalendarCreate(input, userId, conversationId), ["calendar"], "waiting_for_user");
@@ -130,7 +130,7 @@ export async function dispatchDecision(decision: RouterDecision, ctx: DispatchCo
       return done(await prepareCalendarAttendeeUpdate(userId, conversationId, input), ["calendar"], "waiting_for_user");
     case "schedule_feasibility":
       prepareAgentStage(["general", "calendar"], "balanced");
-      return done(await answerScheduleFeasibility(input, userId), ["general", "calendar"]);
+      return done(await answerScheduleFeasibility(input, userId, context), ["general", "calendar"]);
     case "web_search":
       prepareAgentStage(["general"], "balanced");
       return done(await answerPublicSearch(input), ["general"]);

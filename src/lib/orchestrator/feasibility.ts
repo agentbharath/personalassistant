@@ -1,19 +1,25 @@
 import { Temporal } from "@js-temporal/polyfill";
-import { DateClarificationError, getCalendarWindow, listCalendarForWindow } from "@/lib/agents/calendar";
+import { askAboutTime, listCalendarForWindow } from "@/lib/agents/calendar";
+import { TIME_UNAVAILABLE } from "@/lib/agents/time-interpreter";
+import { interpretTimeForUser } from "@/lib/agents/time-interpreter-runtime";
 import { searchPublicWeb, type PublicResearch } from "@/lib/tools/general/tavily-search";
 import { calculateDrivingRoute } from "@/lib/tools/maps/routes";
 import { loadLearnings } from "@/lib/learning/store";
 
 type Outcome<T> = { ok: true; value: T } | { ok: false };
 
-export async function answerScheduleFeasibility(input: string, userId: string) {
-  let window;
-  try { window = getCalendarWindow(input); }
-  catch (error) { if (error instanceof DateClarificationError) return error.question; throw error; }
+const TIME_ZONE = process.env.DEFAULT_USER_TIMEZONE ?? "America/Los_Angeles";
+
+export async function answerScheduleFeasibility(input: string, userId: string, context: { role: "user" | "assistant"; content: string }[] = []) {
+  // R20.5: a model reads the day, the start time and the place; the code only checks their form.
+  const reading = await interpretTimeForUser({ message: input, today: Temporal.Now.zonedDateTimeISO(TIME_ZONE).toPlainDate().toString(), timeZone: TIME_ZONE, userId, context });
+  if (reading.kind === "unavailable") return TIME_UNAVAILABLE;
+  if (reading.kind === "ask") return askAboutTime(reading.question, reading.choices);
+  const window = reading.window;
   // A saved home location is the default place: it points the web search at nearby venues and gives a starting point for the drive.
   const learnings = await loadLearnings(userId).catch(() => undefined);
   const home = learnings?.homeLocation;
-  const requestedLocation = extractLocation(input);
+  const requestedLocation = reading.place ?? undefined;
   const [calendarResult, researchResult] = await Promise.all([
     settle(listCalendarForWindow(userId, window)),
     settle(searchPublicWeb(`${input}. Find the official date, start time, location, and runtime or duration.${home && !requestedLocation ? ` Look for venues near ${home}.` : ""}`)),
@@ -22,7 +28,7 @@ export async function answerScheduleFeasibility(input: string, userId: string) {
 
   const events = calendarResult.ok ? calendarResult.value : [];
   const research = researchResult.ok ? researchResult.value : undefined;
-  const requestedStart = preciseStart(input, window.start);
+  const requestedStart = reading.moment ?? undefined;
   const durationMinutes = research ? extractDuration(research) : undefined;
   const nextEvent = requestedStart ? events.find((event) => !event.allDay && Temporal.Instant.compare(Temporal.Instant.from(event.start), requestedStart.toInstant()) >= 0) : undefined;
 
@@ -70,19 +76,4 @@ function extractDuration(research: PublicResearch) {
   if (hoursMinutes) return Number(hoursMinutes[1]) * 60 + Number(hoursMinutes[2]);
   const minutes = text.match(/\b(\d{2,3})\s*(?:minutes?|mins?)\b/i);
   return minutes ? Number(minutes[1]) : undefined;
-}
-
-function preciseStart(input: string, date: Temporal.ZonedDateTime) {
-  const match = input.match(/\b(1[0-2]|0?\d)(?::([0-5]\d))?\s*(am|pm)\b/i);
-  if (!match) return undefined;
-  let hour = Number(match[1]) % 12;
-  if (match[3].toLowerCase() === "pm") hour += 12;
-  return date.with({ hour, minute: Number(match[2] ?? 0), second: 0, millisecond: 0 });
-}
-
-function extractLocation(input: string) {
-  const match = input.match(/\b(?:at|in)\s+([^,]+?)(?=\s+(?:on|at)\s+(?:\w+\s+)?\d|\s+(?:today|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b|$)/i);
-  const value = match?.[1]?.trim();
-  if (!value || /^(?:\d{1,2}(?::\d{2})?\s*(?:am|pm))$/i.test(value)) return undefined;
-  return value;
 }
