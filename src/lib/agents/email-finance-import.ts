@@ -271,26 +271,33 @@ export function resolveBulkCandidate(extracted: ExtractedTransaction, email: Bul
 
 
 /** "import all iherb receipts": one review card for several orders, each dedupe-checked again on Confirm. */
+/** The Gmail search for a bulk import: purchase-style subjects, from one sender when named, within the window. */
+export function bulkImportQuery(sender: string | null, days: number | null) {
+  return [sender ? `{from:"${sender}" "${sender}"}` : "", `{subject:confirmed subject:confirmation subject:receipt subject:invoice subject:ordered subject:order${sender ? "" : " subject:payment"}}`, days ? `newer_than:${days}d` : ""].filter(Boolean).join(" ");
+}
+
 async function prepareBulkEmailImport(input: string, userId: string, conversationId: string) {
   const parsed = parseEmailRequest(input);
   const learnings = await loadLearnings(userId).catch(() => NO_LEARNINGS);
   const applied = applyLearnings({ ...parsed, action: "import_all", topic: "receipt" }, learnings, { everything: mentionsAll(input) });
   const sender = applied.request.sender;
-  if (!sender) return "Which store or sender should I import from? For example: “import all iHerb receipts”.";
+  // No named sender means a sweep: look for purchase emails from anyone in the window ("import my receipts from the last week"), for a person who
+  // cannot remember where they spent. The same receipt checks, the batch cap and the approval step apply.
+  const scope = sender ?? "purchase";
   const days = applied.request.days;
   const terms = describeSearch(applied.request, applied.defaultedWindow);
   // R5.7: keep the default window unset in state so it can be re-applied, or replaced by a follow-up like "last 90 days".
   await saveEmailState(userId, conversationId, { request: { ...applied.request, days: applied.defaultedWindow ? null : days }, results: [] });
   try {
     // Target confirmation-style subjects and look wider than the default 20 hits, so promo and shipping mail can't crowd out older orders.
-    const safe = sender.replaceAll('"', "");
-    const found = await searchGmail(userId, [`{from:"${safe}" "${safe}"}`, "{subject:confirmed subject:confirmation subject:receipt subject:invoice subject:ordered subject:order}", days ? `newer_than:${days}d` : ""].filter(Boolean).join(" "), 50);
+    const safe = sender?.replaceAll('"', "") ?? "";
+    const found = await searchGmail(userId, bulkImportQuery(sender ? safe : null, days), sender ? 50 : 80);
     const eligible = deduplicateOrders(found
-      .filter((message) => senderMatches(message.from, sender))
+      .filter((message) => !sender || senderMatches(message.from, sender))
       .filter((message) => emailIntentRelevance(message, "receipt") >= minimumEmailRelevance("receipt") && documentScore(message, input) >= minimumDocumentScore(input))
       .sort((left, right) => confirmationRank(right) - confirmationRank(left) || right.receivedAt - left.receivedAt));
     if (!eligible.length) {
-      return `No ${sender} receipts to import${days ? ` in the last ${days} days${applied.defaultedWindow ? " (that's my default window)" : ""}` : ""}. Nothing was imported.\n\nWant me to look further back? Try “last 90 days”, or “always search 90 days” and I’ll remember.\n\n_Searched: ${terms}._`;
+      return `No ${scope} receipts to import${days ? ` in the last ${days} days${applied.defaultedWindow ? " (that's my default window)" : ""}` : ""}. Nothing was imported.\n\nWant me to look further back? Try “last 90 days”, or “always search 90 days” and I’ll remember.\n\n_Searched: ${terms}._`;
     }
     const today = Temporal.Now.zonedDateTimeISO(TIME_ZONE).toPlainDate().toString();
     const batch = eligible.slice(0, BULK_LIMIT);
@@ -343,7 +350,7 @@ async function prepareBulkEmailImport(input: string, userId: string, conversatio
       const counts = votes.get(item.candidate.merchant.toLowerCase())!;
       item.candidate.category = [...counts.entries()].sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))[0][0];
     }
-    if (!items.length) return `I found ${sender} email, but none could be imported. Nothing was imported.${skippedNote}`;
+    if (!items.length) return `I found ${scope} email, but none could be imported. Nothing was imported.${skippedNote}`;
     await createFinanceImportApproval(userId, conversationId, { items: items.map(({ candidate, source, importKind, billId, dueOn }) => ({ candidate, source, ...(importKind === "expense" ? {} : { kind: importKind, billId, dueOn }) })) });
     // R13.1, R5.7: the card is a numbered list of orders, so "import only the second one" has something to point at.
     await saveEmailState(userId, conversationId, {

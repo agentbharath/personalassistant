@@ -40,6 +40,7 @@ Rules that apply throughout: a **bill is not spending until it is paid** (R17); 
 | FN-030 | import my latest iherb receipts | import (cap 5) | Preview up to 5 with dedupe; ask approval | ✅ |
 | FN-031 | (uploads a photo or PDF of a receipt) | receipt import | Extract merchant, amount, date; ask approval; do not store the file | ✅ |
 | FN-032 | (uploads a blurry or unreadable receipt) | extraction failed | Say what could not be read; ask the person to type the amount | ◐ |
+| FN-034 | import all my receipts from the last week / record everything I bought this week (no store named) | sweep import | Search purchase and payment emails from any sender in the window; newest 5 with dedupe; ask approval; offer the next batch | ✅ |
 | FN-033 | add all my amazon orders from last year | bulk over the cap | Explain the cap of 5; import the newest 5; offer the next batch | ✅ |
 
 ## C. Bills and payments

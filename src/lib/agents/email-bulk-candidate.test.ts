@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { cleanBodyText, stripHtml } from "@/lib/tools/email/google-gmail";
-import { deterministicOrderExtraction, orderPlacedOn, resolveBulkCandidate, senderDisplayName } from "./email-finance-import";
+import { bulkImportQuery, deterministicOrderExtraction, orderPlacedOn, resolveBulkCandidate, senderDisplayName } from "./email-finance-import";
 import { applyMerchantLearnings, guessCategory, toKnownCategory } from "@/lib/learning/preferences";
 import { NO_LEARNINGS } from "@/lib/learning/learnings";
 import { buildEvidence, extractInvoiceFacts } from "./email-invoice";
@@ -140,5 +140,18 @@ describe("category guess from the merchant (R14.4)", () => {
     const email = (from: string) => ({ subject: "Order Confirmed #1", from, date: "Sat, 12 Sep 2026 08:10:00 -0700", snippet: "", text: "Order Total: $10.00" });
     expect(deterministicOrderExtraction(email("DoorDash Order <orders@doordash.com>"))?.category).toBe("restaurants");
     expect(deterministicOrderExtraction(email("iHerb <noreply@iherb.com>"))?.category).toBe("shopping");
+  });
+});
+
+describe("the Gmail search for a bulk import (free)", () => {
+  it("keeps the sender and window when they are named", () => {
+    expect(bulkImportQuery("iHerb", 30)).toBe('{from:"iHerb" "iHerb"} {subject:confirmed subject:confirmation subject:receipt subject:invoice subject:ordered subject:order} newer_than:30d');
+  });
+  it("sweeps every sender when none is named, looking for purchase and payment subjects in the window", () => {
+    const query = bulkImportQuery(null, 7);
+    expect(query).not.toContain("from:");
+    expect(query).toContain("subject:receipt");
+    expect(query).toContain("subject:payment");
+    expect(query.endsWith("newer_than:7d")).toBe(true);
   });
 });
