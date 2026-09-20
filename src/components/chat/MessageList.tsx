@@ -52,7 +52,7 @@ export function MessageList({ messages, pending, progress, takingLonger, hasEarl
       const absolute = offset + index;
       const highlight = activeMatch === absolute ? "active" : matches.includes(absolute) ? "match" : undefined;
       const id = `message-${absolute}`;
-      if (message.role === "user") return <UserMessage key={message.sequence ? `s${message.sequence}` : `i${absolute}`} id={id} highlight={highlight}>{message.content}</UserMessage>;
+      if (message.role === "user") return <UserMessage key={message.sequence ? `s${message.sequence}` : `i${absolute}`} id={id} highlight={highlight} busy={pending} onResend={() => onFollowUp(message.content)}>{message.content}</UserMessage>;
       const latest = absolute === lastIndex;
       return <AssistantMessage
         key={message.sequence ? `s${message.sequence}` : `i${absolute}`}

@@ -2,12 +2,28 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Button, IconButton } from "@/components/ui/Button";
-import { CheckIcon, CopyIcon, ThumbDownIcon, ThumbUpIcon } from "@/components/ui/icons";
+import { CheckIcon, CopyIcon, RetryIcon, ThumbDownIcon, ThumbUpIcon } from "@/components/ui/icons";
 import { Markdown } from "./Markdown";
 import styles from "./Message.module.css";
 
-export function UserMessage({ children, id, highlight }: { children: string; id?: string; highlight?: "match" | "active" }) {
-  return <article id={id} className={`${styles.user} ${highlight ? styles[highlight] : ""}`} aria-label="You said">{children}</article>;
+/** Your own message, with Copy and Ask again underneath. Ask again sends the same words as a new message. */
+export function UserMessage({ children, id, highlight, busy, onResend }: { children: string; id?: string; highlight?: "match" | "active"; busy?: boolean; onResend?: () => void }) {
+  const [copied, setCopied] = useState(false);
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(children);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1_800);
+    } catch { /* clipboard blocked: nothing to do */ }
+  }
+  return <div className={styles.userGroup}>
+    <article id={id} className={`${styles.user} ${highlight ? styles[highlight] : ""}`} aria-label="You said">{children}</article>
+    <div className={styles.userTools}>
+      <span className={styles.copied} role="status">{copied ? "Copied" : ""}</span>
+      <IconButton size="sm" label={copied ? "Copied" : "Copy message"} onClick={copy}>{copied ? <CheckIcon width={15} height={15} /> : <CopyIcon width={15} height={15} />}</IconButton>
+      {onResend && <IconButton size="sm" label="Ask again" disabled={busy} onClick={onResend}><RetryIcon width={15} height={15} /></IconButton>}
+    </div>
+  </div>;
 }
 
 type AssistantProps = {

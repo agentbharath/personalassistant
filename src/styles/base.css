@@ -20,7 +20,8 @@ button, input, textarea, select { font: inherit; color: inherit; }
 button { cursor: pointer; }
 button:disabled { cursor: not-allowed; }
 img, svg { display: block; max-width: 100%; }
-::selection { background: var(--accent-soft); color: var(--ink); }
+/* A clearly visible highlight on every surface, including the grey message bubble, in light and dark. */
+::selection { background: color-mix(in srgb, var(--blue) 32%, transparent); color: inherit; }
 :focus { outline: none; }
 :focus-visible { outline: none; box-shadow: var(--focus-ring); border-radius: var(--r-xs); }
 .tabular { font-variant-numeric: tabular-nums; }

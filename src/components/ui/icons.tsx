@@ -30,6 +30,7 @@ export const ThumbDownIcon = (p: SVGProps<SVGSVGElement>) => <Icon {...p}><path 
 export const StopIcon = (p: SVGProps<SVGSVGElement>) => <Icon {...p}><rect x="6.5" y="6.5" width="11" height="11" rx="2.5" fill="currentColor" /></Icon>;
 export const ArrowDownIcon = (p: SVGProps<SVGSVGElement>) => <Icon {...p}><path d="m6 12 6 6 6-6M12 18V5" /></Icon>;
 export const KeyboardIcon = (p: SVGProps<SVGSVGElement>) => <Icon {...p}><rect x="3" y="6" width="18" height="12" rx="2.5" /><path d="M7 10h.01M11 10h.01M15 10h.01M7 14h10" /></Icon>;
+export const RetryIcon = (p: SVGProps<SVGSVGElement>) => <Icon {...p}><path d="M20 12a8 8 0 1 1-2.5-5.8M20 4v4.6h-4.6" /></Icon>;
 export const SettingsIcon = (p: SVGProps<SVGSVGElement>) => <Icon {...p}><path d="M4 7h9M17 7h3M4 17h3M11 17h9" /><circle cx="15" cy="7" r="2" /><circle cx="9" cy="17" r="2" /></Icon>;
 export const SidebarIcon = (p: SVGProps<SVGSVGElement>) => <Icon {...p}><rect x="3.5" y="4.5" width="17" height="15" rx="2.5" /><path d="M9.5 4.5v15" /></Icon>;
 export const LocateIcon = (p: SVGProps<SVGSVGElement>) => <Icon {...p}><circle cx="12" cy="12" r="6.5" /><circle cx="12" cy="12" r="2" fill="currentColor" /><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3" /></Icon>;
