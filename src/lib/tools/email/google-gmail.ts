@@ -98,36 +98,67 @@ function collectAttachments(part?: GmailPart): EmailAttachment[] {
   return [...own, ...(part.parts ?? []).flatMap(collectAttachments)];
 }
 
+/** Runs `task` over `items` with at most `limit` in flight, so a large search does not trip Gmail's per-user rate limit. */
+async function mapLimit<T, R>(items: T[], limit: number, task: (item: T) => Promise<R>): Promise<PromiseSettledResult<R>[]> {
+  const results: PromiseSettledResult<R>[] = new Array(items.length);
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) {
+      const index = next++;
+      try { results[index] = { status: "fulfilled", value: await task(items[index]) }; }
+      catch (reason) { results[index] = { status: "rejected", reason }; }
+    }
+  }));
+  return results;
+}
+
+type MessageRef = { id: string; threadId: string };
+const METADATA_CONCURRENCY = 6;
+
+async function listMessageRefs(accessToken: string, query: string, maxResults: number): Promise<MessageRef[]> {
+  const listUrl = new URL("https://gmail.googleapis.com/gmail/v1/users/me/messages");
+  listUrl.search = new URLSearchParams({ q: query, maxResults: String(maxResults) }).toString();
+  const listResponse = await gmailFetch(listUrl, accessToken);
+  return ((await listResponse.json()) as { messages?: MessageRef[] }).messages ?? [];
+}
+
+/** Fetches each message's headers, a few at a time. A message that fails is left out; only if every one fails is the whole search an error. */
+async function messageSummaries(accessToken: string, refs: MessageRef[]): Promise<EmailSearchResult[]> {
+  const settled = await mapLimit(refs, METADATA_CONCURRENCY, async (message) => {
+    assertToolAllowed("email", "email.read");
+    const messageUrl = new URL(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${message.id}`);
+    messageUrl.searchParams.set("format", "metadata");
+    messageUrl.searchParams.set("fields", "id,threadId,internalDate,snippet,payload/headers");
+    messageUrl.searchParams.append("metadataHeaders", "Subject");
+    messageUrl.searchParams.append("metadataHeaders", "From");
+    messageUrl.searchParams.append("metadataHeaders", "Date");
+    const response = await gmailFetch(messageUrl, accessToken);
+    const body = await response.json() as { id: string; threadId: string; internalDate?: string; snippet?: string; payload?: { headers?: Array<{ name: string; value: string }> } };
+    const headers = new Map((body.payload?.headers ?? []).map((header) => [header.name.toLowerCase(), header.value]));
+    return {
+      id: body.id,
+      threadId: body.threadId,
+      subject: headers.get("subject") ?? "(No subject)",
+      from: headers.get("from") ?? "Unknown sender",
+      date: headers.get("date") ?? "",
+      receivedAt: Number(body.internalDate ?? 0),
+      snippet: decodeEntities(body.snippet ?? ""),
+    };
+  });
+  const results = settled.flatMap((entry) => (entry.status === "fulfilled" ? [entry.value] : []));
+  if (refs.length > 0 && results.length === 0) throw (settled.find((entry) => entry.status === "rejected") as PromiseRejectedResult).reason;
+  return results.sort((left, right) => right.receivedAt - left.receivedAt);
+}
+
 export async function searchGmail(userId: string, query: string, maxResults = 20): Promise<EmailSearchResult[]> {
   assertToolAllowed("email", "email.search");
-  return withGoogleCredential(userId, "email", async (accessToken) => {
-    const listUrl = new URL("https://gmail.googleapis.com/gmail/v1/users/me/messages");
-    listUrl.search = new URLSearchParams({ q: query, maxResults: String(maxResults) }).toString();
-    const listResponse = await gmailFetch(listUrl, accessToken);
-    const list = await listResponse.json() as { messages?: Array<{ id: string; threadId: string }> };
-    const results = await Promise.all((list.messages ?? []).map(async (message) => {
-      assertToolAllowed("email", "email.read");
-      const messageUrl = new URL(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${message.id}`);
-      messageUrl.searchParams.set("format", "metadata");
-      messageUrl.searchParams.set("fields", "id,threadId,internalDate,snippet,payload/headers");
-      messageUrl.searchParams.append("metadataHeaders", "Subject");
-      messageUrl.searchParams.append("metadataHeaders", "From");
-      messageUrl.searchParams.append("metadataHeaders", "Date");
-      const response = await gmailFetch(messageUrl, accessToken);
-      const body = await response.json() as { id: string; threadId: string; internalDate?: string; snippet?: string; payload?: { headers?: Array<{ name: string; value: string }> } };
-      const headers = new Map((body.payload?.headers ?? []).map((header) => [header.name.toLowerCase(), header.value]));
-      return {
-        id: body.id,
-        threadId: body.threadId,
-        subject: headers.get("subject") ?? "(No subject)",
-        from: headers.get("from") ?? "Unknown sender",
-        date: headers.get("date") ?? "",
-        receivedAt: Number(body.internalDate ?? 0),
-        snippet: decodeEntities(body.snippet ?? ""),
-      };
-    }));
-    return results.sort((left, right) => right.receivedAt - left.receivedAt);
-  });
+  return withGoogleCredential(userId, "email", async (accessToken) => messageSummaries(accessToken, await listMessageRefs(accessToken, query, maxResults)));
+}
+
+/** Like `searchGmail`, but only reads the headers of matches that are in one of the given threads. The list call already says which thread each match is in, so the rest cost nothing. */
+export async function searchGmailInThreads(userId: string, query: string, maxResults: number, threadIds: Set<string>): Promise<EmailSearchResult[]> {
+  assertToolAllowed("email", "email.search");
+  return withGoogleCredential(userId, "email", async (accessToken) => messageSummaries(accessToken, (await listMessageRefs(accessToken, query, maxResults)).filter((message) => threadIds.has(message.threadId))));
 }
 
 async function gmailFetch(url: URL, accessToken: string) {

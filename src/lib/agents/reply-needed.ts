@@ -67,6 +67,14 @@ export function buildReplyMessage(input: Pick<ReplyJudgeInput, "from" | "subject
 /** One message is judged once: the same message and prompt version always hit the cache, so nothing is paid for twice (R16.3). */
 export const replyCacheMaterial = (input: Pick<ReplyJudgeInput, "userId" | "messageId">) => [REPLY_JUDGE_VERSION, input.userId, input.messageId].join(" || ");
 
+/** What is already remembered for this message, without a model call and without reading the mail. Undefined when nothing is remembered. */
+export async function readCachedJudgement(input: Pick<ReplyJudgeInput, "userId" | "messageId">, cache?: InterpretationCache | null): Promise<ReplyJudgement | undefined> {
+  try {
+    const cached = await cache?.get(replyCacheMaterial(input));
+    return cached ? outputSchema.parse(JSON.parse(cached)) as ReplyJudgement : undefined;
+  } catch { return undefined; }
+}
+
 /** Null when no model could judge it. The caller leaves it out (and tries again next time) rather than guessing. */
 export async function judgeReply(input: ReplyJudgeInput, deps: ReplyJudgeDeps): Promise<ReplyJudgement | null> {
   const material = replyCacheMaterial(input);

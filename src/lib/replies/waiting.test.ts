@@ -3,9 +3,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const errors = vi.hoisted(() => ({ ConnectionRequired: class extends Error {} }));
 const { ConnectionRequired } = errors;
 vi.mock("@/lib/auth/google-credential-broker", () => ({ GoogleConnectionRequiredError: errors.ConnectionRequired }));
-vi.mock("@/lib/tools/email/google-gmail", () => ({ GoogleGmailAccessError: class extends Error { reason = "unavailable"; }, readGmailMessage: vi.fn(), searchGmail: vi.fn() }));
-vi.mock("@/lib/agents/reply-needed-runtime", () => ({ judgeReplyForUser: vi.fn() }));
-vi.mock("./dismissals", () => ({ listDismissedThreads: vi.fn(), threadKey: (id: string) => `k:${id}` }));
+vi.mock("@/lib/tools/email/google-gmail", () => ({ GoogleGmailAccessError: class extends Error { reason = "unavailable"; }, readGmailMessage: vi.fn(), searchGmail: vi.fn(), searchGmailInThreads: vi.fn() }));
+vi.mock("@/lib/agents/reply-needed-runtime", () => ({ judgeReplyForUser: vi.fn(), peekReplyJudgement: vi.fn() }));
+vi.mock("@/lib/runtime/encrypted-cache", () => ({ createEncryptedCache: () => null }));
+vi.mock("./dismissals", () => ({ listDismissedThreads: vi.fn(), loadPerchPrefs: vi.fn(), threadKey: (id: string) => `k:${id}` }));
 
 import { displayName, inboundQuery, loadWaitingReplies, sentQuery } from "./waiting";
 
@@ -15,10 +16,14 @@ const read = vi.fn();
 const judge = vi.fn();
 const dismissed = vi.fn();
 const prefs = vi.fn();
-const deps = { search, read, judge, dismissed, prefs } as never;
+const searchIn = vi.fn();
+const peek = vi.fn();
+const deps = { search, searchIn, read, judge, peek, dismissed, prefs, scan: null } as never;
 
 beforeEach(() => {
-  search.mockReset().mockImplementation(async (_user: string, query: string) => (query === inboundQuery ? [mail("a", "t1", 100), mail("b", "t2", 300), mail("c", "t3", 200)] : []));
+  search.mockReset().mockResolvedValue([mail("a", "t1", 100), mail("b", "t2", 300), mail("c", "t3", 200)]);
+  searchIn.mockReset().mockResolvedValue([]);
+  peek.mockReset().mockResolvedValue(undefined);
   read.mockReset().mockResolvedValue({ text: "body" });
   judge.mockReset().mockImplementation(async (input: { messageId: string }) => ({ needsReply: input.messageId !== "c", kind: "person", reason: `why ${input.messageId}` }));
   dismissed.mockReset().mockResolvedValue(new Set<string>());
@@ -40,7 +45,8 @@ describe("Waiting on your reply (free, fake Gmail and model)", () => {
   });
 
   it("leaves out threads the owner already answered", async () => {
-    search.mockImplementation(async (_user: string, query: string) => (query === inboundQuery ? [mail("a", "t1", 100), mail("b", "t2", 300)] : [{ id: "s", threadId: "t1", receivedAt: 400 }]));
+    search.mockResolvedValue([mail("a", "t1", 100), mail("b", "t2", 300)]);
+    searchIn.mockResolvedValue([{ id: "s", threadId: "t1", receivedAt: 400 }]);
     const result = await loadWaitingReplies("u1", deps);
     if (result.state !== "ok") throw new Error("expected ok");
     expect(result.items.map((item) => item.messageId)).toEqual(["b"]);
@@ -87,6 +93,35 @@ describe("Waiting on your reply (free, fake Gmail and model)", () => {
     prefs.mockResolvedValue({ saved: true, perchEnabled: true, remindersEnabled: false, kinds: ["person"] });
     expect(await loadWaitingReplies("u1", deps)).toEqual({ state: "off" });
     expect(search).not.toHaveBeenCalled();
+  });
+
+  it("reads the owner's sent headers only for the threads that have incoming mail", async () => {
+    await loadWaitingReplies("u1", deps);
+    expect(searchIn).toHaveBeenCalledWith("u1", sentQuery, 100, new Set(["t1", "t2", "t3"]));
+  });
+
+  it("answers from memory, without reading the mail or calling the model, for messages judged before", async () => {
+    peek.mockImplementation(async (_user: string, id: string) => ({ needsReply: id !== "c", kind: "person", reason: `remembered ${id}` }));
+    const result = await loadWaitingReplies("u1", deps);
+    expect(read).not.toHaveBeenCalled();
+    expect(judge).not.toHaveBeenCalled();
+    if (result.state !== "ok") throw new Error("expected ok");
+    expect(result).toMatchObject({ checked: 3, total: 3 });
+    expect(result.items.map((item) => item.reason)).toEqual(["remembered a", "remembered b"]);
+  });
+
+  it("reads only the messages that were not judged before", async () => {
+    peek.mockImplementation(async (_user: string, id: string) => (id === "a" ? { needsReply: true, kind: "person", reason: "old" } : undefined));
+    await loadWaitingReplies("u1", deps);
+    expect(read.mock.calls.map((call) => call[1]).sort()).toEqual(["b", "c"]);
+  });
+
+  it("does not search Gmail again when the scan is still fresh", async () => {
+    const store = new Map<string, string>();
+    const scan = { get: async (key: string) => store.get(key) ?? null, set: async (key: string, value: string) => { store.set(key, value); } };
+    await loadWaitingReplies("u1", { ...(deps as object), scan } as never);
+    await loadWaitingReplies("u1", { ...(deps as object), scan } as never);
+    expect(search).toHaveBeenCalledTimes(1);
   });
 
   it("shows the sender's name without the address", () => {

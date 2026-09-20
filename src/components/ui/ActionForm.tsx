@@ -22,5 +22,5 @@ export function ActionForm({ action, success, failure = "Couldn’t save that. T
     });
   }
 
-  return <form className={[styles.form, className].filter(Boolean).join(" ")} onSubmit={submit} aria-busy={pending} data-pending={pending || undefined}>{children}</form>;
+  return <form className={[styles.form, className].filter(Boolean).join(" ")} onSubmit={submit} aria-busy={pending} data-pending={pending || undefined}>{children}<span className={styles.status} role="status">{pending ? "Saving…" : ""}</span></form>;
 }
