@@ -3,7 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ search: vi.fn(), synthesize: vi.fn() }));
 vi.mock("@/lib/tools/general/tavily-search", () => ({ searchPublicWeb: mocks.search }));
 vi.mock("@/lib/model/claude", () => ({ synthesizeSearchResults: mocks.synthesize }));
-vi.mock("@/lib/cache/public-query-cache", () => ({ withPublicQueryCache: (_query: string, load: () => Promise<string>) => load() }));
+const cacheState = vi.hoisted(() => ({ hit: null as unknown }));
+vi.mock("@/lib/cache/public-query-cache", () => ({ withPublicQueryCache: (_query: string, load: () => Promise<string>) => (cacheState.hit !== null ? Promise.resolve(cacheState.hit) : load()) }));
 
 import { answerPublicSearch, sourceList } from "./general";
 
@@ -14,6 +15,7 @@ const places = (over: object = {}) => ({ kind: "places", intro: "Chinese restaur
 ], ...over });
 
 beforeEach(() => {
+  cacheState.hit = null;
   mocks.search.mockReset().mockResolvedValue({ answer: "", sources: [1, 2, 3, 4, 5, 6].map(source) });
   mocks.synthesize.mockReset();
 });
@@ -68,5 +70,20 @@ describe("a web search answer (free)", () => {
     expect(sourceList("No citations here.", [source(1), source(2), source(3), source(4)])).toContain("- **3** ·");
     expect(sourceList("Only [9] here.", [source(1), source(2)])).toContain("- **1** ·");
     expect(sourceList("x", [])).toBe("");
+  });
+
+  it("reads a saved answer whether the cache gave back text, an object or an old plain string, and still remembers its places", async () => {
+    const saved = { text: "Saved answer [1]", places: [{ name: "Ginger Cafe", address: "", note: "" }] };
+    const remember = vi.fn().mockResolvedValue(undefined);
+    for (const hit of [JSON.stringify(saved), saved]) {
+      cacheState.hit = hit;
+      expect(await answerPublicSearch("x", remember)).toBe("Saved answer [1]");
+    }
+    expect(remember).toHaveBeenCalledTimes(2);
+    cacheState.hit = "An older plain answer";
+    expect(await answerPublicSearch("x", remember)).toBe("An older plain answer");
+    cacheState.hit = { unexpected: true };
+    expect(await answerPublicSearch("x")).toMatch(/couldn’t read that saved answer/);
+    expect(mocks.synthesize).not.toHaveBeenCalled();
   });
 });

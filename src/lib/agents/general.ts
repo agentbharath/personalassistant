@@ -28,13 +28,13 @@ async function loadAnswer(query: string): Promise<Loaded> {
   return { text, places };
 }
 
-/** Older saved answers were plain text; both forms are read. */
-function parseLoaded(raw: string): Loaded {
+/** Older saved answers were plain text; both forms are read, and so is one a cache already parsed into an object. */
+function parseLoaded(raw: unknown): Loaded {
   try {
-    const value = JSON.parse(raw) as Partial<Loaded>;
-    if (typeof value.text === "string") return { text: value.text, places: Array.isArray(value.places) ? value.places : [] };
+    const value = (typeof raw === "string" ? JSON.parse(raw) : raw) as Partial<Loaded> | null;
+    if (value && typeof value.text === "string") return { text: value.text, places: Array.isArray(value.places) ? value.places : [] };
   } catch { /* plain text from an older version */ }
-  return { text: raw, places: [] };
+  return { text: typeof raw === "string" ? raw : "I couldn’t read that saved answer. Please ask again.", places: [] };
 }
 
 /** The sources the answer cites, with the numbers it cites them by; if it cites none, the first few. */

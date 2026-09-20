@@ -22,8 +22,17 @@ import { CRISIS_RESPONSE } from "./scope";
 import { UNSAFE_REFUSAL } from "./safety";
 import { EMAIL_READ_ONLY_NOTICE } from "./routing";
 import type { OrchestratorResult } from "./run";
+import { reportFailure } from "@/lib/observability/report";
 
 export type DispatchContext = { requestId: string; input: string; userId: string; context: ContextMessage[]; conversationId?: string };
+
+/** An answer is always text. If a handler ever hands back anything else, say so plainly and report it, instead of showing "[object Object]". */
+export const NOT_TEXT = "I had trouble putting that answer together, so nothing was shown. Please ask again.";
+function asText(answer: unknown, operation: string) {
+  if (typeof answer === "string") return answer;
+  reportFailure("answer_not_text", { name: "TypeError" }, { operation });
+  return NOT_TEXT;
+}
 
 export const NOTHING_PENDING = "There's nothing waiting for your approval right now.";
 const FORGET_ALL_PROMPT = "Say “yes, forget everything” to confirm.";
@@ -67,7 +76,7 @@ const NEEDS_CONVERSATION = "I need a saved conversation before I can prepare tha
  */
 export async function dispatchDecision(decision: RouterDecision, ctx: DispatchContext): Promise<OrchestratorResult | null> {
   const { requestId, input, userId, context, conversationId } = ctx;
-  const done = (answer: string, agents: string[], status: OrchestratorResult["status"] = "completed", choices?: string[] | null): OrchestratorResult => ({ requestId, answer, agents, confidence: decision.confidence, status, ...(choices?.length ? { choices } : {}) });
+  const done = (answer: string, agents: string[], status: OrchestratorResult["status"] = "completed", choices?: string[] | null): OrchestratorResult => ({ requestId, answer: asText(answer, decision.operation), agents, confidence: decision.confidence, status, ...(choices?.length ? { choices } : {}) });
 
   // R19.6: unsure means ask, and nothing runs.
   if (decision.operation === "clarify" || (decision.clarification && decision.confidence < ROUTER_CONFIDENCE_THRESHOLD)) {

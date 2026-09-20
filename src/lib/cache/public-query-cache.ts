@@ -29,10 +29,11 @@ export async function withPublicQueryCache(query: string, load: () => Promise<st
   }
   const key = `public-search:v6:${createHash("sha256").update(normalizePublicQuery(query)).digest("hex")}`;
   try {
-    const cached = await getRedis()?.get<string>(key);
+    const cached = await getRedis()?.get<unknown>(key);
     if (cached) {
       recordCache(true);
-      return cached;
+      // Redis parses a stored JSON string into an object on the way out, so put it back to the text that was stored.
+      return typeof cached === "string" ? cached : JSON.stringify(cached);
     }
   } catch { /* Cache is optional. */ }
   recordCache(false);

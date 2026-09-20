@@ -47,6 +47,15 @@ beforeEach(() => {
 
 vi.mock("@/lib/conversations/search-state", () => ({ saveSearchState: (...args: unknown[]) => mocks.saveSearchState(...args) }));
 
+describe("an answer is always text (free)", () => {
+  it("replaces anything that is not text with a plain message, instead of showing [object Object]", async () => {
+    mocks.answerPublicSearch.mockResolvedValueOnce({ text: "an object" } as never);
+    const result = await dispatchDecision(decision({ operation: "web_search" }), ctx);
+    expect(result?.answer).toMatch(/trouble putting that answer together/);
+    expect(result?.answer).not.toContain("[object Object]");
+  });
+});
+
 describe("a web search uses the search the router wrote (free)", () => {
   it("saves what the search showed in this conversation, so a follow-up can point at it", async () => {
     await dispatchDecision(decision({ operation: "web_search", searchQuery: "q" } as never), ctx);
