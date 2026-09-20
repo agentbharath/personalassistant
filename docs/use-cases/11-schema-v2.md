@@ -25,12 +25,13 @@ Three separate places decide meaning, each with its own shape:
 | G9 | **Risk is not a field.** Read, write and destructive are implied by the operation name. | CA-051, FN-050, MS-066 | A generic guard should read the field, not a list of names |
 | G10 | **No evidence spans.** We cannot see which words justified a slot. | Debugging every wrong reading | Cannot improve what cannot be inspected |
 | G11 | **Entities have no type or canonical form.** "Amazon" is a string, so retail versus AWS relies on wording. | EM-002, EM-006, SR-030…038 | Canonical entities (with alias source) make follow-ups and learning safe |
+| G13 | **No scope or redirect handling.** Off-topic messages end in a bare refusal because there is no `pivot` to a real capability. | RD-001…035 | The owner ruled out "I can't answer that" (R23) |
 | G12 | **Output preference is buried** (`action`: list, amounts, facts). | EM-021, EM-070 | Format needs its own slot across domains |
 
 ## 3. Design goals
 
 1. **Correct or asked.** Every reading either passes validation with high per-slot confidence, or becomes a clarifying question. There is no third path where a shaky reading proceeds.
-2. **The model reads; code validates.** Code never decides what someone meant. Code checks that what the model returned is well-formed, possible, and safe.
+2. **The model reads; code validates form (R20.5, R20.6).** **No rule-based classification anywhere, and no rule-based fallback.** Code never decides what someone meant, never reads the message to overrule the model, never reclassifies. It checks only that what the model returned is well-formed and possible, and that a write has its approval. If no model is available, Daylark says it cannot interpret requests right now.
 3. **Structure over prose.** Everything a handler needs arrives as typed fields, never as text to be re-parsed.
 4. **Inspectable.** Each field can be traced to words in the message (`evidence`), and each default is recorded (`assumptions`).
 5. **Migratable.** The new frame can be projected to today's router output, so handlers move over one at a time.
@@ -112,6 +113,9 @@ type CalendarCreateSlots = { title: string; where?: string; attendees?: EntityRe
 type FinanceQuerySlots = { category?: Category; merchant?: EntityRef; compareTo?: TimeSpec; metric: "total"|"average"|"count"|"top"|"breakdown" };
 type FinanceRecordSlots = { amount: { minor: number; currency: string }; merchant: EntityRef; category?: Category; note?: string; direction: "expense"|"income"|"refund" };
 type RefusalSlots = { reason: "email_write"|"payments"|"bank_data"|"reminders"|"booking"|"messaging"|"other_account"|"other"; offer: string };
+type RedirectSlots = { category: "speculation"|"advice_stakes"|"contested"|"creative_or_academic"|"emotional"|"other_person"|"unrelated";
+                       pivot: { capability: "email"|"calendar"|"finance"|"web"|"memory"; operation: Operation; prefill?: Record<string, unknown>; needs?: Array<"location"|"time"|"amount"> } | null;
+                       tone: "casual"|"warm"; distress: boolean };   // distress=true means no pivot
 ```
 
 ## 5. Operation set (replaces the flat 25)
@@ -125,8 +129,8 @@ type RefusalSlots = { reason: "email_write"|"payments"|"bank_data"|"reminders"|"
 | web | `web.search` |
 | memory | `memory.teach`, `memory.show`, `memory.forget`, `memory.forget_all` |
 | conversation | `convo.approve`, `convo.deny`, `convo.edit_pending`, `convo.repeat`, `convo.explain`, `convo.undo`, `convo.never_mind`, `convo.more` |
-| meta | `meta.greeting`, `meta.thanks`, `meta.capabilities`, `meta.about`, `meta.data_privacy` |
-| refusal | `refuse.unsupported` (with `reason`), `refuse.unsafe` |
+| meta | `meta.greeting`, `meta.thanks`, `meta.small_talk`, `meta.capabilities`, `meta.about`, `meta.data_privacy` |
+| refusal and redirect | `redirect` (unrelated or unanswerable, with a `pivot`, see `13`), `refuse.unsupported` (with `reason` and an `offer`), `refuse.unsafe` |
 | safety | `safety.crisis`, `safety.emergency` |
 | clarify | `clarify` (only when no segment can proceed) |
 
@@ -141,7 +145,7 @@ message + state
 1  FRAME       model call, structured output (frame-v1), today's date and time zone, conversation state,
    │            learned aliases, saved places. Few, representative examples.
    ▼
-2  VALIDATE    code: zod schema; operation-slot fit; dates real and ordered; amounts positive;
+2  VALIDATE    code, FORM ONLY (never meaning, never sees the message): zod schema; operation-slot fit; dates real and ordered; amounts positive;
    │            ordinal within the list; risk equals the table; entities canonical or flagged
    │            failure → one repair attempt with the error text, then abstain
    ▼
@@ -152,7 +156,7 @@ message + state
 4  CONSENSUS   only when 3 disagrees or `overall` < threshold: 2 more independent frames; majority per slot;
    │            any disagreement on a slot that changes the result → clarify
    ▼
-5  GATE        code: ABSTAIN if any slot the operation needs is below its threshold; ASK if alternatives are close;
+5  GATE        code: ASK (R22: when in doubt, always ask) if any slot the operation needs is below its threshold or if alternatives are close;
    │            require approval for write/destructive; never skip
    ▼
 6  EXECUTE     handlers receive typed slots only; handlers never see raw text for meaning

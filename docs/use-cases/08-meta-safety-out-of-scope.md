@@ -20,7 +20,7 @@ This file is about the messages that are **not** a request for data: greetings, 
 
 ## B. Unsupported but reasonable asks
 
-Pattern for all of them: **say plainly it cannot be done, then offer the closest thing it can do.** Never say "I'll try", and never pretend.
+Pattern for all of them: **say plainly it cannot be done, then offer the closest thing it can do.** Never say "I'll try", and never pretend. The full pattern, tone rules and examples for unrelated and unanswerable messages are in `13-scope-and-redirection.md`; a bare "I can't answer that" is never acceptable (R23).
 
 | ID | Someone might say | Cannot because | Offer instead | Status |
 | --- | --- | --- | --- | --- |
@@ -47,6 +47,7 @@ Pattern for all of them: **say plainly it cannot be done, then offer the closest
 | MS-045 | Hate or harassment content | Decline | ✅ |
 | MS-046 | Legal, medical or investment decisions | General information only, plus "ask a professional"; never a directive | ◐ |
 | MS-047 | Very sensitive data typed into chat (SSN, full card number, password) | Do not store it; tell the person not to share it; never echo it back | ? |
+| MS-048 | An email containing a one-time code or reset link is found while answering something else | Never surface it (R24); the rest of the answer proceeds | ? |
 
 ## D. Prompt injection and manipulation
 

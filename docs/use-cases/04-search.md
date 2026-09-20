@@ -28,7 +28,7 @@ Privacy rule: a search query may contain a place or an event name, never an emai
 | SR-022 | how do i file taxes / what's a 401k / how does escrow work | explainer | General explanation with a "not personal advice" line for finance, legal, medical | ◐ |
 | SR-023 | recipe for x / how to fix a leaky faucet | how-to | Brief steps with sources if searched | ? |
 | SR-024 | translate this to spanish | translation | Do it in chat | ? |
-| SR-025 | write me a poem / help me write an essay | creative writing | Out of scope for Daylark; decline kindly, offer what it does do | ✖ |
+| SR-025 | write me a poem / help me write an essay | creative writing | Out of scope: redirect, never a bare refusal (`13`, RD-009, RD-015) | ✖ |
 | SR-026 | is this medication safe with that / symptoms of x | medical | General information with a clear "ask a professional"; urgent language triggers the safety path | ◐ |
 
 ## C. Public versus personal (the router must not confuse them)

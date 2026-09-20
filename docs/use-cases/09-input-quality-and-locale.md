@@ -15,7 +15,7 @@ The same need arrives as clean text, as a typo-ridden phone message, as a voice 
 | IQ-007 | (no punctuation, no capitals) how much have i spent on food this month | food spending | ✅ |
 | IQ-008 | ¿? and ... !!! stray marks | ignore the noise | ? |
 | IQ-009 | Transposed words: "receipts amazon show" | same request | ? |
-| IQ-010 | A single letter or keyword: "bills" / "calendar" / "amazon" | Default reading for that domain, said out loud; ask only if it is truly open | ◐ |
+| IQ-010 | A single letter or keyword: "bills" / "calendar" / "amazon" | **Ask what they want** (R22), offering the likely options for that word. A word like "bills" with one obvious reading (show outstanding bills) may be answered when the model has no real doubt | ◐ |
 
 **A correction of the person's spelling is never displayed** ("did you mean receipts?") unless the reading would change the result. The answer shows the reading used ("Showing receipts from iHerb…").
 
@@ -28,7 +28,7 @@ The same need arrives as clean text, as a typo-ridden phone message, as a voice 
 | IQ-022 | "how much did I spend at starbucks dot com" | Merchant, not a URL | ? |
 | IQ-023 | Homophones: "meat me at two" / "weather or not" | Meet me at two | ? |
 | IQ-024 | Numbers as words: "fifteen dollars", "two thirty" | 15, 2:30 | ? |
-| IQ-025 | Cut-off sentence: "what's on my cal" | Ask or complete conservatively (calendar), saying so | ? |
+| IQ-025 | Cut-off sentence: "what's on my cal" | Ask ("your calendar?") when the model has real doubt | ? |
 | IQ-026 | Background words inserted | Ignore | ? |
 
 ## C. Slang and everyday phrasing

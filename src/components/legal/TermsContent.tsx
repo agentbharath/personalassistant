@@ -11,6 +11,9 @@ export function TermsContent() {
     <h2>1. What {product} is</h2>
     <p>{product} is an AI assistant. With your permission it reads your email and calendar, answers questions about them and your spending, searches public information, and can prepare changes for you to approve. It reads email only; it cannot send, delete or change it. It creates, edits or deletes calendar events and saves financial records only after you confirm.</p>
 
+    <h3>Codes and links in your email</h3>
+    <p>One-time passcodes, verification codes, password-reset links, sign-in links and similar items in your email belong to the services that sent them and are meant to be used by you, straight away. {product} does not show, read out or use them, and will not help you retrieve them. Open those emails in your own email. You are responsible for the security of your accounts with those services, and {product} is not responsible for anything that happens to an account because of a code or link you shared or used.</p>
+
     <h2>2. Who can use it</h2>
     <p>You must be at least 18 and able to enter a binding agreement. You need a Google account, and you must be entitled to give {product} access to the email and calendar you connect.</p>
 

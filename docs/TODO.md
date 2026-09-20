@@ -4,7 +4,12 @@ The UI is frozen from 2026-09-20. Everything below is functionality, unless mark
 
 ## Intent quality programme (starts next)
 Read `docs/use-cases/README.md` first. It holds 436 use cases, the schema proposal (`11-schema-v2.md`) and the quality bar (`12-quality-and-measurement.md`).
-- [ ] Owner review of the use-case tables and the ten decisions in `12` §9 (D-1 to D-10).
+- [ ] Owner review of the use-case tables. Remaining open decisions are D-1 (drafting, explained in `12` §9), D-5 to D-10.
+- [ ] **Remove every rule-based path that classifies or interprets a message (R20.5).** Today's code still has them: the rule fallback chain in `orchestrator/run.ts` (runs when the router fails), the email interpreter's message-based overrides (R20.4), ordinal and correction detection by pattern in `email-turn`, `getCalendarWindow`, `extractLocation` and `preciseStart` in the calendar and feasibility code, `parseLearningsCommand`, `parseBillsCommand`, `detectCorrection`, and `summarizeConversationTitle`. Replace each with a model-filled field validated for form. When no model is available, reply that requests can't be interpreted right now.
+- [ ] Implement R22: ask when in doubt, with per-slot thresholds; keep the owner-defined 30-day default only for an unstated window.
+- [ ] Implement R23: a `redirect` operation whose `pivot` is validated against the real capabilities, plus the RD evals (`docs/use-cases/13-scope-and-redirection.md`).
+- [ ] Implement R24: never surface one-time codes or reset and sign-in links from email (extraction, summaries and quoting), with tests.
+- [ ] Clickable answer choices for clarifying questions (small UI addition, since "always ask" makes questions frequent). Needs an owner yes (D-7).
 - [ ] Turn the rows into eval cases in `evals/`, one or more per ID, starting with the 162 unverified rows.
 - [ ] Freeze `frame-v1` after review; write the adapter to today's router output.
 - [ ] Calendar first: replace rule-based date and place parsing with model-resolved, code-validated `TimeSpec`.

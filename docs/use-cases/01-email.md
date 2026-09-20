@@ -29,7 +29,7 @@ Read-only, always. The hard parts are: which emails the person means, what time 
 | EM-024 | shipping updates / where's my package / tracking | topic=shipping | Shipping mail is listed as shipping and is **not** counted as a receipt | ◐ |
 | EM-025 | flight confirmations / boarding pass / my trip emails | topic=travel | List travel mail; do not book or change anything | ? |
 | EM-026 | reservations / hotel booking / airbnb | topic=travel/lodging | Same | ? |
-| EM-027 | password reset / verify your email / security alert | topic=account-security | List; **never quote codes or reset links** (see EM-095) | ? |
+| EM-027 | password reset / verify your email / security alert | topic=account-security | Say such an email exists (sender, time). **Never show, quote or act on the code or link (R24).** Explain in one line why | ? |
 | EM-028 | newsletters / promos / deals / spam-looking stuff | topic=promotion | List promotions; offer nothing destructive | ✅ |
 | EM-029 | recruiters / job emails / linkedin messages | topic=recruiter | List recruiter mail | ✅ |
 | EM-030 | subscription renewals / auto-renew notices | topic=subscription | List renewal notices; offer to show amounts | ? |
@@ -90,11 +90,11 @@ All of these get: a short "I can only read your email, so I can't do that", then
 | ID | Someone might say | Daylark should | Status |
 | --- | --- | --- | --- |
 | EM-090 | reply to sarah / tell him yes / respond to that | Decline; offer to summarise the email so the person can reply themselves | ✅ |
-| EM-091 | send an email to my boss / write to the landlord / draft a message | Decline sending; **drafting text in chat is fine only if the owner allows it** (open decision D-1) | ✅ |
+| EM-091 | send an email to my boss / write to the landlord / draft a message / help me reply | Decline sending. **Whether Daylark may write the words in chat for the person to copy is undecided (D-1).** Until decided: decline to draft and offer to summarise the email being replied to | ✅ |
 | EM-092 | delete that / trash the promotions / get rid of these / clean my inbox | Decline | ✅ |
 | EM-093 | archive / mark as read / star / label this / move to folder | Decline | ✅ |
 | EM-094 | unsubscribe me from these | Decline; can name the sender so the person can unsubscribe | ✅ |
-| EM-095 | what's my verification code / read me the OTP / the reset link | Do not surface codes or links; say why (they expire and are sensitive) | ? |
+| EM-095 | what's my verification code / read me the OTP / the reset link / the magic link / the 2FA number | **Decided (R24): leave them alone.** Say the email arrived (sender, time) and that codes and links belong to the service that sent them, so the person should open it there. Never show, read out or click | ? |
 | EM-096 | forward this to my accountant | Decline | ✅ |
 | EM-097 | block this sender / mark as spam | Decline | ✅ |
 
@@ -107,7 +107,7 @@ All of these get: a short "I can only read your email, so I can't do that", then
 | EM-102 | my mail | too broad | Offer "recent" with the default window, and say so | ✅ |
 | EM-103 | the receipt | which merchant | Ask, offering the merchants in the last results | ◐ |
 | EM-104 | the bill | which bill | If there is exactly one outstanding, use it; else ask | ✅ |
-| EM-105 | amazon (one word) | search, or import, or spend? | Treat as "emails from Amazon" and say so; offer spending | ? |
+| EM-105 | amazon (one word) | emails, receipts, spending, or a web question? | **Ask** (R22): "Do you want your emails from Amazon, your Amazon receipts, or what you've spent there?" | ? |
 
 ## H. Hostile and odd content
 

@@ -43,6 +43,9 @@ export function PrivacyContent() {
     <h2>2. How we use it</h2>
     <p>Only to run {product} for you: to understand your request, look things up in your email and calendar, work out answers, save what you ask us to save, keep your account secure, prevent abuse, fix errors and keep costs within limits. We do not use your data for advertising, we do not sell it, and we do not use it to build profiles for anyone else.</p>
 
+    <h3>One-time codes and links in your email</h3>
+    <p>Your email may contain one-time passcodes, verification codes, password-reset links, sign-in links and similar items sent by other services. These belong to the service that sent them, they expire quickly, and you use them straight away. {product} does not display, read out, quote, store or act on them. If you ask about such an email, {product} can tell you that it arrived and who sent it, and you open it in your own email. {product} cannot be used to get, forward or use these codes or links.</p>
+
     <h2>3. Google user data</h2>
     <p>{product}&apos;s use and transfer of information received from Google APIs adheres to the <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noreferrer noopener">Google API Services User Data Policy</a>, including the Limited Use requirements. In particular:</p>
     <ul>

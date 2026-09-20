@@ -9,23 +9,40 @@ An AI model reading free text cannot be *proven* 99.99% accurate on everything p
 - **Statistics.** To show an error rate below 0.01% with 95% confidence you need about **30,000 independent test cases with zero errors** (the "rule of three": 3 ÷ 30,000 = 0.01%). Our current eval sets have hundreds of cases. A number like "99.99%" from that would be meaningless.
 - **Language is open-ended.** New phrasings keep appearing. What we can guarantee is *structure*, not that every phrasing is read correctly.
 
-So the bar is split into things that **can** be guaranteed and things that are measured:
+**Owner instruction (2026-09-20): make the target the largest number possible.** So the targets below are set as high as they can be set honestly, and the claim Daylark makes about itself is always **the number we have demonstrated**, never the target. A target can be five nines; a claim needs the evidence.
 
-| Tier | Statement | How it is achieved | Target |
-| --- | --- | --- | --- |
-| **T0. Invariants** | No write happens without approval. Email is never modified. One user never sees another's data. Text inside an email, page or file never triggers an action. Secrets are never logged. | **By construction** (code gates, row-level security, structural separation of data from instructions), verified by property tests and adversarial tests | **100%, no exceptions.** A single violation is a stop-ship bug |
-| **T1. Never silently wrong on actions** | For any request that leads to a write or a statement of financial fact, the outcome is either **correct**, or Daylark **asked or declined**. | Frame → validate → verify → (consensus) → abstain (see `11`) | **≥ 99.99% "correct-or-asked"**, reported with a confidence interval on a large adversarial plus real set. Wrong-and-confident is S0 |
-| **T2. Intent accuracy** | The operation chosen is the right one. | Model-first router with structured output and verification | ≥ 99.5% on clean paraphrase sets; ≥ 98% on the hard set; per category, never averaged away |
-| **T3. Slot accuracy, exact values** | Dates, times, amounts, senders, merchants are exactly right. | Model resolves; **code validates** (real dates, ordering, ranges); ambiguous dates force a question | Dates ≥ 99.9% exact on the date set; amounts 100% when present in the source |
-| **T4. Follow-up resolution** | "the second one", "and yesterday?", "no, aws" resolve correctly. | Conversation state per domain, explicit references, ask when unresolved | ≥ 99% on the follow-up set; unresolved → asked |
-| **T5. Clarification quality** | Asks when it must; does not ask when it need not. | Thresholds tuned on the set | Missed necessary questions: ≤ 0.1%. Unnecessary questions on read-only asks with a sensible default: ≤ 3% |
+### What each number costs to demonstrate
 
-**The honest summary:** the 99.99% figure applies to T1, and only because Daylark is allowed to say "I'm not sure, which do you mean?". Raw first-try understanding across all wording will be lower, and that is fine, because a question is not an error. What must never happen is a confident wrong answer or a wrong write.
+With zero errors observed in *n* independent trials, the 95% confidence lower bound on accuracy is about 1 − 3/n:
+
+| Error-free trials | Demonstrated accuracy (95% confidence) |
+| --- | --- |
+| 300 | 99% |
+| 3,000 | 99.9% |
+| 30,000 | 99.99% |
+| 300,000 | **99.999%** (five nines) |
+| 3,000,000 | 99.9999% |
+
+Every error found in a run moves the bound down and becomes a new regression case. A number above what the evidence supports is not reported.
+
+### The tiers
+
+| Tier | Statement | How it is achieved | **Target** | Demonstrated today |
+| --- | --- | --- | --- | --- |
+| **T0. Invariants** | No write without approval. Email never modified. One user never sees another's data. Text inside an email, page or file never triggers an action. Secrets never logged. Codes and links in email never shown (R24). | **By construction** (code gates, row-level security, structural separation of data from instructions), verified by property and adversarial tests | **100%, no exceptions.** One violation is a stop-ship bug | not yet measured |
+| **T1. Never silently wrong on actions** | For any request that leads to a write or a statement of financial fact, the outcome is either **correct**, or Daylark **asked or declined**. | Frame → validate form → verify → (consensus) → ask (`11`) | **≥ 99.999%** "correct-or-asked" | not yet measured |
+| **T2. Intent accuracy** | The operation chosen is the right one (decided by a model, R20.5). | Model router, strict schema, verifier | ≥ 99.9% on clean paraphrase sets; ≥ 99% on the hard set; per category, never averaged away | ~97% on the router set before credits ran out (106 cases) |
+| **T3. Slot accuracy, exact values** | Dates, times, amounts, senders, merchants are exactly right. | Model resolves, code validates form, ambiguity forces a question | Dates ≥ 99.99%; amounts 100% when present in the source | not yet measured |
+| **T4. Follow-up resolution** | "the second one", "and yesterday?", "no, aws" resolve correctly. | State per domain, explicit references, ask when unresolved | ≥ 99.9%; unresolved → asked | not yet measured |
+| **T5. Clarification quality** | Asks when in doubt (R22). | Thresholds tuned on the labelled set | Missed necessary questions ≤ 0.01%. Unnecessary questions are **tracked, not capped**: the owner chose the safe side | not yet measured |
+| **T6. Redirect quality** (`13`) | An unrelated or unanswerable message never gets a bare refusal; the pivot is a real capability; no pivot to a distressed person | Router `redirect` with a validated pivot | **100%** no bare refusals; **100%** real pivots; **100%** no pivot under distress; tone graded by rubric | not yet measured |
+
+**The honest summary:** the largest numbers apply to T1, T0 and T6, and they are reachable because Daylark is allowed to say "I'm not sure, which do you mean?". Raw first-try understanding across all wording will be lower, and that is fine, because a question is not an error. What must never happen is a confident wrong answer or a wrong write. Five nines on T1 needs ~300,000 error-free cases; that is built in stages (see §4), and until each stage is run the demonstrated number stays where the evidence puts it.
 
 ## 2. How the system reaches it (design, not hope)
 
 1. **The model interprets, into a strict schema** (`frame-v1`), with today's date, the user's time zone, conversation state, learned aliases and saved places in context.
-2. **Deterministic validation** rejects impossible or malformed readings: non-existent dates, negative amounts, ordinals beyond the list, mismatched risk.
+2. **Deterministic validation of form only** rejects impossible or malformed readings: non-existent dates, negative amounts, ordinals beyond the list, mismatched risk. It never reads the message and never reclassifies (R20.6). **Every judgement about meaning, including the verifier and the consensus readings, is made by a model; there are no classification rules and no rule-based fallback (R20.5).**
 3. **An independent verifier** re-reads the message and the frame and reports mismatches. It runs for every write, every low-confidence slot, every multi-part message, and a sampled share of the rest.
 4. **Self-consistency** (extra independent readings) runs only when the verifier disagrees or confidence is low. A disagreement on any result-changing slot becomes a question.
 5. **Abstain thresholds per slot.** A slot below its threshold is asked about; it is never filled by a guess. Thresholds are tuned on the labelled set so that "wrong and answered" is driven toward zero.
@@ -102,17 +119,37 @@ A change to a prompt, schema, validator or handler ships only if:
 
 Frame plus verify is at least two model calls per turn, plus two more on hard turns. That is slower and costs more than today. It is accepted by design. The actual numbers must be measured on the first shadow run (no figures are claimed here), and the daily token budget (R9) will need to be re-set from those measurements.
 
-## 9. Decisions needed from the owner
+## 9. Decisions
 
-| # | Decision | Why it matters |
+Decided by the owner on 2026-09-20 (now in `RULES.md` as R20.5, R22, R23, R24):
+
+| # | Decision | Outcome |
 | --- | --- | --- |
-| D-1 | May Daylark **draft text** in chat for the person to send (still not sending)? | EM-091 |
-| D-2 | One-time codes and reset links in email: **never** surface, or surface with a warning? | EM-027, EM-095 |
-| D-3 | Ambiguous read-only asks: **answer with a stated default**, or **always ask**? The doc assumes the former; the latter is slower and safer | T5, EM-047, CA-074 |
-| D-4 | "3 o'clock" with no am/pm: assume working hours and state it, or always ask? | CA-036 |
-| D-5 | Which languages are required at launch? | IQ-050…054 |
-| D-6 | Store an opt-in interpretation log for measurement, and how long? | `11` §8 |
-| D-7 | Clickable answer choices for clarifying questions (small UI addition)? | `11` §10 |
-| D-8 | Week starts Monday or Sunday by default? | EM-042, IQ-062 |
-| D-9 | Who labels the real-traffic set, and is the owner comfortable reading their own messages for that? | §4 |
-| D-10 | Approval for spend: a budget for building the ~30,000-case measurement set | §4 |
+| D-2 | One-time codes and reset links in email | **Leave them alone.** Never shown, quoted or acted on (R24). Stated in the Privacy Policy and Terms |
+| D-3 | Ambiguous asks: default or ask? | **Always ask when in doubt** (R22). The owner-defined 30-day default for an unstated window stays (R22.1) |
+| D-4 | "3 o'clock" with no am or pm | **Ask**, unless the context makes only one reading plausible; the model judges that |
+| n/a | Rules to classify queries | **Never** (R20.5): no rules, no rule-based fallback. Models only |
+| n/a | The 99.99% target | **As high as possible**: T1 target ≥ 99.999%, with the claim limited to what is demonstrated |
+| n/a | Unrelated or unanswerable messages | **Redirect, never a bare refusal** (R23, `13`) |
+
+Still open:
+
+| # | Decision | Why it matters | Recommendation |
+| --- | --- | --- | --- |
+| D-1 | Drafting: see the explanation below | EM-091 | Draft in chat only, for mail and calendar related messages |
+| D-5 | Which languages are required at launch? | IQ-050…054 | English first, then Spanish |
+| D-6 | Store an opt-in interpretation log for measurement, and how long? | `11` §8 | Opt-in, hashed, 90 days, no message text unless the owner opts in |
+| D-7 | Clickable answer choices for clarifying questions (small UI addition) | `11` §10 | Yes: "always ask" makes questions frequent, so one tap beats typing |
+| D-8 | Week starts Monday or Sunday by default? | EM-042, IQ-062 | Follow the user's locale (Sunday in the US) |
+| D-9 | Who labels the real-traffic set? | §4 | The owner, on a small sample, plus a second reviewer |
+| D-10 | Budget for building the 30,000 to 300,000-case measurement set | §4 | Build in stages; each stage needs a cost quote and approval (R21) |
+
+### What "drafting" means (D-1)
+
+It is about **the words in the chat window**, for any message, not the Gmail drafts folder. Daylark is signed in with Gmail's **read-only** permission, so it cannot create a Gmail draft, and it cannot send. If someone asks "help me reply to this" or "write a message to my landlord about the leak", the choices are:
+
+1. **No drafting.** Daylark declines and offers to summarise the email being replied to.
+2. **Draft in the chat.** Daylark writes the wording in its reply; the person copies it into Gmail or a text and sends it themselves. Nothing is created or sent. Suitable when the message is about the person's mail or calendar.
+3. **Create a real Gmail draft.** Needs a broader Gmail permission (`gmail.compose`), a heavier Google review, and a change to the "we cannot change your email" promise in the Privacy Policy and Terms. Not recommended.
+
+Until decided, behaviour is option 1.

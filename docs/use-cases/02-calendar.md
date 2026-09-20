@@ -42,7 +42,7 @@ Dates are resolved from **today's date and the user's time zone**. Anything assu
 | CA-033 | remind me to call mom at 5 | reminder, not an event | Reminders are not supported; offer a calendar event instead | ✖ |
 | CA-034 | every monday at 9 standup / weekly on thursdays / first friday of the month | recurring | Recurring events: state the rule; if unsupported say so, do not create a single one silently | ? |
 | CA-035 | dinner at 7 (no date) | date missing | If the conversation gives a date use it; otherwise ask "which day?" | ✅ |
-| CA-036 | meeting at 3 (am or pm?) | ambiguous meridiem | Assume the working-hours reading (3 pm) **and state it**; for 9 or 10 ask | ? |
+| CA-036 | meeting at 3 (am or pm?) | ambiguous meridiem | **Decided (R22): ask** "3 AM or 3 PM?" unless the wording or context makes only one reading plausible (a dinner at 7, a call at 8 am was already said). The model judges that; no rule | ? |
 | CA-037 | lunch with anna sometime next week | fuzzy date | Ask which day; offer free lunchtime slots | ? |
 | CA-038 | add it / put that on my calendar (after a search result) | create from a referenced item | Use the event details from the previous answer; ask approval | ◐ |
 | CA-039 | movie at 7 in oakland | title + time + location | Location included; travel time may be offered | ◐ |
