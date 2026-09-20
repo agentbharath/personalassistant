@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Temporal } from "@js-temporal/polyfill";
 import { loadEmailState } from "@/lib/conversations/email-state";
+import { loadSearchState } from "@/lib/conversations/search-state";
 import { hasPendingApproval } from "@/lib/workflows/pending";
 import { NOTHING_PENDING, answerApproval, dispatchDecision } from "./dispatch";
 import { routeForUser } from "./router-runtime";
@@ -50,6 +51,7 @@ export async function runOrchestrator(input: string, userId: string, context: Co
     message: input,
     context,
     emailState: conversationId ? await loadEmailState(userId, conversationId) : null,
+    lastSearch: conversationId ? await loadSearchState(userId, conversationId) : null,
     today: Temporal.Now.zonedDateTimeISO(process.env.DEFAULT_USER_TIMEZONE ?? "America/Los_Angeles").toPlainDate().toString(),
     pendingApproval: await hasPendingApproval(userId, conversationId),
   });

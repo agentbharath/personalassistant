@@ -8,6 +8,10 @@ vi.mock("@/lib/cache/public-query-cache", () => ({ withPublicQueryCache: (_query
 import { answerPublicSearch, sourceList } from "./general";
 
 const source = (n: number) => ({ title: `Source ${n}`, url: `https://example.com/${n}`, snippet: `evidence ${n}` });
+const places = (over: object = {}) => ({ kind: "places", intro: "Chinese restaurants in Sunnyvale:", answer: "", caveat: "", items: [
+  { name: "Ginger Cafe", address: "", note: "Chinese with Southeast Asian influences", source: 1 },
+  { name: "Asia Village", address: "747 S. Wolfe Road", note: "pickup or delivery", source: 4 },
+], ...over });
 
 beforeEach(() => {
   mocks.search.mockReset().mockResolvedValue({ answer: "", sources: [1, 2, 3, 4, 5, 6].map(source) });
@@ -15,34 +19,54 @@ beforeEach(() => {
 });
 
 describe("a web search answer (free)", () => {
-  it("keeps the bold names and bullet list the model wrote, and drops headings", async () => {
-    mocks.synthesize.mockResolvedValue("## Chinese restaurants in Sunnyvale:\n- **Ginger Cafe** — Chinese with Southeast Asian influences [1]\n- **Asia Village** — pickup or delivery [4]");
+  it("shows places as a card list with a Maps link built by code, and cites the sources", async () => {
+    mocks.synthesize.mockResolvedValue(places());
     const answer = await answerPublicSearch("Chinese restaurants in Sunnyvale, CA");
-    expect(answer).toContain("- **Ginger Cafe** — Chinese with Southeast Asian influences [1]");
-    expect(answer).not.toMatch(/^## /m);
+    expect(answer).toContain("Chinese restaurants in Sunnyvale:");
+    expect(answer).toContain("- **Ginger Cafe** — Chinese with Southeast Asian influences [1]  \n  [Open in Maps](https://www.google.com/maps/search/?api=1&query=Ginger+Cafe+Sunnyvale%2C+CA)");
+    expect(answer).toContain("- **Asia Village** — pickup or delivery [4]  \n  747 S. Wolfe Road · [Open in Maps](https://www.google.com/maps/search/?api=1&query=Asia+Village+747+S.+Wolfe+Road)");
   });
 
   it("numbers each source the way the answer cites it, and lists only the ones it cites", async () => {
-    mocks.synthesize.mockResolvedValue("Options:\n- **A** [4]\n- **B** [1]\n- **C** [4]");
+    mocks.synthesize.mockResolvedValue(places());
     const answer = await answerPublicSearch("x");
     expect(answer).toContain("### Sources\n- **1** · [Source 1](https://example.com/1)\n- **4** · [Source 4](https://example.com/4)");
     expect(answer).not.toContain("Source 2");
   });
 
   it("sends the model exactly the five numbered sources the reader can see", async () => {
-    mocks.synthesize.mockResolvedValue("- **A** [1]");
+    mocks.synthesize.mockResolvedValue(places());
     await answerPublicSearch("x");
     expect(mocks.synthesize.mock.calls[0][1]).toHaveLength(5);
   });
 
-  it("lists the first three sources when the answer cites none, and ignores a citation that points at no source", () => {
+  it("remembers the places shown, so a follow-up can point at them", async () => {
+    mocks.synthesize.mockResolvedValue(places());
+    const remember = vi.fn().mockResolvedValue(undefined);
+    await answerPublicSearch("Chinese restaurants in Sunnyvale, CA", remember);
+    expect(remember).toHaveBeenCalledWith({ query: "Chinese restaurants in Sunnyvale, CA", places: [
+      { name: "Ginger Cafe", address: "", note: "Chinese with Southeast Asian influences" },
+      { name: "Asia Village", address: "747 S. Wolfe Road", note: "pickup or delivery" },
+    ] });
+  });
+
+  it("remembers nothing for a plain answer, and a failed save never fails the answer", async () => {
+    mocks.synthesize.mockResolvedValue({ kind: "answer", intro: "", items: [], answer: "It opens at 9 [1].", caveat: "" });
+    const remember = vi.fn();
+    expect(await answerPublicSearch("when does it open", remember)).toContain("It opens at 9 [1].");
+    expect(remember).not.toHaveBeenCalled();
+    mocks.synthesize.mockResolvedValue(places());
+    await expect(answerPublicSearch("y", vi.fn().mockRejectedValue(new Error("db")))).resolves.toContain("Ginger Cafe");
+  });
+
+  it("turns a link the model wrote in a plain answer into text, so untrusted results cannot put links in it", async () => {
+    mocks.synthesize.mockResolvedValue({ kind: "answer", intro: "", items: [], answer: "See [click](https://evil.example/x) [1]", caveat: "" });
+    expect(await answerPublicSearch("x")).toContain("See click (https://evil.example/x) [1]");
+  });
+
+  it("lists the first three sources when nothing is cited, and ignores a citation that points at no source", () => {
     expect(sourceList("No citations here.", [source(1), source(2), source(3), source(4)])).toContain("- **3** ·");
     expect(sourceList("Only [9] here.", [source(1), source(2)])).toContain("- **1** ·");
     expect(sourceList("x", [])).toBe("");
-  });
-
-  it("turns a link the model wrote into plain text, so untrusted results cannot put links in the answer", async () => {
-    mocks.synthesize.mockResolvedValue("- **A** see [click](https://evil.example/x) [1]");
-    expect(await answerPublicSearch("x")).toContain("see click (https://evil.example/x) [1]");
   });
 });

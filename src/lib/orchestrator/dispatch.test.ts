@@ -4,7 +4,7 @@ import type { RouterDecision } from "./router";
 
 const mocks = vi.hoisted(() => ({
   answerCalendar: vi.fn(), prepareCalendarCreate: vi.fn(), answerFinance: vi.fn(), answerPublicSearch: vi.fn(), runBillsCommand: vi.fn(), answerStatusLookup: vi.fn(),
-  answerCasual: vi.fn(), prepareCalendarAttendeeUpdate: vi.fn(), prepareCalendarDelete: vi.fn(), handleEmailConversationTurn: vi.fn(), answerScheduleFeasibility: vi.fn(), answerDailyView: vi.fn(),
+  answerCasual: vi.fn(), prepareCalendarAttendeeUpdate: vi.fn(), prepareCalendarDelete: vi.fn(), handleEmailConversationTurn: vi.fn(), answerScheduleFeasibility: vi.fn(), answerDailyView: vi.fn(), saveSearchState: vi.fn(),
   runLearningCommand: vi.fn(), executeReadOnlyAgentPlan: vi.fn(), saveLearning: vi.fn(),
   resolveDelete: vi.fn(), resolveAttendees: vi.fn(), resolveCreate: vi.fn(), resolveFinance: vi.fn(),
 }));
@@ -45,14 +45,22 @@ beforeEach(() => {
   for (const resolver of [mocks.resolveDelete, mocks.resolveAttendees, mocks.resolveCreate, mocks.resolveFinance]) resolver.mockResolvedValue(null);
 });
 
+vi.mock("@/lib/conversations/search-state", () => ({ saveSearchState: (...args: unknown[]) => mocks.saveSearchState(...args) }));
+
 describe("a web search uses the search the router wrote (free)", () => {
+  it("saves what the search showed in this conversation, so a follow-up can point at it", async () => {
+    await dispatchDecision(decision({ operation: "web_search", searchQuery: "q" } as never), ctx);
+    const remember = mocks.answerPublicSearch.mock.calls[0][1] as (state: unknown) => Promise<void>;
+    await remember({ query: "q", places: [{ name: "A", address: "", note: "" }] });
+    expect(mocks.saveSearchState).toHaveBeenCalledWith("u1", "c1", { query: "q", places: [{ name: "A", address: "", note: "" }] });
+  });
   it("passes the router's query, so the saved home place is in it", async () => {
     await dispatchDecision(decision({ operation: "web_search", searchQuery: "Indian restaurants in Sunnyvale, CA" } as never), ctx);
-    expect(mocks.answerPublicSearch).toHaveBeenCalledWith("Indian restaurants in Sunnyvale, CA");
+    expect(mocks.answerPublicSearch).toHaveBeenCalledWith("Indian restaurants in Sunnyvale, CA", expect.any(Function));
   });
   it("falls back to the person's own words when the router wrote none", async () => {
     await dispatchDecision(decision({ operation: "web_search" }), ctx);
-    expect(mocks.answerPublicSearch).toHaveBeenCalledWith("the message");
+    expect(mocks.answerPublicSearch).toHaveBeenCalledWith("the message", expect.any(Function));
   });
 });
 

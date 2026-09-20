@@ -13,7 +13,7 @@ import { caseHash, estimateLiveCost, liveMode, loadLedger, pendingCases, planTex
 const mode = liveMode();
 const REPEAT = Number(process.env.LIVE_EVAL_REPEAT ?? 0);
 
-type Case = { id: string; rule: string; input: string; pending?: boolean; home?: string; state?: { topic: string; sender: string; action: string; results: number }; context?: Array<{ role: "user" | "assistant"; content: string }>; expect: RouterExpect };
+type Case = { id: string; rule: string; input: string; pending?: boolean; home?: string; search?: { query: string; places: Array<{ name: string; address: string }> }; state?: { topic: string; sender: string; action: string; results: number }; context?: Array<{ role: "user" | "assistant"; content: string }>; expect: RouterExpect };
 const cases = readFileSync(resolve(process.cwd(), "evals/router.jsonl"), "utf8").trim().split("\n").map((line) => JSON.parse(line) as Case);
 const idOf = (item: Case) => item.id;
 const hashOf = (item: Case) => caseHash(item);
@@ -33,7 +33,7 @@ async function runAll(items: Case[], complete: Parameters<typeof routeMessage>[1
     // Stop before a batch that could pass the limit. The cases not reached stay pending.
     if (!meter.canAfford(Math.min(size, items.length - i))) break;
     const batch = items.slice(i, i + size);
-    out.push(...await Promise.all(batch.map((item) => routeMessage({ userId: "live-eval", message: item.input, context: item.context ?? [], emailState: toState(item.state), today: "2026-09-21", pendingApproval: item.pending ?? false, homeLocation: item.home ?? null }, { complete, cache: null }))));
+    out.push(...await Promise.all(batch.map((item) => routeMessage({ userId: "live-eval", message: item.input, context: item.context ?? [], emailState: toState(item.state), today: "2026-09-21", pendingApproval: item.pending ?? false, homeLocation: item.home ?? null, lastSearch: item.search ?? null }, { complete, cache: null }))));
     i += batch.length;
   }
   return out;

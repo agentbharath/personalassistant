@@ -13,6 +13,7 @@ import { prepareCalendarAttendeeUpdate, prepareCalendarDelete, resolvePendingCal
 import { resolvePendingFinanceImport } from "@/lib/workflows/finance-import";
 import { handleEmailConversationTurn } from "./email-turn";
 import { answerScheduleFeasibility } from "./feasibility";
+import { saveSearchState } from "@/lib/conversations/search-state";
 import { answerDailyView } from "@/lib/today/answer";
 import { runLearningCommand } from "./learning-turn";
 import { composeMultiAgentAnswer, executeReadOnlyAgentPlan, planClauseInstructions } from "./multi-agent";
@@ -138,7 +139,8 @@ export async function dispatchDecision(decision: RouterDecision, ctx: DispatchCo
     case "web_search":
       prepareAgentStage(["general"], "balanced");
       // R20.5: the router wrote the search (typos fixed, the saved home place added for "near me"); the raw message is the fallback.
-      return done(await answerPublicSearch(decision.searchQuery || input), ["general"]);
+      // Remember what was shown, so "the second one" or "which is open now?" can be read next turn.
+      return done(await answerPublicSearch(decision.searchQuery || input, conversationId ? (state) => saveSearchState(userId, conversationId, state) : undefined), ["general"]);
     case "multi": {
       const plan = planClauseInstructions(input, decision.agents);
       const outcomes = await executeReadOnlyAgentPlan(plan.tasks, input, userId, context);
