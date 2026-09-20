@@ -6,14 +6,14 @@ import { listDismissedThreads, loadPerchPrefs, threadKey, type PerchPrefs } from
 
 export type WaitingReply = { threadId: string; messageId: string; from: string; subject: string; receivedAt: number; reason: string; kind: ReplyKind };
 /** `items` are everything the model says needs a reply; the card shows the kinds the owner chose and says how many it is hiding. */
-export type WaitingResult = { state: "ok"; items: WaitingReply[]; pending: number; prefs: PerchPrefs }
+export type WaitingResult = { state: "ok"; items: WaitingReply[]; /** Messages checked this visit, and the messages that could be waiting (checked or not yet). */ checked: number; total: number; prefs: PerchPrefs }
   /** The owner has not answered the first-visit question. No mail is read until they do. */
   | { state: "setup"; prefs: PerchPrefs }
   /** The owner turned reminders off. */
   | { state: "off" } | { state: "needs_connection" } | { state: "unavailable" };
 
 /** Judged per visit, newest first. What is not reached is judged on the next visit, because judgements are remembered. */
-const MAX_JUDGED_PER_VISIT = 20;
+const MAX_JUDGED_PER_VISIT = 30;
 const BUDGET_MS = 8_000;
 
 export const inboundQuery = `in:inbox (category:primary OR category:updates) newer_than:${REPLY_WINDOW_DAYS}d -from:me`;
@@ -47,7 +47,7 @@ export async function loadWaitingReplies(userId: string, deps = { search: search
     }));
     await Promise.race([work, new Promise((resolve) => setTimeout(resolve, BUDGET_MS))]);
     // Waiting longest first: those are the ones most likely to be forgotten.
-    return { state: "ok", items: [...found].sort((left, right) => left.receivedAt - right.receivedAt), pending: candidates.length - Math.min(settledCount, batch.length), prefs };
+    return { state: "ok", items: [...found].sort((left, right) => left.receivedAt - right.receivedAt), checked: Math.min(settledCount, batch.length), total: candidates.length, prefs };
   } catch (error) {
     if (error instanceof GoogleConnectionRequiredError || (error instanceof GoogleGmailAccessError && error.reason === "insufficient_scope")) return { state: "needs_connection" };
     return { state: "unavailable" };

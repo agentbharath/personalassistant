@@ -26,7 +26,7 @@ const MOCK: DailyView = {
 
 const NOW = Date.parse("2026-09-21T18:00:00Z");
 const day = (days: number) => NOW - days * 86_400_000;
-const MOCK_WAITING: WaitingResult = { state: "ok", pending: 0, prefs: { saved: true, perchEnabled: true, remindersEnabled: true, kinds: ["person", "business", "recruiter"] }, items: [
+const MOCK_WAITING: WaitingResult = { state: "ok", checked: 3, total: 3, prefs: { saved: true, perchEnabled: true, remindersEnabled: true, kinds: ["person", "business", "recruiter"] }, items: [
   { threadId: "18c2f3a1b2c3d4e5", messageId: "m1", from: "Sam Lee <sam@example.com>", subject: "Signed lease?", receivedAt: day(9), reason: "Sam asks if you can send the signed lease by Friday.", kind: "person" },
   { threadId: "18c2f3a1b2c3d4e6", messageId: "m2", from: "Priya Nair <priya@example.com>", subject: "Dinner on Saturday", receivedAt: day(3), reason: "Priya is asking whether 7 pm on Saturday works for you.", kind: "person" },
   { threadId: "18c2f3a1b2c3d4e7", messageId: "m3", from: "Stevens Creek Striders <info@meetup.com>", subject: "Saturday: Can you make the trail run?", receivedAt: day(1), reason: "The group is asking you to RSVP for the Saturday trail run.", kind: "invitation" },

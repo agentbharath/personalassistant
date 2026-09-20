@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { MailIcon } from "@/components/ui/icons";
+import { ActionForm } from "@/components/ui/ActionForm";
+import { CheckIcon, MailIcon } from "@/components/ui/icons";
 import { dismissReply, savePerchChoices } from "@/app/perch/actions";
 import { REPLY_KINDS, type ReplyKind } from "@/lib/agents/reply-needed";
 import { displayName, type WaitingResult } from "@/lib/replies/waiting";
@@ -29,7 +30,9 @@ function KindOptions({ selected }: { selected: ReplyKind[] }) {
 export function WaitingCard({ result, now = Date.now(), dismiss = dismissReply, save = savePerchChoices }: { result: WaitingResult; now?: number; dismiss?: Action; save?: Action }) {
   if (result.state === "off") return null;
   const visible = result.state === "ok" ? result.items.filter((item) => result.prefs.kinds.includes(item.kind)) : [];
-  const hidden = result.state === "ok" ? result.items.length - visible.length : 0;
+  const hiddenItems = result.state === "ok" ? result.items.filter((item) => !result.prefs.kinds.includes(item.kind)) : [];
+  const hiddenKinds = REPLY_KINDS.filter((kind) => hiddenItems.some((item) => item.kind === kind)).map((kind) => KIND_LABELS[kind].title);
+  const unchecked = result.state === "ok" ? result.total - result.checked : 0;
   const shown = visible.slice(0, MAX_SHOWN);
   const more = visible.length - shown.length;
   return <section className={card.card} aria-label="Waiting on your reply">
@@ -39,7 +42,7 @@ export function WaitingCard({ result, now = Date.now(), dismiss = dismissReply, 
       {result.state === "ok" && <span className={card.badge}>{visible.length ? `${visible.length} waiting` : "All caught up"}</span>}
     </header>
 
-    {result.state === "setup" && <form action={save} className={styles.setup}>
+    {result.state === "setup" && <ActionForm action={save} success="Saved. I’ll start checking your mail." className={styles.setup}>
       <p className={card.note}>I can remind you about mail that’s waiting for your reply. It only looks at your Primary and Updates tabs, and it never changes your email. What should I remind you about?</p>
       <div className={styles.chooseForm}><KindOptions selected={result.prefs.kinds} /></div>
       <div className={styles.buttons}>
@@ -47,11 +50,13 @@ export function WaitingCard({ result, now = Date.now(), dismiss = dismissReply, 
         <button className={styles.save} type="submit" name="scope" value="setup-off">No reminders</button>
       </div>
       <p className={card.sub}>You can change this any time in Settings.</p>
-    </form>}
+    </ActionForm>}
 
     {result.state === "needs_connection" && <div className={card.empty}><p>Connect Google to see mail that needs a reply.</p><Link className={card.action} href="/settings">Open Settings</Link></div>}
     {result.state === "unavailable" && <div className={card.empty}><p>I couldn’t check your mail just now. Nothing was changed.</p></div>}
-    {result.state === "ok" && !shown.length && <p className={card.allClear}>Nothing you asked about looks like it needs a reply from the last 14 days.</p>}
+    {result.state === "ok" && !shown.length && (unchecked > 0
+      ? <p className={card.quiet}>Nothing so far. I’ve checked {result.checked} of your {result.total} recent messages.</p>
+      : <p className={card.allClear}><CheckIcon />You’re all caught up. Nothing from the last 7 days looks like it needs a reply.</p>)}
     {shown.length > 0 && <ul className={card.list}>{shown.map((item) => <li className={styles.item} key={item.threadId}>
       <div className={styles.main}>
         <p className={styles.top}><strong>{displayName(item.from)}</strong><span className={card.sub}>waiting {waited(item.receivedAt, now)}</span></p>
@@ -63,17 +68,17 @@ export function WaitingCard({ result, now = Date.now(), dismiss = dismissReply, 
         <form action={dismiss}><input type="hidden" name="thread" value={item.threadId} /><button className={styles.dismiss} type="submit">Dismiss<span className={styles.sr}> {item.subject}</span></button></form>
       </div>
     </li>)}</ul>}
-    {hidden > 0 && <p className={card.sub} style={{ marginTop: "var(--s-3)" }}>{hidden} more {hidden === 1 ? "is" : "are"} hidden by what you chose to see.</p>}
+    {hiddenItems.length > 0 && <p className={card.sub} style={{ marginTop: "var(--s-3)" }}>{hiddenItems.length} more {hiddenItems.length === 1 ? "needs" : "need"} a reply but {hiddenItems.length === 1 ? "is" : "are"} hidden by your choices ({hiddenKinds.join(", ")}). You can change that below.</p>}
     {more > 0 && <p className={card.sub} style={{ marginTop: "var(--s-3)" }}>+{more} more waiting.</p>}
-    {result.state === "ok" && result.pending > 0 && <p className={card.sub} style={{ marginTop: "var(--s-3)" }}>Still checking {result.pending} recent message{result.pending === 1 ? "" : "s"}. Refresh in a moment for the rest.</p>}
+    {unchecked > 0 && <p className={card.sub} style={{ marginTop: "var(--s-3)" }}>Checked {result.state === "ok" ? result.checked : 0} of {result.state === "ok" ? result.total : 0} recent messages so far. Refresh to check the rest.</p>}
 
     {result.state === "ok" && <details className={styles.choose}>
       <summary className={styles.chooseSummary}>What should I remind you about?</summary>
-      <form action={save} className={styles.chooseForm}>
+      <ActionForm action={save} success="Saved." className={styles.chooseForm}>
         <input type="hidden" name="scope" value="kinds" />
         <KindOptions selected={result.prefs.kinds} />
         <button className={styles.save} type="submit">Save choices</button>
-      </form>
+      </ActionForm>
     </details>}
   </section>;
 }

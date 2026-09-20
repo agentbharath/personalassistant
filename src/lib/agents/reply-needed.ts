@@ -8,7 +8,7 @@ import type { InterpretationCache } from "./email-interpreter";
  * by a model alone (R20.5): no sender lists or keyword patterns.
  */
 export const REPLY_JUDGE_VERSION = "reply-v2";
-export const REPLY_WINDOW_DAYS = 14;
+export const REPLY_WINDOW_DAYS = 7;
 
 export type MailRef = { id: string; threadId: string; from: string; subject: string; receivedAt: number; snippet: string };
 

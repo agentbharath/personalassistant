@@ -2,11 +2,12 @@ import { savePerchChoices } from "@/app/perch/actions";
 import { REPLY_KINDS } from "@/lib/agents/reply-needed";
 import type { PerchPrefs } from "@/lib/replies/dismissals";
 import { KIND_LABELS } from "@/components/today/reply-kinds";
+import { ActionForm } from "@/components/ui/ActionForm";
 import styles from "./PerchSettings.module.css";
 
 /** Settings for Perch: show it or not, remind or not, and which kinds of waiting mail. Each is a plain checkbox that saves with one button. */
 export function PerchSettings({ prefs, save = savePerchChoices }: { prefs: PerchPrefs; save?: (formData: FormData) => Promise<void> }) {
-  return <form action={save} className={styles.form}>
+  return <ActionForm action={save} success="Saved." className={styles.form}>
     <input type="hidden" name="scope" value="settings" />
     <label className={styles.option}>
       <input type="checkbox" name="perch" defaultChecked={prefs.perchEnabled} />
@@ -24,5 +25,5 @@ export function PerchSettings({ prefs, save = savePerchChoices }: { prefs: Perch
       </label>)}
     </fieldset>
     <button className={styles.save} type="submit">Save</button>
-  </form>;
+  </ActionForm>;
 }

@@ -26,14 +26,14 @@ beforeEach(() => {
 });
 
 describe("Waiting on your reply (free, fake Gmail and model)", () => {
-  it("looks only at Primary and Updates in the inbox, from the last 14 days, and asks for the owner's sent mail separately", () => {
-    expect(inboundQuery).toBe("in:inbox (category:primary OR category:updates) newer_than:14d -from:me");
-    expect(sentQuery).toBe("in:sent newer_than:14d");
+  it("looks only at Primary and Updates in the inbox, from the last 7 days, and asks for the owner's sent mail separately", () => {
+    expect(inboundQuery).toBe("in:inbox (category:primary OR category:updates) newer_than:7d -from:me");
+    expect(sentQuery).toBe("in:sent newer_than:7d");
   });
 
   it("lists only what the model says needs a reply, waiting longest first", async () => {
     const result = await loadWaitingReplies("u1", deps);
-    expect(result).toMatchObject({ state: "ok", pending: 0 });
+    expect(result).toMatchObject({ state: "ok", checked: 3, total: 3 });
     if (result.state !== "ok") throw new Error("expected ok");
     expect(result.items.map((item) => item.messageId)).toEqual(["a", "b"]);
     expect(result.items[0].reason).toBe("why a");
