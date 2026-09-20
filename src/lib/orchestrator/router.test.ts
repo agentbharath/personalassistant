@@ -138,7 +138,7 @@ describe("code checks structure and never judges the message (R19.5)", () => {
 
 import { ROUTER_JSON_SCHEMA } from "./router";
 
-describe("router v11: drafts, redirects and choices (R22, R23, R25)", () => {
+describe("router v12: drafts, redirects and choices (R22, R23, R25)", () => {
   // The model returns flat objects with "none" and empty strings, not nulls (the API limits how many union-typed fields a schema may have).
   const draft = (over: Record<string, unknown> = {}) => ({ action: "create", kind: "reply", to: "sarah", replyTo: "sarah's email", instruction: "say I'll be there", version: "", ...over });
   const redirect = (over: Record<string, unknown> = {}) => ({ category: "speculation", reply: "I can't tell you how they came by theirs, but I can help you find vintage shops near you.", distress: false, pivot: "web", ask: "", ...over });
@@ -165,8 +165,8 @@ describe("router v11: drafts, redirects and choices (R22, R23, R25)", () => {
     for (const key of ["choices", "draft", "redirect"]) expect(required).toContain(key);
   });
 
-  it("is version 11, asks when in doubt, and teaches drafting, redirecting and choices", () => {
-    expect(ROUTER_VERSION).toBe("router-v11");
+  it("is version 12, asks when in doubt, and teaches drafting, redirecting and choices", () => {
+    expect(ROUTER_VERSION).toBe("router-v12");
     expect(ROUTER_SYSTEM).toMatch(/When in doubt, ask/);
     expect(ROUTER_SYSTEM).toMatch(/email_draft/);
     expect(ROUTER_SYSTEM).toMatch(/Never just "I can't answer that"/);
@@ -229,5 +229,29 @@ describe("the saved home location (free)", () => {
   });
   it("tells the model what to do with it", () => {
     expect(ROUTER_SYSTEM).toMatch(/homeLocation is the user's saved home city or ZIP/);
+  });
+});
+
+describe("how much of the conversation the router sees (free)", () => {
+  const input = (context: RouterInput["context"]): RouterInput => ({ userId: "u1", message: "I can't attend", context, emailState: null, today: "2026-09-21", pendingApproval: false });
+
+  it("keeps the last eight messages, with room for a whole list or draft in Daylark's own answers", () => {
+    const context = Array.from({ length: 12 }, (_, index) => ({ role: (index % 2 ? "assistant" : "user") as "user" | "assistant", content: `${index}:` + "x".repeat(1000) }));
+    const recent = JSON.parse(buildRouterMessage(input(context))).recent as Array<{ role: string; text: string }>;
+    expect(recent).toHaveLength(8);
+    expect(recent[0].text.startsWith("4:")).toBe(true);
+    expect(recent.filter((item) => item.role === "assistant").every((item) => item.text.length === 700)).toBe(true);
+    expect(recent.filter((item) => item.role === "user").every((item) => item.text.length === 300)).toBe(true);
+  });
+
+  it("passes the summary of earlier conversation separately, so it never uses up a recent slot", () => {
+    const message = JSON.parse(buildRouterMessage(input([{ role: "assistant", content: "Earlier conversation summary:\nThe person is planning a trip." }, { role: "user", content: "hi" }])));
+    expect(message.summary).toContain("planning a trip");
+    expect(message.recent).toEqual([{ role: "user", text: "hi" }]);
+  });
+
+  it("tells the model that an answer to its own question continues the same task, and that reply-to-a-person starts a new reply", () => {
+    expect(ROUTER_SYSTEM).toMatch(/is the ANSWER to it and continues the same task/);
+    expect(ROUTER_SYSTEM).toMatch(/always starts a NEW reply or email, even right after a draft was saved/);
   });
 });
