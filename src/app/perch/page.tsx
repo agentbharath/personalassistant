@@ -11,6 +11,8 @@ import { createClient } from "@/lib/supabase/server";
 import { signOut } from "../auth/actions";
 
 export const dynamic = "force-dynamic";
+/** Perch reads the calendar, bills and mail. The reply card stops waiting after 8 seconds by itself; this is the outer limit. */
+export const maxDuration = 30;
 
 export default async function PerchPage() {
   const supabase = await createClient();

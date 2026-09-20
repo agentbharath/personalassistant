@@ -4,6 +4,9 @@ import { appendMessage, createConversation, getConversation } from "@/lib/conver
 import { prepareReceiptImport } from "@/lib/agents/receipt";
 import { reportFailure } from "@/lib/observability/report";
 
+/** Reading a receipt (a PDF or photo) with the model can take a while. */
+export const maxDuration = 60;
+
 const conversationSchema = z.string().uuid().optional();
 
 export async function POST(request: Request) {

@@ -10,6 +10,9 @@ import { ModelBudgetExceededError } from "@/lib/runtime/model-runtime";
 import { recordQueryTelemetry } from "@/lib/observability/query-telemetry";
 import { resolveRetryMessage } from "@/lib/conversations/retry";
 
+/** Vercel's limit for this route. The app stops a query itself at 20 seconds (below), and saving the answer needs a little longer, so this leaves plenty of room. */
+export const maxDuration = 60;
+
 const QUERY_TIMEOUT_MS = 20_000;
 
 const requestSchema = z.object({

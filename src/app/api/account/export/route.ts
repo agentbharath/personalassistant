@@ -1,6 +1,9 @@
 import { createClient } from "@/lib/supabase/server";
 import { buildAccountExport } from "@/lib/account/export";
 
+/** Exporting everything for one person reads several tables. */
+export const maxDuration = 60;
+
 export async function GET() {
   const supabase = await createClient();
   const { data, error } = await supabase.auth.getClaims();
