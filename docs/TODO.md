@@ -2,6 +2,15 @@
 
 The UI is frozen from 2026-09-20. Everything below is functionality, unless marked (UI) and required by a feature.
 
+## Intent quality programme (starts next)
+Read `docs/use-cases/README.md` first. It holds 436 use cases, the schema proposal (`11-schema-v2.md`) and the quality bar (`12-quality-and-measurement.md`).
+- [ ] Owner review of the use-case tables and the ten decisions in `12` §9 (D-1 to D-10).
+- [ ] Turn the rows into eval cases in `evals/`, one or more per ID, starting with the 162 unverified rows.
+- [ ] Freeze `frame-v1` after review; write the adapter to today's router output.
+- [ ] Calendar first: replace rule-based date and place parsing with model-resolved, code-validated `TimeSpec`.
+- [ ] Shadow-run frame-v1 against router-v6 (needs credits and an approved cost quote).
+- [ ] Conversation state for calendar, finance, bills and search (today only email has it).
+
 ## Needs you
 - [ ] Restart the dev server so it picks up `MODEL_DAILY_TOKEN_BUDGET=500000` and the legal-page environment values.
 - [ ] Add Anthropic credits. Until then every model call fails and the app falls back to rules.
