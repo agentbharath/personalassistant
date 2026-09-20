@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/layout/AppShell";
+import { RefreshOnReturn } from "@/components/today/RefreshOnReturn";
 import { RepliesSection, RepliesSkeleton } from "@/components/today/RepliesSection";
 import { TodayView } from "@/components/today/TodayView";
 import { loadDailyView } from "@/lib/today/load";
@@ -21,6 +22,6 @@ export default async function PerchPage() {
   const [view, recent] = userId ? await Promise.all([loadDailyView(userId), listConversations(userId, { limit: 40 }).catch(() => [])]) : [null, []];
 
   return <AppShell title="Perch" email={email} signOutAction={signOut} recent={recent} activeView="perch">
-    {view && userId ? <TodayView view={view} replies={<Suspense fallback={<RepliesSkeleton />}><RepliesSection userId={userId} /></Suspense>} /> : null}
+    {view && userId ? <><RefreshOnReturn /><TodayView view={view} replies={<Suspense fallback={<RepliesSkeleton />}><RepliesSection userId={userId} /></Suspense>} /></> : null}
   </AppShell>;
 }
