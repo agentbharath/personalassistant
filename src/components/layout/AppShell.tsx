@@ -16,7 +16,7 @@ type Props = {
   signOutAction: () => void | Promise<void>;
   recent: ConversationSummary[];
   activeConversationId?: string;
-  activeView?: "chat" | "history" | "settings";
+  activeView?: "chat" | "today" | "history" | "settings";
   children: ReactNode;
 };
 

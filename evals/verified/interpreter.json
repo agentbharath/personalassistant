@@ -1,5 +1,5 @@
 {
- "version": "email-v8",
+ "version": "email-v9",
  "verified": {
   "iherb-receipts-list: all iherb receipts": "51fa7125fed4",
   "iherb-receipts-list: all iherb recipts": "57d6418e5c97",
@@ -117,6 +117,7 @@
   "follow-up: correction-i-meant-amounts": "f0c5bf6bd2bd",
   "follow-up: correction-unread": "93fa87862b20",
   "follow-up: state-yes-import-them": "f375dee6d0cd",
+  "follow-up: state-please-import-those": "e2463cebac74",
   "follow-up: state-search-90-days": "15505e83552c",
   "follow-up: state-90-days-bare": "4c645fe32f3f",
   "follow-up: state-look-back-6-months": "e18a1f9590ce",
@@ -124,10 +125,29 @@
   "follow-up: state-for-3-months": "c35e51ac3ed0",
   "follow-up: state-last-week-still-works": "b9ad68354404",
   "follow-up: state-in-the-last-60-days": "c3418d325ec6",
+  "ordinal: import-second": "4cbda4ec5f69",
+  "ordinal: import-hash": "63bc4091edff",
+  "ordinal: import-2nd-receipt": "62ae8fef6354",
+  "ordinal: facts-first": "67e348968f63",
+  "ordinal: facts-total": "376bcede0010",
+  "ordinal: show-third": "693b0a5708df",
+  "ordinal: show-first-no-noun": "b9db819c51be",
+  "ordinal: bare-ordinal-shows": "f10445762ee1",
+  "ordinal: latest-by-date": "d75398974b75",
+  "ordinal: oldest-by-date": "45b84dec66a0",
+  "ordinal: that-one-single": "80c106c79a45",
+  "ordinal: calendar-words-ignored": "3f4f56e0cb27",
+  "ordinal: no-ordinal": "e56c78e6df4b",
+  "ordinal: weekday-not-a-reference": "24f5b4a31474",
+  "ordinal: only-the-second-one": "84ac676ec4c8",
+  "ordinal: just-the-third": "f48973b554d0",
+  "ordinal: import-number-4": "04703cde3e06",
+  "ordinal: last-one": "6f19b34d3274",
+  "ordinal: that-one-ambiguous": "3ef1572cfbdd",
+  "ordinal: not-a-reference": "fdb589c63cd6",
   "not email: what's on my calendar tomorrow": "e7d27b14da2d",
   "not email: how much did I spend on groceries this month": "7b932ed71a27",
   "not email: best pizza near me": "a3e47997a57c",
-  "not email: cancel my 2 PM meeting": "58e4884a2475",
-  "follow-up: state-please-import-those": "e2463cebac74"
+  "not email: cancel my 2 PM meeting": "58e4884a2475"
  }
 }

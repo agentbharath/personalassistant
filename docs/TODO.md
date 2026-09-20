@@ -6,7 +6,7 @@ The UI is frozen from 2026-09-20. Everything below is functionality, unless mark
 Read `docs/use-cases/README.md` first. It holds 436 use cases, the schema proposal (`11-schema-v2.md`) and the quality bar (`12-quality-and-measurement.md`).
 - [ ] Owner review of the use-case tables. Remaining open decisions are D-1 (drafting, explained in `12` §9), D-5 to D-10.
 - [x] **Rule chain removed from the orchestrator (R20.5a, 2026-09-20):** no rule fallback; when no model is available Daylark says so and does nothing; Confirm and Cancel use an explicit `uiAction`; unused `bills-turn`, `status-turn`, `graph` deleted; 917 tests pass.
-- [ ] **Still rule-based (R20.5), to convert with the model and remove:** the email interpreter's message-based overrides and `email-turn`'s ordinal and correction patterns (R20.4); the now-unused classifiers in `orchestrator/intent.ts`, `scope.ts`, `safety.ts` and `classifyWithClaude`; `learning/commands.ts` parsers still used by handlers; `summarizeConversationTitle`. Each conversion needs eval cases first, then a small live re-run within R21.6 and R21.7.
+- [ ] **Still rule-based (R20.5), to convert with the model and remove:** the now-unused classifiers in `orchestrator/intent.ts`, `scope.ts`, `safety.ts` and `classifyWithClaude`; `learning/commands.ts` parsers still used by handlers; `summarizeConversationTitle`. Each conversion needs eval cases first, then a small live re-run within R21.6 and R21.7.
 - [ ] Implement R22: ask when in doubt, with per-slot thresholds; keep the owner-defined 30-day default only for an unstated window.
 - [ ] Implement R23: a `redirect` operation whose `pivot` is validated against the real capabilities, plus the RD evals (`docs/use-cases/13-scope-and-redirection.md`).
 - [ ] Implement R24: never surface one-time codes or reset and sign-in links from email (extraction, summaries and quoting), with tests.
@@ -70,3 +70,10 @@ Done: the saved home location (Settings, encrypted like other preferences, migra
 
 ## Done recently (for reference)
 Sign-in gate moved to `src/proxy.ts` (it was not running), sign-in returns to the page you asked for, download and delete controls in Settings, live Google connection check, error and 404 pages, PNG app icons, `npm run ui:check`.
+
+## Daily view (R26)
+- [x] `/today`: meetings, bills (overdue, today, 7 days), weekly spending habit; mock preview at `/design/today` in `npm run ui:check`.
+- [ ] Reminders: needs a store (`reminders` table, create/edit/cancel with approval, shown on Today), a router operation and eval cases. Today says plainly that it has none.
+- [ ] Chat entry: "what's my day" / "any bills this week" answered from the same data (needs a `daily_view` router operation, so a new router version and a re-run of the router set).
+- [ ] Optional weekly email or push digest of the spending habit (needs a scheduler and consent wording).
+- [ ] Email interpreter v9 live re-verification (148 cases, needs an owner-stated dollar limit and `LIVE_EVAL_MAX_CASES=148`).

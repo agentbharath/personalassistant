@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import type { EmailState } from "@/lib/conversations/email-state";
 import type { EmailRequest } from "./email-request";
-import { INTERPRETER_SYSTEM, INTERPRETER_VERSION, buildInterpreterMessage, canonicalize, interpretEmail, interpretWithRules, type InterpretationCache, type InterpreterInput } from "./email-interpreter";
+import { INTERPRETER_SYSTEM, INTERPRETER_VERSION, buildInterpreterMessage, canonicalize, interpretEmail, type InterpretationCache, type InterpreterInput } from "./email-interpreter";
 
 const output = (overrides: Record<string, unknown> = {}) => ({
   domain: "email", action: "list", topic: "receipt", sender: "iherb", days: null, calendar: null, unread: false, humansOnly: false,
-  exclusion: "", confidence: 0.95, clarification: null, reading: "iherb receipts", ...overrides,
+  exclusion: "", confidence: 0.95, clarification: null, reading: "iherb receipts", pick: 0, pickAction: "none", correction: false, plainList: false, ...overrides,
 });
 const reply = (value: unknown) => ({ content: [{ type: "text", text: typeof value === "string" ? value : JSON.stringify(value) }] }) as never;
 const input = (message: string, state: EmailState | null = null): InterpreterInput => ({ userId: "u1", message, state, context: [] });
@@ -29,12 +29,12 @@ describe("what the model is asked (R16.2, R16.3)", () => {
     await interpretEmail(input("all iherb recipts"), { complete });
     expect(complete.mock.calls[0][0].tools).toBeUndefined();
   });
-  it("sends the saved request and numbered results, and no dates or clocks", () => {
+  it("sends the saved request and the numbered results with their dates, and no clock", () => {
     const state: EmailState = { request: { action: "list", topic: "receipt", sender: "iherb", days: null, calendar: null, unread: false, humansOnly: false, exclusion: "" }, results: [{ id: "m1", subject: "Order Confirmed #947597212", from: "iHerb <noreply@info.iherb.com>", date: "Tue, 15 Sep 2026 10:00:00 -0700" }], updatedAt: 123456789 };
     const message = buildInterpreterMessage(input("the amount receipts", state));
     expect(message).toContain('"sender":"iherb"');
     expect(message).toContain('"n":1');
-    expect(message).not.toContain("2026");
+    expect(message).toContain('"date"');
     expect(message).not.toContain("123456789");
   });
 });
@@ -67,31 +67,42 @@ describe("the same input resolves the same way (R16.3)", () => {
   });
 });
 
-describe("code has the last word (R16.4)", () => {
-  const canon = (overrides: Record<string, unknown>, message = "show iherb receipts") => canonicalize(output(overrides) as never, message);
-  it("never accepts a pronoun, verb, or document word as a sender", () => {
-    for (const sender of ["mean", "my", "the amount", "receipts", "last 30 days", "unread"]) expect(canon({ sender }).request.sender).toBeNull();
-    expect(canon({ sender: "iherb" }).request.sender).toBe("iherb");
+describe("code only checks the form of the model's reading (R20.5)", () => {
+  const canon = (overrides: Record<string, unknown>, message = "show iherb receipts", results = 0) => canonicalize(output(overrides) as never, message, results);
+  it("keeps a sender that is a name or an address, and drops one that is not plausible text", () => {
     expect(canon({ sender: "Amazon Web Services" }).request.sender).toBe("Amazon Web Services");
     expect(canon({ sender: "alice@example.com" }).request.sender).toBe("alice@example.com");
+    expect(canon({ sender: "x".repeat(300) }).request.sender).toBeNull();
   });
   it("clamps windows to whole days from 1 to 365 and keeps only one window", () => {
-    expect(canon({ days: 9999 }, "iherb receipts last 9999 days").request.days).toBe(365);
-    expect(canon({ days: 0 }, "iherb receipts last 0 days").request.days).toBe(1);
-    expect(canon({ days: 30.4 }, "iherb receipts last 30 days").request.days).toBe(30);
-    expect(canon({ days: 30, calendar: "today" }, "iherb receipts today, not the last 30 days").request).toMatchObject({ days: null, calendar: "today" });
-  });
-  it("turns 'all' with no window into the longest window (R11.7)", () => {
-    expect(canon({}, "show all iherb receipts").request.days).toBe(365);
-    expect(canon({ days: 60 }, "show all iherb receipts last 60 days").request.days).toBe(60);
-    expect(canon({}, "show iherb receipts").request.days).toBeNull();
+    expect(canon({ days: 9999 }).request.days).toBe(365);
+    expect(canon({ days: 0 }).request.days).toBe(1);
+    expect(canon({ days: 30.4 }).request.days).toBe(30);
+    expect(canon({ days: 30, calendar: "today" }).request).toMatchObject({ days: null, calendar: "today" });
   });
   it("makes imports and amounts receipt requests", () => {
-    expect(canon({ action: "import_all", topic: "general" }, "import all iherb receipts").request.topic).toBe("receipt");
-    expect(canon({ action: "amounts", topic: "promotion" }, "show the amounts on my iherb receipts").request.topic).toBe("receipt");
+    expect(canon({ action: "import_all", topic: "general" }).request.topic).toBe("receipt");
+    expect(canon({ action: "amounts", topic: "promotion" }).request.topic).toBe("receipt");
+  });
+  it("takes a filter or exclusion the model read, without checking the message for keywords", () => {
+    expect(canon({ unread: true, humansOnly: true, exclusion: "not regular Amazon" }).request).toMatchObject({ unread: true, humansOnly: true, exclusion: "not regular Amazon" });
   });
   it("passes a non-email message through untouched (R16.6)", () => {
     expect(canonicalize(output({ domain: "other", sender: "x" }) as never, "what's on my calendar").domain).toBe("other");
+  });
+});
+
+describe("pointing at a numbered result (R13, R20.5)", () => {
+  it("turns the model's 1-based number into a 0-based index with its action", () => {
+    expect(canonicalize(output({ pick: 2, pickAction: "import" }) as never, "import the second one", 3).pick).toEqual({ index: 1, action: "import" });
+  });
+  it("ignores a number outside the list or with no action", () => {
+    expect(canonicalize(output({ pick: 5, pickAction: "show" }) as never, "show #5", 3).pick).toBeNull();
+    expect(canonicalize(output({ pick: 2, pickAction: "none" }) as never, "x", 3).pick).toBeNull();
+    expect(canonicalize(output({ pick: 0, pickAction: "show" }) as never, "show that one", 3).pick).toBeNull();
+  });
+  it("passes on whether the message corrected the previous reading", () => {
+    expect(canonicalize(output({ correction: true }) as never, "I meant the amounts").correction).toBe(true);
   });
 });
 
@@ -102,12 +113,13 @@ describe("unsure or failing (R16.5, R16.7)", () => {
     expect(result.confidence).toBeLessThan(0.7);
     expect(result.clarification).toMatch(/Receipts, promotions/);
   });
-  it.each([["a thrown error", () => Promise.reject(new Error("boom"))], ["not JSON", () => Promise.resolve(reply("nope"))], ["a wrong shape", () => Promise.resolve(reply({ domain: "email" }))]])("falls back to the rules on %s, and says so", async (_name, make) => {
+  it.each([["a thrown error", () => Promise.reject(new Error("boom"))], ["not JSON", () => Promise.resolve(reply("nope"))], ["a wrong shape", () => Promise.resolve(reply({ domain: "email" }))]])("reports itself unavailable on %s, and guesses nothing", async (_name, make) => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const result = await interpretEmail(input("all iherb recipts"), { complete: make as never });
-    expect(result.source).toBe("rules");
-    expect(result.request).toMatchObject({ topic: "receipt", sender: "iherb" });
-    expect(warn).toHaveBeenCalledWith("email_interpreter_fallback", expect.stringContaining(INTERPRETER_VERSION));
+    expect(result.source).toBe("unavailable");
+    expect(result.domain).toBe("other");
+    expect(result.request.sender).toBeNull();
+    expect(warn).toHaveBeenCalledWith("email_interpreter_unavailable", expect.stringContaining(INTERPRETER_VERSION));
     warn.mockRestore();
   });
   it("does not cache a fallback", async () => {
@@ -120,9 +132,6 @@ describe("unsure or failing (R16.5, R16.7)", () => {
     const complete = vi.fn().mockResolvedValue(reply(output()));
     const broken: InterpretationCache = { get: () => Promise.reject(new Error("down")), set: () => Promise.reject(new Error("down")) };
     expect((await interpretEmail(input("all iherb recipts"), { complete, cache: broken })).source).toBe("model");
-  });
-  it("the rules reading calls a non-email message 'other'", () => {
-    expect(interpretWithRules(input("what is the weather")).domain).toBe("other");
   });
 });
 
@@ -148,66 +157,6 @@ describe("sender casing (R16.3)", () => {
   });
   it("keeps the model's spelling when the name is not in the message (a known sender)", () => {
     expect(canonicalize(output({ sender: "Adobe" }) as never, "hoe about adobee").request.sender).toBe("Adobe");
-  });
-});
-
-describe("the model cannot invent what the message did not say (R16.4)", () => {
-  const prev: EmailRequest = { action: "list", topic: "receipt", sender: "iherb", days: 30, calendar: null, unread: true, humansOnly: false, exclusion: "" };
-  const canon = (overrides: Record<string, unknown>, message: string, previous: EmailRequest | null = null) => canonicalize(output(overrides) as never, message, previous);
-  it("drops a real-people filter the message never asked for", () => {
-    expect(canon({ humansOnly: true }, "did any recruiter email me today").request.humansOnly).toBe(false);
-    expect(canon({ humansOnly: true }, "only real people, not automated").request.humansOnly).toBe(true);
-    expect(canon({ humansOnly: true }, "and last week", { ...prev, humansOnly: true }).request.humansOnly).toBe(true);
-  });
-  it("drops an unread filter or window the message never asked for, unless it was already saved", () => {
-    expect(canon({ unread: true }, "show iherb receipts").request.unread).toBe(false);
-    expect(canon({ unread: true }, "only unread").request.unread).toBe(true);
-    expect(canon({ unread: true }, "from adobe", prev).request.unread).toBe(true);
-    expect(canon({ days: 30 }, "show iherb receipts").request.days).toBeNull();
-    expect(canon({ days: 30 }, "from adobe", prev).request.days).toBe(30);
-    expect(canon({ days: 30 }, "last month").request.days).toBe(30);
-  });
-  it("never turns a message into an import unless it asks to import, record or save", () => {
-    expect(canon({ action: "import_all" }, "show all iherb receipts").request.action).toBe("list");
-    expect(canon({ action: "import_all" }, "import them").request.action).toBe("import_all");
-    expect(canon({ action: "import" }, "record my latest receipt").request.action).toBe("import");
-  });
-  it("drops a calendar window the message never named", () => {
-    expect(canon({ calendar: "today" }, "show iherb receipts").request.calendar).toBeNull();
-    expect(canon({ calendar: "today" }, "emails from google today").request.calendar).toBe("today");
-  });
-  it("takes the exclusion verbatim from the message, never the model's paraphrase", () => {
-    const message = "Emails from PG&E this week, not climate credit or safety notices.";
-    for (const paraphrase of ["skip climate credit and safety notices", "not climate credit or safety notices", ""]) {
-      expect(canon({ exclusion: paraphrase }, message).request.exclusion).toBe("not climate credit or safety notices.");
-    }
-  });
-  it("carries a saved exclusion into a follow-up only when the model kept one", () => {
-    const withExclusion: EmailRequest = { ...prev, exclusion: "not regular Amazon?" };
-    expect(canon({ exclusion: "not regular Amazon" }, "and last week", withExclusion).request.exclusion).toBe("not regular Amazon?");
-    expect(canon({ exclusion: "" }, "and last week", withExclusion).request.exclusion).toBe("");
-    expect(canon({ exclusion: "made up" }, "and last week", null).request.exclusion).toBe("");
-  });
-  it("matches whole words only, so adobe is not found inside adobee", () => {
-    expect(canon({ sender: "Adobe" }, "hoe about adobee").request.sender).toBe("Adobe");
-  });
-});
-
-describe("actions are grounded in the message (R16.4)", () => {
-  const canon = (overrides: Record<string, unknown>, message: string, previous: EmailRequest | null = null) => canonicalize(output(overrides) as never, message, previous);
-  const saved = (action: EmailRequest["action"]): EmailRequest => ({ action, topic: "receipt", sender: "iherb", days: null, calendar: null, unread: false, humansOnly: false, exclusion: "" });
-  it("amounts or facts need an amount word, else it is a plain list", () => {
-    expect(canon({ action: "amounts" }, "show me recent invoices").request.action).toBe("list");
-    expect(canon({ action: "facts" }, "show me the latest invoice from adobe").request.action).toBe("list");
-    expect(canon({ action: "amounts" }, "show the amounts on my iherb receipts").request.action).toBe("amounts");
-  });
-  it("facts versus amounts follows the plural and 'latest' rule, whatever the model chose", () => {
-    expect(canon({ action: "facts" }, "what are the totals on my iherb receipts").request.action).toBe("amounts");
-    expect(canon({ action: "amounts" }, "how much was my latest invoice from Adobe").request.action).toBe("facts");
-  });
-  it("a follow-up keeps the saved amounts action", () => {
-    expect(canon({ action: "amounts" }, "and last week", saved("amounts")).request.action).toBe("amounts");
-    expect(canon({ action: "amounts" }, "the amount receipts", saved("list")).request.action).toBe("amounts");
   });
 });
 

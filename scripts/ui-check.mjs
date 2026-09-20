@@ -13,6 +13,7 @@ const pages = [
   ["chat-empty", "/design/app"],
   ["chat-thread", "/design/app?view=thread"],
   ["history", "/design/history"],
+  ["today", "/design/today"],
   ["privacy", "/privacy"],
   ["design", "/design"],
 ];

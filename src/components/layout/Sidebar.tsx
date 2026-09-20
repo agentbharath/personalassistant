@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ConversationSummary } from "@/lib/conversations/store";
 import { IconButton } from "@/components/ui/Button";
-import { CloseIcon, ClockIcon, PinIcon, PlusIcon, SettingsIcon } from "@/components/ui/icons";
+import { CalendarIcon, CloseIcon, ClockIcon, PinIcon, PlusIcon, SettingsIcon } from "@/components/ui/icons";
 import { Wordmark } from "@/components/ui/Logo";
 import { useConversationDeletion } from "./ConversationDeletion";
 import { ConversationMenu, RenameField } from "./ConversationMenu";
@@ -12,7 +12,7 @@ import styles from "./Sidebar.module.css";
 
 export type SidebarProps = {
   activeConversationId?: string;
-  activeView?: "chat" | "history" | "settings";
+  activeView?: "chat" | "today" | "history" | "settings";
   recent: ConversationSummary[];
   /** Called after any navigation, so the mobile drawer can close. */
   onNavigate?: () => void;
@@ -70,6 +70,7 @@ export function Sidebar({ activeConversationId, activeView = "chat", recent, onN
         </section>}
     </div>
     <div className={styles.foot}>
+      <Link className={`${styles.all} ${activeView === "today" ? styles.allActive : ""}`} href={{ pathname: "/today" }} onClick={onNavigate}><CalendarIcon width={16} height={16} />Today</Link>
       <Link className={`${styles.all} ${activeView === "history" ? styles.allActive : ""}`} href={{ pathname: "/history" }} onClick={onNavigate}><ClockIcon width={16} height={16} />All history</Link>
       <Link className={`${styles.all} ${activeView === "settings" ? styles.allActive : ""}`} href={{ pathname: "/settings" }} onClick={onNavigate}><SettingsIcon width={16} height={16} />Settings</Link>
       <p className={styles.note}>Private by design. Anything that changes your data needs your approval.</p>

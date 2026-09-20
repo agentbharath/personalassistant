@@ -2,10 +2,8 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { exclusionTerms, extractRequestedSender, fixDomainTypos, recencyDays, stripExclusions } from "@/lib/agents/email-query";
-import { resolveEmailFollowUp } from "@/lib/agents/email-followup";
-import { parseOrdinalReference } from "@/lib/agents/email-ordinal";
 import { parseLearningsCommand } from "@/lib/learning/commands";
-import { NO_LEARNINGS, applyLearnings, describeSearch, detectCorrection } from "@/lib/learning/learnings";
+import { NO_LEARNINGS, applyLearnings, describeSearch } from "@/lib/learning/learnings";
 import { detectCalendarPreference, detectFinanceCorrection } from "@/lib/learning/preferences";
 import { parseEmailRequest, renderEmailRequest, type EmailRequest } from "@/lib/agents/email-request";
 import { detectEmailIntent, emailIntentRelevance, minimumEmailRelevance } from "@/lib/agents/email-relevance";
@@ -52,18 +50,6 @@ describe("rules: what counts as a receipt (evals/email-relevance.jsonl)", () => 
 });
 
 type FollowUpCase = { id: string; rule: string; state?: { request: EmailRequest; results: Array<{ id: string; subject: string; from: string; date: string }> }; context: Array<{ role: "user" | "assistant"; content: string }>; input: string; expect: Partial<EmailRequest> | null };
-describe("rules: conversation context (evals/email-followups.jsonl)", () => {
-  for (const { id, rule, state, context, input, expect: want } of load<FollowUpCase>("email-followups.jsonl")) {
-    it(`${id} [${rule}]`, () => {
-      const resolved = resolveEmailFollowUp(input, context, state ? { ...state, updatedAt: Date.now() } : null);
-      if (want === null) return expect(resolved).toBeNull();
-      expect(resolved).not.toBeNull();
-      const request = parseEmailRequest(resolved!);
-      for (const [key, value] of Object.entries(want)) expect(field(request, key as keyof EmailRequest), key).toEqual(wanted(key, value));
-    });
-  }
-});
-
 type ImportCase = { id: string; rule: string; input: string; message: { subject: string; snippet: string; from?: string }; accept: boolean };
 describe("rules: import candidate scoring (evals/email-import.jsonl)", () => {
   for (const { id, rule, input, message, accept } of load<ImportCase>("email-import.jsonl")) {
@@ -101,26 +87,6 @@ describe("rules: a rendered request parses back to itself (R5.5)", () => {
   }
 });
 
-describe("rules: every email wording routes without a model call (R1.6, R9.4)", () => {
-  for (const { id, rule, expect: want, variants } of load<VariantGroup>("email-variants.jsonl")) {
-    if (want.sender === null && want.topic === undefined) continue;
-    for (const variant of variants) {
-      it(`${id}: ${variant} [${rule}]`, () => {
-        const fixed = fixDomainTypos(variant);
-        const routed = isEmailFinanceImport(fixed) || isEmailSearch(fixed) || classifyDeterministically(fixed)?.intents[0].agent === "email";
-        expect(routed).toBe(true);
-      });
-    }
-  }
-});
-
-type LearningCase = { id: string; rule: string; last: { sender: string | null }; input: string; expect: unknown };
-describe("rules: explicit corrections teach Daylark (evals/email-learning.jsonl)", () => {
-  for (const { id, rule, last, input, expect: want } of load<LearningCase>("email-learning.jsonl")) {
-    it(`${id} [${rule}]`, () => expect(detectCorrection(input, last.sender ? { ...parseEmailRequest("emails"), sender: last.sender } : parseEmailRequest("show receipts"))).toEqual(want));
-  }
-});
-
 type TermsCase = { id: string; rule: string; input: string; expect: string };
 describe("rules: the search terms shown to the user (evals/email-terms.jsonl)", () => {
   for (const { id, rule, input, expect: want } of load<TermsCase>("email-terms.jsonl")) {
@@ -132,12 +98,6 @@ describe("rules: the search terms shown to the user (evals/email-terms.jsonl)", 
 });
 
 type OrdinalCase = { id: string; rule: string; input: string; results: Array<{ date: string }>; expect: unknown };
-describe("rules: ordinal references (evals/email-ordinals.jsonl)", () => {
-  for (const { id, rule, input, results, expect: want } of load<OrdinalCase>("email-ordinals.jsonl")) {
-    it(`${id} [${rule}]`, () => expect(parseOrdinalReference(input, results)).toEqual(want));
-  }
-});
-
 type CommandCase = { id: string; rule: string; input: string; expect: unknown };
 describe("rules: viewing and forgetting (evals/learning-commands.jsonl)", () => {
   for (const { id, rule, input, expect: want } of load<CommandCase>("learning-commands.jsonl")) {

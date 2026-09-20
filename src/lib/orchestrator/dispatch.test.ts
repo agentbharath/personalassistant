@@ -65,10 +65,10 @@ describe("each operation calls its own handler (R19.4)", () => {
     await dispatchDecision(decision({ operation: "status_lookup", sender: "chase", matter: "dispute" }), ctx);
     expect(mocks.answerStatusLookup).toHaveBeenCalledWith("u1", { sender: "chase", matter: "dispute" });
   });
-  it("the email operation forces the email path, and defers to the rules when the specialist declines", async () => {
+  it("the email operation goes to the email specialist, and asks when it declines", async () => {
     mocks.handleEmailConversationTurn.mockResolvedValueOnce({ answer: "EMAIL", agents: ["email"], status: "completed" }).mockResolvedValueOnce(null);
     expect((await dispatchDecision(decision({ operation: "email" }), ctx))?.answer).toBe("EMAIL");
-    expect(mocks.handleEmailConversationTurn).toHaveBeenCalledWith("the message", "u1", "c1", [], { force: true });
+    expect(mocks.handleEmailConversationTurn).toHaveBeenCalledWith("the message", "u1", "c1", []);
     expect(await dispatchDecision(decision({ operation: "email" }), ctx)).toBeNull();
   });
   it("email writes are declined, and pending-approval operations need a saved conversation", async () => {

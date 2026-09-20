@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { mentionsAll, parseEmailRequest } from "@/lib/agents/email-request";
-import { DEFAULT_WINDOW_DAYS, NO_LEARNINGS, applyLearnings, describeSearch, detectCorrection } from "./learnings";
+import { DEFAULT_WINDOW_DAYS, NO_LEARNINGS, applyLearnings, describeSearch } from "./learnings";
 
 describe("default window (R11.1)", () => {
   it("defaults a windowless search to 30 days and marks it", () => {
@@ -43,22 +43,6 @@ describe("search terms (R11.2)", () => {
   });
 });
 
-describe("corrections (R11.4, R11.6)", () => {
-  const last = parseEmailRequest("emails from adobee");
-  it.each([
-    ["always search 90 days", { kind: "default_window", topic: "all", days: 90 }],
-    ["from now on search 3 months for receipts", { kind: "default_window", topic: "receipt", days: 90 }],
-    ["by default look back two weeks", { kind: "default_window", topic: "all", days: 14 }],
-  ])("%s", (input, want) => expect(detectCorrection(input, last)).toEqual(want));
-  it.each(["I meant Adobe", "no, Adobe", "it's Adobe", "should be Adobe."])("%s → alias", (input) => {
-    expect(detectCorrection(input, last)).toEqual({ kind: "sender_alias", alias: "adobee", canonical: "Adobe" });
-  });
-  it("never learns from ordinary questions or when there was no sender", () => {
-    expect(detectCorrection("show my latest invoices", last)).toBeNull();
-    expect(detectCorrection("no thanks", last)).toBeNull();
-    expect(detectCorrection("I meant Adobe", parseEmailRequest("show receipts"))).toBeNull();
-  });
-});
 
 describe("all means everything (R11.7)", () => {
   it("detects all/every/each outside an exclusion clause", () => {

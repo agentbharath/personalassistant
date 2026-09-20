@@ -74,7 +74,7 @@ export async function dispatchDecision(decision: RouterDecision, ctx: DispatchCo
 
   switch (decision.operation) {
     case "email": {
-      const turn = await handleEmailConversationTurn(input, userId, conversationId, context, { force: true });
+      const turn = await handleEmailConversationTurn(input, userId, conversationId, context);
       return turn ? done(turn.answer, turn.agents, turn.status) : null;
     }
     case "status_lookup":

@@ -80,41 +80,10 @@ export function describeSearch(request: EmailRequest, defaulted: boolean) {
   ].filter(Boolean).join(" · ");
 }
 
-const COUNT: Record<string, number> = { a: 1, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, twelve: 12 };
-const REMEMBER = /\b(?:always|from now on|going forward|by default|as (?:a |the )?default|default to|remember)\b/i;
-
-/** R11.4, R11.6: only explicit corrections teach Daylark. `last` is the previous email request in this conversation. */
-export function detectCorrection(input: string, last: EmailRequest | null): Learning | null {
-  const text = input.trim();
-  if (REMEMBER.test(text)) {
-    const match = text.match(/\b(\d{1,3}|a|one|two|three|four|five|six|seven|eight|nine|ten|twelve)\s*(day|week|month|year)s?\b/i);
-    if (match) {
-      const count = COUNT[match[1].toLowerCase()] ?? Number(match[1]);
-      const days = Math.min(count * { day: 1, week: 7, month: 30, year: 365 }[match[2].toLowerCase() as "day" | "week" | "month" | "year"], 365);
-      const { core } = stripExclusions(text);
-      const topic: EmailIntent | "all" = /\b(?:recruiters?|recruiting)\b/i.test(core) ? "recruiter" : RECEIPT_WORDS.test(core) ? "receipt" : /\b(?:promotions?|promotional|deals?)\b/i.test(core) ? "promotion" : "all";
-      return { kind: "default_window", topic, days };
-    }
-  }
-  if (REMEMBER.test(text) && /\b(?:amounts?|totals?)\b/i.test(text) && RECEIPT_WORDS.test(text)) return { kind: "default_action", topic: "receipt", action: "amounts" };
-  if (last?.sender) {
-    const match = text.match(/^(?:no[,.!]?\s+)?(?:i meant|i mean|meant|it'?s|it is|should be|i said)\s+([\p{L}\p{N}&'.-]+(?:\s+[\p{L}\p{N}&'.-]+){0,2})[.!?]*$/iu)
-      ?? text.match(/^no[,.!]\s*([\p{L}\p{N}&'.-]+(?:\s+[\p{L}\p{N}&'.-]+){0,2})[.!?]*$/iu);
-    const canonical = match?.[1]?.trim().replace(/[.!?]+$/, "");
-    if (canonical && !/\b(?:receipts?|invoices?|amounts?|totals?|emails?|mails?|orders?|statements?|promotions?|promotional|recruiters?|unread|days?|weeks?|months?)\b/i.test(canonical) && canonical.toLowerCase() !== last.sender.toLowerCase() && !/^(?:thanks?|thank you|problem|way|worries|need|more|please|cancel|stop|wait|nevermind|never mind|nothing|sorry|later|now|yet|really|sure|thanks a lot)$/i.test(canonical)) {
-      return { kind: "sender_alias", alias: last.sender, canonical };
-    }
-  }
-  return null;
-}
-
-// R11.8: a request that says "emails", "messages" or "just list" wants the plain list, whatever was learned.
-const PLAIN_LIST = /\b(?:emails?|mails?|messages?|just (?:list|show)|list (?:them|only)|no amounts?|without amounts?)\b/i;
-
-/** Applies a learned default action to a request the interpreter read as a plain list. */
-export function applyLearnedAction(request: EmailRequest, message: string, learnings: Learnings) {
+/** Applies a learned default action to a request the interpreter read as a list, unless the person asked for the emails themselves (`plainList`, read by the model). */
+export function applyLearnedAction(request: EmailRequest, plainList: boolean, learnings: Learnings) {
   const learned = learnings.defaultActions[request.topic];
-  if (request.action !== "list" || !learned || PLAIN_LIST.test(message)) return { request, applied: false };
+  if (request.action !== "list" || !learned || plainList) return { request, applied: false };
   return { request: { ...request, action: learned }, applied: true };
 }
 

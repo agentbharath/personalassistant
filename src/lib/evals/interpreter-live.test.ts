@@ -40,7 +40,7 @@ describe.skipIf(mode === "off")("live: the email interpreter (R16.8, R21)", () =
     const passed: InterpreterCase[] = [];
     const notRun = pending.length - results.length;
     const failed = pending.slice(0, results.length).flatMap((item, index) => {
-      const problems = results[index].source === "rules" ? ["the model call failed, so the rules answered"] : checkInterpretation(results[index], item.expect);
+      const problems = results[index].source === "unavailable" ? ["the model call failed"] : checkInterpretation(results[index], item.expect);
       if (!problems.length) passed.push(item);
       return problems.length ? [`${item.label}\n    ${problems.join("\n    ")}`] : [];
     });

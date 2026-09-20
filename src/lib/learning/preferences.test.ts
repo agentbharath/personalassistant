@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { acknowledgeLearning, describeLearning, matchesForget, renderLearnings } from "./commands";
-import { NO_LEARNINGS, applyLearnedAction, detectCorrection, learnFromReinterpretation, withLearning, type Learning } from "./learnings";
+import { NO_LEARNINGS, applyLearnedAction, learnFromReinterpretation, withLearning, type Learning } from "./learnings";
 import { parseEmailRequest } from "@/lib/agents/email-request";
 import { applyMerchantLearnings, normalizeCategory } from "./preferences";
 
@@ -108,21 +108,15 @@ describe("learning what a request means (R11.8)", () => {
     expect(learnFromReinterpretation(parseEmailRequest("promotional emails"), { ...amounts, topic: "promotion" }, true)).toBeNull();
     expect(learnFromReinterpretation(list, amounts, true, learned)).toBeNull();
   });
-  it("can be stated outright", () => {
-    const last = parseEmailRequest("show all iherb receipts");
-    expect(detectCorrection("always show amounts for receipts", last)).toEqual({ kind: "default_action", topic: "receipt", action: "amounts" });
-    expect(detectCorrection("from now on receipts should show totals", last)).toEqual({ kind: "default_action", topic: "receipt", action: "amounts" });
-    expect(detectCorrection("show the amounts on my iherb receipts", last)).toBeNull();
-  });
   it("turns a plain receipt list into amounts once learned", () => {
-    expect(applyLearnedAction(list, "show all iherb recipts", learned)).toMatchObject({ applied: true, request: { action: "amounts", sender: "iherb" } });
+    expect(applyLearnedAction(list, false, learned)).toMatchObject({ applied: true, request: { action: "amounts", sender: "iherb" } });
   });
-  it.each(["show all iherb receipt emails", "list my iherb receipt messages", "just list the iherb receipts", "iherb receipts without amounts"])("keeps the plain list when the message says so: %s", (message) => {
-    expect(applyLearnedAction(list, message, learned).applied).toBe(false);
+  it("keeps the plain list when the model read that the person asked for the emails themselves", () => {
+    expect(applyLearnedAction(list, true, learned).applied).toBe(false);
   });
   it("does nothing before anything is learned, or for other topics and actions", () => {
-    expect(applyLearnedAction(list, "show all iherb receipts", NO_LEARNINGS).applied).toBe(false);
-    expect(applyLearnedAction(parseEmailRequest("promotional emails"), "promotional emails", learned).applied).toBe(false);
-    expect(applyLearnedAction(parseEmailRequest("import all iherb receipts"), "import all iherb receipts", learned).applied).toBe(false);
+    expect(applyLearnedAction(list, false, NO_LEARNINGS).applied).toBe(false);
+    expect(applyLearnedAction(parseEmailRequest("promotional emails"), false, learned).applied).toBe(false);
+    expect(applyLearnedAction(parseEmailRequest("import all iherb receipts"), false, learned).applied).toBe(false);
   });
 });
