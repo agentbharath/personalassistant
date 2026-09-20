@@ -1,5 +1,8 @@
+import { Suspense } from "react";
 import { AppShell } from "@/components/layout/AppShell";
+import { RepliesSection } from "@/components/today/RepliesSection";
 import { TodayView } from "@/components/today/TodayView";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { loadDailyView } from "@/lib/today/load";
 import { listConversations } from "@/lib/conversations/store";
 import { createClient } from "@/lib/supabase/server";
@@ -15,6 +18,6 @@ export default async function PerchPage() {
   const [view, recent] = userId ? await Promise.all([loadDailyView(userId), listConversations(userId, { limit: 40 }).catch(() => [])]) : [null, []];
 
   return <AppShell title="Perch" email={email} signOutAction={signOut} recent={recent} activeView="perch">
-    {view ? <TodayView view={view} /> : null}
+    {view && userId ? <TodayView view={view} replies={<Suspense fallback={<Skeleton height="7rem" />}><RepliesSection userId={userId} /></Suspense>} /> : null}
   </AppShell>;
 }

@@ -87,7 +87,7 @@ function Spending({ week }: { week: WeeklySpending }) {
   </>;
 }
 
-export function TodayView({ view }: { view: DailyView }) {
+export function TodayView({ view, replies }: { view: DailyView; /** The "Waiting on your reply" card. It loads separately, so it arrives as a slot. */ replies?: ReactNode }) {
   const heading = new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: "UTC" }).format(new Date(`${view.today}T00:00:00Z`));
   const meetings = view.meetingsToday, ahead = view.meetingsAhead, bills = view.bills, spending = view.spending;
   const billCount = bills.state === "ok" ? bills.value.overdue.length + bills.value.dueToday.length + bills.value.dueThisWeek.length : 0;
@@ -121,6 +121,8 @@ export function TodayView({ view }: { view: DailyView }) {
           </>;
         })()}
       </Card>
+
+      {replies}
 
       <Card label="Spending this week" tone="green" icon={<WalletIcon />}>
         {spending.state !== "ok" ? <Unavailable what="your spending" state={spending.state} />
