@@ -71,6 +71,13 @@ function Spending({ week }: { week: WeeklySpending }) {
         <span className={styles.bar} aria-hidden="true"><span className={styles.fill} style={{ width: `${Math.max(item.sharePercent, 3)}%` }} /></span>
       </li>)}</ul>
     </Group>
+    <details className={styles.entries}>
+      <summary className={styles.summary}>Show all {week.entries.length} purchase{week.entries.length === 1 ? "" : "s"}</summary>
+      <ul className={styles.list}>{week.entries.map((entry, index) => <li className={styles.entry} key={`${entry.occurredOn}-${entry.merchant}-${index}`}>
+        <span className={styles.what}>{entry.merchant}<span className={styles.sub}>{shortDate(entry.occurredOn)} · {titleCase(entry.category)}</span></span>
+        <span className={styles.amount}>{money(entry.amountMinor, week.currency)}</span>
+      </li>)}</ul>
+    </details>
     <div className={styles.foot}>
       {week.biggest && <p>Biggest: <strong>{week.biggest.merchant}</strong>, {money(week.biggest.amountMinor, week.currency)} on {shortDate(week.biggest.occurredOn)}</p>}
       {week.otherCurrencyCount > 0 && <p>{week.otherCurrencyCount} purchase{week.otherCurrencyCount === 1 ? "" : "s"} in another currency {week.otherCurrencyCount === 1 ? "isn’t" : "aren’t"} included.</p>}

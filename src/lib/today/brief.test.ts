@@ -58,6 +58,7 @@ describe("this week's spending habit (free)", () => {
     expect(week.dailyAverage).toBe(1714);
     expect(week.topCategories).toEqual([{ category: "groceries", amountMinor: 6000, sharePercent: 50 }, { category: "restaurants", amountMinor: 6000, sharePercent: 50 }]);
     expect(week.biggest).toEqual({ merchant: "Curry Point", amountMinor: 6000, occurredOn: "2026-09-15" });
+    expect(week.entries.map((entry) => `${entry.occurredOn} ${entry.merchant} ${entry.amountMinor}`)).toEqual(["2026-09-21 Trader Joe's 4000", "2026-09-16 Costco 2000", "2026-09-15 Curry Point 6000"]);
   });
 
   it("has no percentage change when the earlier week had no spending", () => {

@@ -60,3 +60,15 @@
   .card { padding: var(--s-4); }
   .event { grid-template-columns: 1fr; gap: 0; }
 }
+
+.entries { margin-top: var(--s-4); border-top: 1px solid var(--line); }
+.summary { display: flex; align-items: center; gap: var(--s-2); min-height: 2.5rem; color: var(--muted); font-size: var(--text-sm); font-weight: 500; cursor: pointer; list-style: none; }
+.summary::-webkit-details-marker { display: none; }
+.summary::before { content: ""; width: 0.45rem; height: 0.45rem; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(-45deg); transition: transform 0.15s ease; }
+.entries[open] > .summary::before { transform: rotate(45deg); }
+.summary:hover { color: var(--ink); }
+.summary:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; border-radius: var(--r-xs); }
+.entries[open] > .list { padding-bottom: var(--s-2); }
+.entry { display: flex; align-items: center; justify-content: space-between; gap: var(--s-4); }
+.entry .what { display: grid; gap: 0; }
+@media (prefers-reduced-motion: reduce) { .summary::before { transition: none; } }

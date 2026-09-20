@@ -42,6 +42,8 @@ export type WeeklySpending = {
   dailyAverage: number;
   topCategories: { category: string; amountMinor: number; sharePercent: number }[];
   biggest: { merchant: string; amountMinor: number; occurredOn: string } | null;
+  /** Every expense counted in the total, newest first, so the person can check the total against what they remember. */
+  entries: { merchant: string; amountMinor: number; occurredOn: string; category: string }[];
   /** Expenses in other currencies that were left out of the totals. */
   otherCurrencyCount: number;
 };
@@ -88,6 +90,7 @@ export function weeklySpending(records: SpendingRecord[], today: string): Weekly
     dailyAverage: Math.round(total / WEEK_DAYS),
     topCategories,
     biggest: { merchant: biggest.merchant, amountMinor: biggest.amountMinor, occurredOn: biggest.occurredOn },
+    entries: [...mine].sort((left, right) => right.occurredOn.localeCompare(left.occurredOn) || right.amountMinor - left.amountMinor).map(({ merchant, amountMinor, occurredOn, category }) => ({ merchant, amountMinor, occurredOn, category })),
     otherCurrencyCount: thisWeek.length - mine.length,
   };
 }
