@@ -66,17 +66,32 @@ export async function withGoogleCredential<T>(userId: string, capability: Capabi
   if (!CAPABILITY_SCOPES[capability].every((scope) => granted.has(scope))) throw new GoogleConnectionRequiredError(capability);
 
   let accessToken = decryptText(data.access_token_ciphertext as string);
-  if (new Date(data.access_token_expires_at as string).getTime() <= Date.now() + 60_000) {
+  // Gets a new access token from the saved refresh token and stores it. Without a refresh token the person has to reconnect.
+  const renew = async () => {
     if (!data.refresh_token_ciphertext) throw new GoogleConnectionRequiredError(capability);
-    accessToken = await refreshGoogleAccessToken(decryptText(data.refresh_token_ciphertext as string), capability);
+    const renewed = await refreshGoogleAccessToken(decryptText(data.refresh_token_ciphertext as string), capability);
     const { error: updateError } = await admin.from("oauth_connections").update({
-      access_token_ciphertext: encryptText(accessToken),
+      access_token_ciphertext: encryptText(renewed),
       access_token_expires_at: new Date(Date.now() + 50 * 60 * 1_000).toISOString(),
       updated_at: new Date().toISOString(),
     }).eq("user_id", userId).eq("provider", "google").eq("capability", capability);
     if (updateError) throw updateError;
+    return renewed;
+  };
+  if (new Date(data.access_token_expires_at as string).getTime() <= Date.now() + 60_000) accessToken = await renew();
+  try {
+    return await operation(accessToken);
+  } catch (error) {
+    // Google can reject a token that has not reached its expected expiry (revoked, or replaced by a newer sign-in). Renew once and try again
+    // before asking the person to reconnect. A token that was renewed just now is not renewed twice.
+    if (!isAuthRejected(error) || accessToken !== decryptText(data.access_token_ciphertext as string)) throw error;
+    return operation(await renew());
   }
-  return operation(accessToken);
+}
+
+/** The Google tools report a rejected token (401) as `insufficient_scope`. */
+function isAuthRejected(error: unknown) {
+  return error instanceof Error && (error as { reason?: string }).reason === "insufficient_scope";
 }
 
 async function refreshGoogleAccessToken(refreshToken: string, capability: Capability) {
