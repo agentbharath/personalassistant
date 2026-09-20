@@ -3,7 +3,7 @@ import styles from "./settings.module.css";
 
 export type Tone = "blue" | "green" | "amber" | "violet" | "neutral";
 
-/** One settings section as a card: a tinted icon, a title, a line of help, then the controls. The id is the target of the jump links at the top. */
+/** One settings section as a card: a tinted icon, a title, a line of help, then the controls. The id lets other pages link straight to a section (for example, what Daylark has learned). */
 export function SettingsSection({ id, title, help, icon, tone = "neutral", focusable = false, children }: { id: string; title: string; help: ReactNode; icon: ReactNode; tone?: Tone; focusable?: boolean; children: ReactNode }) {
   return <section className={styles.card} aria-labelledby={id}>
     <header className={styles.head}>

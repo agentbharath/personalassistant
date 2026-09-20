@@ -18,9 +18,6 @@ export default function DesignSettingsPage() {
   return <AppShell title="Settings" email="you@example.com" signOutAction={signOut} recent={MOCK_RECENT} activeView="settings">
     <div className={styles.page}>
       <h1 className={styles.title}>Settings</h1>
-      <nav className={styles.jump} aria-label="Jump to a section">
-        {[["connections", "Connections"], ["perch", "Perch"], ["location", "Location"], ["appearance", "Appearance"], ["learned", "Learned"], ["data", "Your data"], ["account", "Account"]].map(([id, label]) => <a className={styles.jumpLink} href={`#${id}`} key={id}>{label}</a>)}
-      </nav>
       <SettingsGroup label="Google">
         <SettingsSection id="connections" title="Connections" help="What Daylark can reach in your Google account." icon={<MailIcon />} tone="green"><ConnectionsFallback /></SettingsSection>
       </SettingsGroup>

@@ -17,7 +17,6 @@ import { CalendarIcon, EditIcon, LocateIcon, MailIcon, SettingsIcon, SunIcon, Wa
 import { SettingsGroup, SettingsSection } from "./SettingsSection";
 import styles from "./settings.module.css";
 
-const SECTIONS = [["connections", "Connections"], ["perch", "Perch"], ["location", "Location"], ["appearance", "Appearance"], ["learned", "Learned"], ["data", "Your data"], ["account", "Account"]] as const;
 
 export default async function SettingsPage() {
   const supabase = await createClient();
@@ -33,9 +32,6 @@ export default async function SettingsPage() {
   return <AppShell title="Settings" email={email} signOutAction={signOut} recent={recent} activeView="settings" perchEnabled={perch.perchEnabled}>
     <div className={styles.page}>
       <h1 className={styles.title}>Settings</h1>
-      <nav className={styles.jump} aria-label="Jump to a section">
-        {SECTIONS.map(([id, label]) => <a className={styles.jumpLink} href={`#${id}`} key={id}>{label}</a>)}
-      </nav>
 
       <SettingsGroup label="Google">
         <SettingsSection id="connections" title="Connections" help="What Daylark can reach in your Google account." icon={<MailIcon />} tone="green">
