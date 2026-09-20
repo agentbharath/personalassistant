@@ -74,6 +74,6 @@ Sign-in gate moved to `src/proxy.ts` (it was not running), sign-in returns to th
 ## Daily view (R26)
 - [x] `/today`: meetings, bills (overdue, today, 7 days), weekly spending habit; mock preview at `/design/today` in `npm run ui:check`.
 - [~] Reminders: skipped for now (owner decision 2026-09-21): there are no push notifications, so a reminder could not reach anyone.
-- [ ] Chat entry: "what's my day" / "any bills this week" answered from the same data (needs a `daily_view` router operation, so a new router version and a re-run of the router set).
+- [x] Chat entry: router op `daily_view` (router-v8), same data as /today.
 - [~] Emailed or pushed digests: not wanted (owner decision 2026-09-21). The Today page is the recap: people come and look, as with a Slack recap.
 - [ ] Email interpreter v9 live re-verification (148 cases, needs an owner-stated dollar limit and `LIVE_EVAL_MAX_CASES=148`).

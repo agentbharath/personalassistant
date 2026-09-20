@@ -191,3 +191,15 @@
 {"id": "v7-follow-1", "rule": "R23", "useCase": "RD-001", "input": "yes please", "expect": {"operation": "web_search"}, "context": [{"role": "user", "content": "how come people own vintage items but not me"}, {"role": "assistant", "content": "I can't tell you how they came by theirs, but I can help you find vintage shops near you. Want me to look around your area?"}], "home": "Oakland, CA"}
 {"id": "v7-follow-2", "rule": "R23", "useCase": "RD-001", "input": "yeah, around oakland", "expect": {"operation": "web_search"}, "context": [{"role": "user", "content": "how come people own vintage items but not me"}, {"role": "assistant", "content": "I can't tell you how they came by theirs, but I can help you find vintage shops near you. Want me to look around your area?"}], "home": "Oakland, CA"}
 {"id": "v7-follow-3", "rule": "R23", "useCase": "RD-001", "input": "yes please", "expect": {"operation": "clarify"}, "context": [{"role": "user", "content": "how come people own vintage items but not me"}, {"role": "assistant", "content": "I can't tell you how they came by theirs, but I can help you find vintage shops near you. Want me to look around your area?"}]}
+{"id": "daily-view-0", "rule": "R26", "input": "what's my day look like", "expect": {"operation": "daily_view"}}
+{"id": "daily-view-1", "rule": "R26", "input": "give me my daily brief", "expect": {"operation": "daily_view"}}
+{"id": "daily-view-2", "rule": "R26", "input": "anything I need to know today", "expect": {"operation": "daily_view"}}
+{"id": "daily-view-3", "rule": "R26", "input": "show me my week ahead", "expect": {"operation": "daily_view"}}
+{"id": "daily-view-4", "rule": "R26", "input": "recap my day", "expect": {"operation": "daily_view"}}
+{"id": "daily-view-5", "rule": "R26", "input": "what's due and what's on this week", "expect": {"operation": "daily_view"}}
+{"id": "daily-view-6", "rule": "R26", "input": "morning briefing please", "expect": {"operation": "daily_view"}}
+{"id": "daily-view-7", "rule": "R26", "input": "what do I have going on today, bills and all", "expect": {"operation": "daily_view"}}
+{"id": "daily-view-neg-cal", "rule": "R26", "input": "what's on my calendar today", "expect": {"operation": "calendar_query"}}
+{"id": "daily-view-neg-bills", "rule": "R26", "input": "any bills due this week", "expect": {"operation": "bills_list"}}
+{"id": "daily-view-neg-spend", "rule": "R26", "input": "how much did I spend this week", "expect": {"operation": "finance_spending"}}
+{"id": "daily-view-neg-free", "rule": "R26", "input": "am I free tomorrow afternoon", "expect": {"operation": "calendar_query"}}

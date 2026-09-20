@@ -4,7 +4,7 @@ import type { RouterDecision } from "./router";
 
 const mocks = vi.hoisted(() => ({
   answerCalendar: vi.fn(), prepareCalendarCreate: vi.fn(), answerFinance: vi.fn(), answerPublicSearch: vi.fn(), runBillsCommand: vi.fn(), answerStatusLookup: vi.fn(),
-  answerCasual: vi.fn(), prepareCalendarAttendeeUpdate: vi.fn(), prepareCalendarDelete: vi.fn(), handleEmailConversationTurn: vi.fn(), answerScheduleFeasibility: vi.fn(),
+  answerCasual: vi.fn(), prepareCalendarAttendeeUpdate: vi.fn(), prepareCalendarDelete: vi.fn(), handleEmailConversationTurn: vi.fn(), answerScheduleFeasibility: vi.fn(), answerDailyView: vi.fn(),
   runLearningCommand: vi.fn(), executeReadOnlyAgentPlan: vi.fn(), saveLearning: vi.fn(),
   resolveDelete: vi.fn(), resolveAttendees: vi.fn(), resolveCreate: vi.fn(), resolveFinance: vi.fn(),
 }));
@@ -23,6 +23,7 @@ vi.mock("@/lib/workflows/calendar-create", () => ({
 }));
 vi.mock("@/lib/workflows/finance-import", () => ({ resolvePendingFinanceImport: mocks.resolveFinance }));
 vi.mock("./email-turn", () => ({ handleEmailConversationTurn: mocks.handleEmailConversationTurn }));
+vi.mock("@/lib/today/answer", () => ({ answerDailyView: mocks.answerDailyView }));
 vi.mock("./feasibility", () => ({ answerScheduleFeasibility: mocks.answerScheduleFeasibility }));
 vi.mock("./learning-turn", () => ({ runLearningCommand: mocks.runLearningCommand }));
 vi.mock("./multi-agent", () => ({ composeMultiAgentAnswer: () => "COMPOSED", executeReadOnlyAgentPlan: mocks.executeReadOnlyAgentPlan, planClauseInstructions: () => ({ tasks: [], notes: [] }) }));
@@ -36,7 +37,7 @@ const ctx = { requestId: "r1", input: "the message", userId: "u1", context: [], 
 
 beforeEach(() => {
   for (const mock of Object.values(mocks)) mock.mockReset();
-  mocks.answerFinance.mockResolvedValue("FINANCE"); mocks.runBillsCommand.mockResolvedValue("BILLS"); mocks.answerStatusLookup.mockResolvedValue("STATUS");
+  mocks.answerFinance.mockResolvedValue("FINANCE"); mocks.runBillsCommand.mockResolvedValue("BILLS"); mocks.answerDailyView.mockResolvedValue("DAILY"); mocks.answerStatusLookup.mockResolvedValue("STATUS");
   mocks.answerCalendar.mockResolvedValue("CALENDAR"); mocks.answerPublicSearch.mockResolvedValue("WEB"); mocks.answerCasual.mockResolvedValue("CASUAL");
   mocks.prepareCalendarCreate.mockResolvedValue("CREATE"); mocks.prepareCalendarDelete.mockResolvedValue("DELETE"); mocks.prepareCalendarAttendeeUpdate.mockResolvedValue("ATTENDEES");
   mocks.runLearningCommand.mockResolvedValue({ answer: "LEARNING", agents: [], status: "completed" }); mocks.executeReadOnlyAgentPlan.mockResolvedValue([{ agent: "email", ok: true, answer: "x" }]);
@@ -49,6 +50,7 @@ describe("each operation calls its own handler (R19.4)", () => {
     [decision({ operation: "finance_spending" }), () => mocks.answerFinance, "FINANCE"],
     [decision({ operation: "finance_record" }), () => mocks.answerFinance, "FINANCE"],
     [decision({ operation: "bills_list" }), () => mocks.runBillsCommand, "BILLS"],
+    [decision({ operation: "daily_view" }), () => mocks.answerDailyView, "DAILY"],
     [decision({ operation: "calendar_query" }), () => mocks.answerCalendar, "CALENDAR"],
     [decision({ operation: "web_search" }), () => mocks.answerPublicSearch, "WEB"],
     [decision({ operation: "unsupported" }), () => mocks.answerCasual, "CASUAL"],

@@ -5,14 +5,14 @@ import type { EmailState } from "@/lib/conversations/email-state";
 
 /** R19.7, R19.9: bump on any change to the prompt or schema, then pass `npm run eval:live`. */
 // v7: email drafts, redirect instead of refusing (R23), ask when in doubt with tap-to-answer choices (R22), codes and links left alone (R24).
-export const ROUTER_VERSION = "router-v7";
+export const ROUTER_VERSION = "router-v8";
 /** R22: when in doubt, ask. Below this the router's one question is asked and nothing runs. */
 export const ROUTER_CONFIDENCE_THRESHOLD = 0.8;
 
 export const OPERATIONS = [
   "email", "status_lookup", "finance_spending", "finance_record", "bills_list", "bills_paid", "bills_autopay",
   "learning_show", "learning_forget", "learning_teach", "calendar_query", "calendar_create", "calendar_delete", "calendar_attendees",
-  "schedule_feasibility", "web_search", "multi", "email_write_declined", "email_draft", "approve", "deny", "crisis", "unsafe", "casual", "redirect", "unsupported", "clarify",
+  "schedule_feasibility", "daily_view", "web_search", "multi", "email_write_declined", "email_draft", "approve", "deny", "crisis", "unsafe", "casual", "redirect", "unsupported", "clarify",
 ] as const;
 export type Operation = (typeof OPERATIONS)[number];
 const AGENTS = ["email", "calendar", "finance", "general"] as const;
@@ -156,6 +156,7 @@ const EXAMPLES: Array<[string, ModelOutput]> = [
   ['"what\'s the status of my chase dispute"', { ...blank, operation: "status_lookup", sender: "chase", matter: "dispute", confidence: 0.96, reading: "Latest Chase email about the dispute" }],
   ['"show my total spendings so far"', { ...blank, operation: "finance_spending", confidence: 0.97, reading: "All recorded spending" }],
   ['"I spent $24.50 at Curry Point today"', { ...blank, operation: "finance_record", confidence: 0.98, reading: "Record a $24.50 expense" }],
+  ['"what\'s my day look like"', { ...blank, operation: "daily_view", confidence: 0.95, reading: "An overview of today: meetings, bills and spending" }],
   ['"what bills are outstanding"', { ...blank, operation: "bills_list", confidence: 0.97, reading: "Unpaid bills" }],
   ['"I paid the PG&E bill last Sunday" (today is 2026-09-21)', { ...blank, operation: "bills_paid", merchant: "PG&E", paidOn: "2026-09-20", confidence: 0.96, reading: "Mark the PG&E bill paid on Sep 20" }],
   ['"PG&E is on autopay"', { ...blank, operation: "bills_autopay", merchant: "PG&E", confidence: 0.97, reading: "Remember PG&E is on autopay" }],
@@ -203,10 +204,11 @@ export const ROUTER_SYSTEM = `You are the router for Daylark, a personal assista
 Operations:
 - email: anything about the user's email: searching, listing, receipts, invoices, promotions, recruiters, amounts on receipts, importing receipts, or a follow-up to a saved email search (a new sender, a window like "last 90 days", "only unread", "the second one", "import them", "I meant the amount receipts"). Choose email even when the word "email" is not used ("find unpaid bills", "all iherb receipts"). When savedEmailSearch is not null and the message is a short fragment or a bare name, it is a follow-up: email.
 - status_lookup: the status, progress or latest news of a matter with a named company ("status of my chase dispute", "any update on my amazon refund"). Give sender (the company) and matter (dispute, claim, refund, return, case, ticket, complaint, application, request, chargeback).
-- finance_spending: questions about spending totals or breakdowns. finance_record: the user states a purchase to record.
+- finance_spending: questions about spending totals or breakdowns. A plain spending phrase ("spending on restaurants", "restaurant spending", "what I spent on groceries") is finance_spending; do not ask whether the user wants to record or search instead. finance_record: the user states a purchase to record.
 - bills_list: what bills are outstanding or unpaid, or what the user owes. bills_paid: the user says they paid a bill: give merchant, and paidOn as an ISO date (YYYY-MM-DD) worked out from today when the user gives or implies a day ("yesterday", "last Sunday", "the 5th"), else null. bills_autopay: the user says a company's bill is on autopay (merchant).
 - learning_show: what Daylark has learned or remembers. learning_forget: any "forget <something>" or "unlearn <something>" (term), or forget everything; never ask what it refers to, the handler finds what matches. learning_teach: the user states a lasting preference or correction; fill lesson: default_window (days, and topic all/receipt/promotion/recruiter), receipts_show_amounts, sender_alias (alias is what they typed, canonical is what they meant), calendar_duration or calendar_buffer (minutes), merchant_category (merchant and one category), merchant_alias (alias, canonical: the user says a short or odd name means a company, like "amzn means Amazon"), autopay (merchant). sender_alias is only for a correction of a name the user just searched for in email ("I meant Adobe" after a search for adobee).
-- calendar_query: what is on the calendar or whether the user is free. calendar_create. calendar_delete: deleting, cancelling or removing a calendar event. calendar_attendees: changing who is invited or on the guest list ("the event" means the most recent one; the handler works out which, so do not ask). schedule_feasibility: can the user fit an activity around calendar events, considering travel.
+- calendar_query: what is on the calendar or whether the user is free. A part of a day ("tomorrow afternoon", "Saturday morning", "tonight") is a complete time reference: choose calendar_query and do not ask what time. calendar_create. calendar_delete: deleting, cancelling or removing a calendar event. calendar_attendees: changing who is invited or on the guest list ("the event" means the most recent one; the handler works out which, so do not ask). schedule_feasibility: can the user fit an activity around calendar events, considering travel.
+- daily_view: an overview of the user's day or week across several of their own things at once: "what's my day look like", "give me my daily brief", "anything I need to know today", "my week ahead", "recap", "what's due and what's on this week". A question about only ONE of them is that operation instead: meetings alone is calendar_query, bills alone is bills_list, spending alone is finance_spending.
 - web_search: public facts, places, events, recommendations that need the web.
 - multi: one message with several separate asks across agents; list the agents involved in agents.
 - email_draft: the user wants Daylark to WRITE an email for them to send: reply to an email, write a new email, or change, shorten, redo, discard or go back on a draft Daylark already wrote. Fill draft: action (create, edit, discard or revert), kind (reply or new, for create; else none), to (who it is for, as said; empty if not said), replyTo (which email, as said, such as "the second one" or "Sarah's email"; empty if not said), instruction (what it should say, or how to change it), version (which earlier version, as said, for revert; else empty). Daylark only saves drafts in Gmail and never sends; whether drafting is switched on is decided elsewhere, so choose email_draft whenever that is what was asked. "Drafts" means email drafts. When the last assistant message showed or saved an email draft, follow-ups such as "make it shorter", "add that I'm free after 3", "change …", "cc …", "undo that", "go back to the first one" and "delete it" are about that draft.

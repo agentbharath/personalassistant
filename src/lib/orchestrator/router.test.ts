@@ -127,7 +127,7 @@ describe("code checks structure and never judges the message (R19.5)", () => {
 
 import { ROUTER_JSON_SCHEMA } from "./router";
 
-describe("router v7: drafts, redirects and choices (R22, R23, R25)", () => {
+describe("router v8: drafts, redirects and choices (R22, R23, R25)", () => {
   // The model returns flat objects with "none" and empty strings, not nulls (the API limits how many union-typed fields a schema may have).
   const draft = (over: Record<string, unknown> = {}) => ({ action: "create", kind: "reply", to: "sarah", replyTo: "sarah's email", instruction: "say I'll be there", version: "", ...over });
   const redirect = (over: Record<string, unknown> = {}) => ({ category: "speculation", reply: "I can't tell you how they came by theirs, but I can help you find vintage shops near you.", distress: false, pivot: "web", ask: "", ...over });
@@ -154,8 +154,8 @@ describe("router v7: drafts, redirects and choices (R22, R23, R25)", () => {
     for (const key of ["choices", "draft", "redirect"]) expect(required).toContain(key);
   });
 
-  it("is version 7, asks when in doubt, and teaches drafting, redirecting and choices", () => {
-    expect(ROUTER_VERSION).toBe("router-v7");
+  it("is version 8, asks when in doubt, and teaches drafting, redirecting and choices", () => {
+    expect(ROUTER_VERSION).toBe("router-v8");
     expect(ROUTER_SYSTEM).toMatch(/When in doubt, ask/);
     expect(ROUTER_SYSTEM).toMatch(/email_draft/);
     expect(ROUTER_SYSTEM).toMatch(/Never just "I can't answer that"/);

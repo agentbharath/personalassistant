@@ -13,6 +13,7 @@ import { prepareCalendarAttendeeUpdate, prepareCalendarDelete, resolvePendingCal
 import { resolvePendingFinanceImport } from "@/lib/workflows/finance-import";
 import { handleEmailConversationTurn } from "./email-turn";
 import { answerScheduleFeasibility } from "./feasibility";
+import { answerDailyView } from "@/lib/today/answer";
 import { runLearningCommand } from "./learning-turn";
 import { composeMultiAgentAnswer, executeReadOnlyAgentPlan, planClauseInstructions } from "./multi-agent";
 import { ROUTER_CONFIDENCE_THRESHOLD, type ContextMessage, type Lesson, type RouterDecision } from "./router";
@@ -131,6 +132,9 @@ export async function dispatchDecision(decision: RouterDecision, ctx: DispatchCo
     case "schedule_feasibility":
       prepareAgentStage(["general", "calendar"], "balanced");
       return done(await answerScheduleFeasibility(input, userId, context), ["general", "calendar"]);
+    case "daily_view":
+      prepareAgentStage(["calendar", "finance"], "fast");
+      return done(await answerDailyView(userId), ["calendar", "finance"]);
     case "web_search":
       prepareAgentStage(["general"], "balanced");
       return done(await answerPublicSearch(input), ["general"]);
