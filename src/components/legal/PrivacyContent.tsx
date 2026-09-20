@@ -16,7 +16,8 @@ export function PrivacyContent() {
     <h3>From your Google account</h3>
     <p>When you sign in with Google you give {product} permission to:</p>
     <ul>
-      <li><strong>Read your email</strong> (the read-only Gmail permission). {product} searches and reads messages when you ask about them, for example to find a receipt. It never sends, drafts, deletes, labels or changes email.</li>
+      <li><strong>Read your email</strong> (the read-only Gmail permission). {product} searches and reads messages when you ask about them, for example to find a receipt. It never sends, deletes, labels or changes your existing email.</li>
+      <li><strong>Save email drafts</strong> (the Gmail compose permission), only if you turn drafting on. When you ask {product} to write an email or a reply, it writes a draft and shows it to you. Only after you confirm does it save the draft in your Gmail Drafts folder, where you read and send it yourself. Google has no permission that allows drafts without also technically allowing sending. {product} is built so that it cannot send: the only things it can do to your mailbox are create, read, update and delete the drafts it created itself. It never sends, and it never deletes or changes any other email.</li>
       <li><strong>View and manage your calendar events</strong>. {product} reads your events to answer questions, and creates, changes or deletes an event only after you confirm it in the chat.</li>
       <li>Your name, email address and profile basics, which identify your account.</li>
     </ul>
@@ -61,7 +62,7 @@ export function PrivacyContent() {
       <thead><tr><th>Provider</th><th>What it does</th><th>What it can receive</th></tr></thead>
       <tbody>
         <tr><td>Supabase</td><td>Sign-in and the database</td><td>Your account details and everything stored above. Conversation text, titles, learned preferences, financial details and sign-in tokens are encrypted by {product} before they reach the database.</td></tr>
-        <tr><td>Anthropic</td><td>The AI models that interpret requests and write some replies</td><td>Your message, recent conversation for context, receipts you upload, and where needed for a request, text taken from the emails or events involved.</td></tr>
+        <tr><td>Anthropic</td><td>The AI models that interpret requests and write some replies</td><td>Your message, recent conversation for context, receipts you upload, and where needed for a request, text taken from the emails or events involved. To write a draft: what you asked it to say and, for a reply, the email being answered (sender, subject, date and text). To list mail waiting for your reply, if you turn that on: the sender, subject and the start of the text of recent Primary and Updates messages, once for each message.</td></tr>
         <tr><td>Google</td><td>Gmail and Calendar access, and route and travel-time estimates</td><td>Your requests to those services. For travel time, the start and end addresses, which can include your saved home location.</td></tr>
         <tr><td>Tavily</td><td>Public web search</td><td>A search query about public information, such as a place or event. It can include the area around your saved home location.</td></tr>
         <tr><td>Upstash</td><td>Short-lived cache that speeds up repeat requests</td><td>Encrypted cache entries.</td></tr>

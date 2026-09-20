@@ -7,7 +7,7 @@ export type RouterExpect = {
   paidOn?: string | null;
   lesson?: Record<string, unknown>;
   /** R25: what kind of draft request. */
-  draft?: { action: string; kind?: string | null };
+  draft?: { action: string; kind?: string | null; replyTo?: string; version?: string; toIncludes?: string };
   /** R23: how a redirect should look. `pivot: "none"` means no pivot at all. */
   redirect?: { category?: string; distress?: boolean; pivot?: "none" | string };
   /** R22: the clarifying question should come with two or more tap-to-answer choices. */
@@ -37,6 +37,10 @@ export function checkDecision(decision: RouterDecision | null, want: RouterExpec
     if (decision.draft?.action !== want.draft.action) problems.push(`draft.action: wanted ${want.draft.action}, got ${decision.draft?.action ?? "none"}`);
     if (want.draft.kind !== undefined && decision.draft?.kind !== want.draft.kind) problems.push(`draft.kind: wanted ${want.draft.kind}, got ${decision.draft?.kind ?? "none"}`);
   }
+
+  if (want.draft?.replyTo !== undefined && (decision.draft?.replyTo ?? "") !== want.draft.replyTo) problems.push(`draft.replyTo: wanted ${want.draft.replyTo}, got ${decision.draft?.replyTo ?? ""}`);
+  if (want.draft?.version !== undefined && (decision.draft?.version ?? "") !== want.draft.version) problems.push(`draft.version: wanted ${want.draft.version}, got ${decision.draft?.version ?? ""}`);
+  if (want.draft?.toIncludes && !(decision.draft?.to ?? "").toLowerCase().includes(want.draft.toIncludes.toLowerCase())) problems.push(`draft.to: wanted it to include ${want.draft.toIncludes}, got ${decision.draft?.to ?? ""}`);
 
   if (want.choices && (decision.choices?.length ?? 0) < 2) problems.push(`choices: wanted two or more tap-to-answer choices, got ${decision.choices?.length ?? 0}`);
 

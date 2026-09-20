@@ -24,7 +24,10 @@ export async function ConnectionsSection({ userId }: { userId?: string }) {
   const saved = new Set(rows.map((row) => row.capability as string));
   // Ask Google whether each saved permission still works, at the same time, so a revoked one is shown as such.
   const [emailState, calendarState] = await Promise.all((["email", "calendar"] as const).map(async (capability): Promise<State> => (userId && saved.has(capability) ? checkGoogleConnection(userId, capability) : "missing")));
-  const allGood = emailState === "connected" && calendarState === "connected";
+  // R25: the drafts row only exists once drafting is switched on. The permission is asked for at sign-in, so someone who signed in earlier must reconnect.
+  const draftsOn = process.env.NEXT_PUBLIC_DRAFTS_ENABLED === "true";
+  const draftsState: State = !draftsOn ? "connected" : userId && saved.has("email_drafts") ? await checkGoogleConnection(userId, "email_drafts") : "missing";
+  const allGood = emailState === "connected" && calendarState === "connected" && draftsState === "connected";
 
   return <>
     <ul className={styles.list}>
@@ -32,6 +35,10 @@ export async function ConnectionsSection({ userId }: { userId?: string }) {
         <span><strong>Gmail</strong><br /><span className={styles.sub}>Read only. It can search and read messages, and can never send, delete or change them.</span></span>
         <span className={badge(emailState)[1]}>{badge(emailState)[0]}</span>
       </li>
+      {draftsOn && <li className={styles.row}>
+        <span><strong>Gmail drafts</strong><br /><span className={styles.sub}>Saves a draft in your Drafts folder after you confirm it. Google&apos;s permission for this could technically send mail, so Daylark is built so it never can. You send drafts yourself.</span></span>
+        <span className={badge(draftsState)[1]}>{badge(draftsState)[0]}</span>
+      </li>}
       <li className={styles.row}>
         <span><strong>Google Calendar</strong><br /><span className={styles.sub}>Reads your events. Adds, changes or removes one only after you confirm.</span></span>
         <span className={badge(calendarState)[1]}>{badge(calendarState)[0]}</span>

@@ -10,10 +10,14 @@ export type EmailSearchResult = {
   date: string;
   receivedAt: number;
   snippet: string;
+  /** The To header, when the search asked for it. Used to find who the owner writes to. */
+  to?: string;
 };
 
 export type EmailAttachment = { id: string; filename: string; mimeType: string; size: number };
-export type EmailContent = EmailSearchResult & { text: string; attachments: EmailAttachment[] };
+/** What a reply needs to sit under the message it answers (R25): the message's own id, the chain before it, and where replies should go. */
+export type ReplyHeaders = { messageId: string; references: string[]; replyTo: string; to: string };
+export type EmailContent = EmailSearchResult & { text: string; attachments: EmailAttachment[]; reply: ReplyHeaders };
 
 export class GoogleGmailAccessError extends Error {
   constructor(public readonly reason: "api_disabled" | "insufficient_scope" | "forbidden" | "unavailable") {
@@ -40,6 +44,12 @@ export async function readGmailMessage(userId: string, messageId: string): Promi
       snippet: decodeEntities(body.snippet ?? ""),
       text: cleanBodyText(collectText(body.payload)).slice(0, 150_000),
       attachments: collectAttachments(body.payload),
+      reply: {
+        messageId: headers.get("message-id") ?? "",
+        references: (headers.get("references") ?? "").split(/\s+/).filter(Boolean),
+        replyTo: headers.get("reply-to") ?? "",
+        to: headers.get("to") ?? "",
+      },
     };
   });
 }
@@ -132,6 +142,7 @@ async function messageSummaries(accessToken: string, refs: MessageRef[]): Promis
     messageUrl.searchParams.append("metadataHeaders", "Subject");
     messageUrl.searchParams.append("metadataHeaders", "From");
     messageUrl.searchParams.append("metadataHeaders", "Date");
+    messageUrl.searchParams.append("metadataHeaders", "To");
     const response = await gmailFetch(messageUrl, accessToken);
     const body = await response.json() as { id: string; threadId: string; internalDate?: string; snippet?: string; payload?: { headers?: Array<{ name: string; value: string }> } };
     const headers = new Map((body.payload?.headers ?? []).map((header) => [header.name.toLowerCase(), header.value]));
@@ -143,6 +154,7 @@ async function messageSummaries(accessToken: string, refs: MessageRef[]): Promis
       date: headers.get("date") ?? "",
       receivedAt: Number(body.internalDate ?? 0),
       snippet: decodeEntities(body.snippet ?? ""),
+      to: headers.get("to") ?? "",
     };
   });
   const results = settled.flatMap((entry) => (entry.status === "fulfilled" ? [entry.value] : []));

@@ -4,7 +4,7 @@ import type { RouterDecision } from "./router";
 
 const mocks = vi.hoisted(() => ({
   answerCalendar: vi.fn(), prepareCalendarCreate: vi.fn(), answerFinance: vi.fn(), answerPublicSearch: vi.fn(), runBillsCommand: vi.fn(), answerStatusLookup: vi.fn(),
-  answerCasual: vi.fn(), prepareCalendarAttendeeUpdate: vi.fn(), prepareCalendarDelete: vi.fn(), handleEmailConversationTurn: vi.fn(), answerScheduleFeasibility: vi.fn(), answerDailyView: vi.fn(), saveSearchState: vi.fn(),
+  answerCasual: vi.fn(), prepareCalendarAttendeeUpdate: vi.fn(), prepareCalendarDelete: vi.fn(), handleEmailConversationTurn: vi.fn(), answerScheduleFeasibility: vi.fn(), answerDailyView: vi.fn(), saveSearchState: vi.fn(), prepareEmailDraft: vi.fn(), resolveEmailDraft: vi.fn(), ownerIdentity: vi.fn(), loadEmailState: vi.fn(),
   runLearningCommand: vi.fn(), executeReadOnlyAgentPlan: vi.fn(), saveLearning: vi.fn(),
   resolveDelete: vi.fn(), resolveAttendees: vi.fn(), resolveCreate: vi.fn(), resolveFinance: vi.fn(),
 }));
@@ -22,6 +22,10 @@ vi.mock("@/lib/workflows/calendar-create", () => ({
   resolvePendingCalendarDelete: mocks.resolveDelete, resolvePendingCalendarAttendeeUpdate: mocks.resolveAttendees, resolvePendingCalendarCreate: mocks.resolveCreate,
 }));
 vi.mock("@/lib/workflows/finance-import", () => ({ resolvePendingFinanceImport: mocks.resolveFinance }));
+vi.mock("@/lib/agents/email-draft", () => ({ prepareEmailDraft: mocks.prepareEmailDraft }));
+vi.mock("@/lib/workflows/email-draft", () => ({ resolvePendingEmailDraft: mocks.resolveEmailDraft }));
+vi.mock("@/lib/auth/owner", () => ({ ownerIdentity: mocks.ownerIdentity }));
+vi.mock("@/lib/conversations/email-state", () => ({ loadEmailState: mocks.loadEmailState }));
 vi.mock("./email-turn", () => ({ handleEmailConversationTurn: mocks.handleEmailConversationTurn }));
 vi.mock("@/lib/today/answer", () => ({ answerDailyView: mocks.answerDailyView }));
 vi.mock("./feasibility", () => ({ answerScheduleFeasibility: mocks.answerScheduleFeasibility }));
@@ -42,6 +46,7 @@ beforeEach(() => {
   mocks.prepareCalendarCreate.mockResolvedValue("CREATE"); mocks.prepareCalendarDelete.mockResolvedValue("DELETE"); mocks.prepareCalendarAttendeeUpdate.mockResolvedValue("ATTENDEES");
   mocks.runLearningCommand.mockResolvedValue({ answer: "LEARNING", agents: [], status: "completed" }); mocks.executeReadOnlyAgentPlan.mockResolvedValue([{ agent: "email", ok: true, answer: "x" }]);
   mocks.saveLearning.mockResolvedValue(undefined);
+  mocks.resolveEmailDraft.mockResolvedValue(null); mocks.ownerIdentity.mockResolvedValue({ name: "Bharath", email: "me@example.com" }); mocks.loadEmailState.mockResolvedValue(null);
   for (const resolver of [mocks.resolveDelete, mocks.resolveAttendees, mocks.resolveCreate, mocks.resolveFinance]) resolver.mockResolvedValue(null);
 });
 
@@ -173,11 +178,24 @@ describe("unsure means ask, and nothing runs (R19.6)", () => {
 });
 
 describe("drafts, redirects and choices (R22, R23, R25)", () => {
-  it("answers a drafting request honestly while drafting is not released, and never makes up a draft", async () => {
-    const result = await dispatchDecision(decision({ operation: "email_draft", draft: { action: "create", kind: "reply", to: "sarah", replyTo: null, instruction: "say yes", version: null } }), ctx);
-    expect(result?.answer).toMatch(/can't save email drafts yet/);
-    expect(result?.answer).toMatch(/summarise the email/);
-    expect(result?.agents).toEqual(["email"]);
+  it("hands a drafting request to the draft agent with who the owner is and the saved email search, and shows its preview", async () => {
+    mocks.prepareEmailDraft.mockResolvedValue({ answer: "PREVIEW", status: "waiting_for_user", choices: ["a", "b"] });
+    const draft = { action: "create" as const, kind: "reply" as const, to: "sarah", replyTo: null, instruction: "say yes", version: null };
+    const result = await dispatchDecision(decision({ operation: "email_draft", draft }), ctx);
+    expect(mocks.prepareEmailDraft).toHaveBeenCalledWith(draft, expect.objectContaining({ userId: "u1", conversationId: "c1", ownerName: "Bharath", ownerEmail: "me@example.com" }));
+    expect(result).toMatchObject({ answer: "PREVIEW", status: "waiting_for_user", agents: ["email"], choices: ["a", "b"] });
+  });
+
+  it("asks what to write when the router chose drafting but read no details", async () => {
+    const result = await dispatchDecision(decision({ operation: "email_draft", draft: null }), ctx);
+    expect(result?.answer).toMatch(/new email or reply/);
+    expect(mocks.prepareEmailDraft).not.toHaveBeenCalled();
+  });
+
+  it("lets Confirm and Cancel reach a pending draft", async () => {
+    mocks.resolveEmailDraft.mockResolvedValueOnce({ answer: "SAVED", status: "completed" });
+    expect((await dispatchDecision(decision({ operation: "approve" }), ctx))?.answer).toBe("SAVED");
+    expect(mocks.resolveEmailDraft).toHaveBeenCalledWith("u1", "c1", "confirm");
   });
 
   it("shows a redirect's own message, so an off-topic message is helped, not refused", async () => {

@@ -7,7 +7,7 @@ export type ConnectionState = "connected" | "needs_reconnect" | "unavailable";
  * has expired and confirms Google still grants the needed scope. A connection Google has revoked or that lacks the scope needs
  * reconnecting; a network problem or timeout is reported as unavailable rather than guessed at.
  */
-export async function checkGoogleConnection(userId: string, capability: "calendar" | "email"): Promise<ConnectionState> {
+export async function checkGoogleConnection(userId: string, capability: "calendar" | "email" | "email_drafts"): Promise<ConnectionState> {
   try {
     await withGoogleCredential(userId, capability, async () => true);
     return "connected";

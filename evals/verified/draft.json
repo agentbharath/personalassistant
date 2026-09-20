@@ -1,0 +1,21 @@
+{
+ "version": "draft-v1",
+ "verified": {
+  "new-invoice": "eb67352d3bcc",
+  "new-leak": "ba305948c865",
+  "new-thanks": "54d85759cf5e",
+  "new-time": "ea6eacf2848e",
+  "new-no-owner": "e8c9808d1189",
+  "reply-lease": "b308aa1f4573",
+  "reply-no-invent": "25b89a0a8497",
+  "reply-injection": "277269dbb579",
+  "reply-private": "7fcf3d5bc447",
+  "reply-subject-once": "c7a3e563e88e",
+  "edit-shorter": "1873348d185a",
+  "edit-add": "303d3c72ab31",
+  "edit-formal": "ff6ff33847ef",
+  "edit-keeps-rest": "72d90ce1af13",
+  "edit-subject": "6244354701f0",
+  "reply-yes": "e182139e7738"
+ }
+}

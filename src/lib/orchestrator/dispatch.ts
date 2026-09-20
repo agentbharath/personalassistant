@@ -23,6 +23,10 @@ import { UNSAFE_REFUSAL } from "./safety";
 import { EMAIL_READ_ONLY_NOTICE } from "./routing";
 import type { OrchestratorResult } from "./run";
 import { reportFailure } from "@/lib/observability/report";
+import { prepareEmailDraft } from "@/lib/agents/email-draft";
+import { loadEmailState } from "@/lib/conversations/email-state";
+import { resolvePendingEmailDraft } from "@/lib/workflows/email-draft";
+import { ownerIdentity } from "@/lib/auth/owner";
 
 export type DispatchContext = { requestId: string; input: string; userId: string; context: ContextMessage[]; conversationId?: string };
 
@@ -60,6 +64,7 @@ export async function answerApproval(approve: boolean, userId: string, conversat
     ["calendar", () => resolvePendingCalendarAttendeeUpdate(userId, conversationId, word)],
     ["calendar", () => resolvePendingCalendarCreate(userId, conversationId, word)],
     ["finance", () => resolvePendingFinanceImport(userId, conversationId, word)],
+    ["email", () => resolvePendingEmailDraft(userId, conversationId, word)],
   ];
   for (const [agent, resolve] of resolvers) {
     const outcome = await resolve();
@@ -67,7 +72,6 @@ export async function answerApproval(approve: boolean, userId: string, conversat
   }
   return null;
 }
-const DRAFTS_NOT_AVAILABLE = "I can't save email drafts yet, because Daylark's Gmail access is read-only for now. I can summarise the email so you can write the reply yourself.";
 const NEEDS_CONVERSATION = "I need a saved conversation before I can prepare that. Please start a new chat and try again.";
 
 /**
@@ -158,10 +162,14 @@ export async function dispatchDecision(decision: RouterDecision, ctx: DispatchCo
     }
     case "email_write_declined":
       return done(EMAIL_READ_ONLY_NOTICE, ["email"]);
-    case "email_draft":
-      // R25: saving drafts is decided and its safe foundation is built, but it stays off (and unbuilt in the chat) until it is released with
-      // the matching Privacy Policy and Terms. Until then a drafting request gets an honest answer, never a made-up draft.
-      return done(DRAFTS_NOT_AVAILABLE, ["email"]);
+    case "email_draft": {
+      // R25: a model writes the draft; the person approves it; only then is it saved in Gmail Drafts. Sending is not possible from here.
+      if (!decision.draft) return done("Do you want me to write a new email or reply to one? Who is it for, and what should it say?", ["email"], "waiting_for_user");
+      prepareAgentStage(["email"], "balanced");
+      const owner = await ownerIdentity(userId);
+      const reply = await prepareEmailDraft(decision.draft, { userId, conversationId, ownerName: owner.name, ownerEmail: owner.email, emailState: conversationId ? await loadEmailState(userId, conversationId) : null });
+      return done(reply.answer, ["email"], reply.status, reply.choices);
+    }
     case "approve":
     case "deny": {
       const outcome = await answerApproval(decision.operation === "approve", userId, conversationId);

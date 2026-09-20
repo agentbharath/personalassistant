@@ -118,3 +118,13 @@ export async function listVersions(userId: string, id: string) {
   requireEnabled();
   return readVersions(await ownedDraft(userId, id)).map((version, index) => ({ index, at: version.at, note: version.note, subject: version.subject, preview: version.body.replace(/\s+/g, " ").slice(0, 80) }));
 }
+
+/** The newest draft Daylark saved in this conversation that is still in Gmail, with its versions. "Make it shorter" means this one. */
+export async function latestDraft(userId: string, conversationId: string) {
+  requireEnabled();
+  const { data, error } = await table().select("id, gmail_draft_id, gmail_thread_id, versions_ciphertext").eq("user_id", userId).eq("conversation_id", conversationId).is("discarded_at", null).order("created_at", { ascending: false }).limit(1).maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  const versions = readVersions(data as Row);
+  return versions.length ? { id: data.id as string, versions } : null;
+}
