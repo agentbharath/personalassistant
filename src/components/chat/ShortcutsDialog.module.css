@@ -1,0 +1,8 @@
+.backdrop { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; padding: var(--s-4); background: var(--scrim); }
+.dialog { width: min(26rem, 100%); padding: var(--s-5); border: 1px solid var(--line-strong); border-radius: var(--r-md); background: var(--surface); box-shadow: var(--shadow-3); }
+.title { font-size: var(--text-base); }
+.list { display: grid; gap: var(--s-3); margin: var(--s-4) 0 0; }
+.list div { display: flex; justify-content: space-between; gap: var(--s-4); align-items: baseline; }
+.list dd { margin: 0; color: var(--muted); font-size: var(--text-sm); text-align: right; }
+.list kbd { padding: 2px 8px; border: 1px solid var(--line-strong); border-radius: var(--r-xs); background: var(--bg-sunken); font-family: var(--font-sans); font-size: var(--text-xs); white-space: nowrap; }
+.actions { display: flex; justify-content: flex-end; margin-top: var(--s-5); }

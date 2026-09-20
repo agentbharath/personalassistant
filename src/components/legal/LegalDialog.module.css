@@ -1,0 +1,8 @@
+.backdrop { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; padding: var(--s-4); background: var(--scrim); }
+.dialog { display: flex; flex-direction: column; width: min(46rem, 100%); max-height: min(90dvh, 50rem); border: 1px solid var(--line-strong); border-radius: var(--r-md); background: var(--surface); box-shadow: var(--shadow-3); }
+.head { display: flex; align-items: center; justify-content: space-between; gap: var(--s-4); padding: var(--s-3) var(--s-3) var(--s-3) var(--s-5); border-bottom: 1px solid var(--line); }
+.title { font-size: var(--text-base); letter-spacing: -0.01em; }
+.scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 var(--s-5) var(--s-6); }
+.scroll:focus { outline: none; }
+.body { margin-top: var(--s-4); font-size: var(--text-sm); }
+.body h2 { font-size: var(--text-lg); }

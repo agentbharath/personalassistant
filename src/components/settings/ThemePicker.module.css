@@ -1,0 +1,5 @@
+.group { display: inline-flex; margin-top: var(--s-4); padding: 3px; border: 1px solid var(--line-strong); border-radius: var(--r-md); background: var(--bg-sunken); }
+.option { position: relative; display: inline-flex; align-items: center; min-height: 2rem; padding: 0 var(--s-4); border-radius: var(--r-sm); color: var(--muted); font-size: var(--text-sm); cursor: pointer; }
+.option input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
+.option:has(input:focus-visible) { box-shadow: var(--focus-ring); }
+.selected { background: var(--surface); color: var(--ink); font-weight: 500; box-shadow: var(--shadow-1); }

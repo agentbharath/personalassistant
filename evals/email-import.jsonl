@@ -1,0 +1,10 @@
+{"id": "plural-import-confirmed", "rule": "R2.2,R4.1", "input": "import all my latest iherb receipts", "message": {"subject": "Order Confirmed #947597212", "snippet": "Order #947597212"}, "accept": true}
+{"id": "singular-import-confirmed", "rule": "R2.2,R4.1", "input": "import my latest iherb receipt", "message": {"subject": "Thank you for your iHerb order 947597212", "snippet": ""}, "accept": true}
+{"id": "import-shipped-rejected", "rule": "R4.4", "input": "import all my latest iherb receipts", "message": {"subject": "Your iHerb order 947597212 has shipped", "snippet": "Track your package"}, "accept": false}
+{"id": "import-delivered-rejected", "rule": "R4.4", "input": "import all iherb receipts", "message": {"subject": "Delivered: Your iHerb order 947597212", "snippet": ""}, "accept": false}
+{"id": "import-sale-rejected", "rule": "R4.3", "input": "import all iherb receipts", "message": {"subject": "Save 20% off collagen - sale ends tonight", "snippet": "order now"}, "accept": false}
+{"id": "import-explicit-receipt", "rule": "R4.1", "input": "import all adobe receipts", "message": {"subject": "Your receipt from Adobe", "snippet": ""}, "accept": true}
+{"id": "cinemark-purchase", "rule": "R4.1", "input": "import all receipts", "message": {"subject": "Cinemark Purchase Confirmation", "snippet": "", "from": "Cinemark <cinemark@email.cinemark.com>"}, "accept": true}
+{"id": "rent-payment", "rule": "R4.1", "input": "import all receipts", "message": {"subject": "Payment Confirmation", "snippet": "", "from": "Heritage Park Apartments <noreply@heritagepark.com>"}, "accept": true}
+{"id": "card-bill-payment-is-a-transfer", "rule": "R8.1", "input": "import all receipts", "message": {"subject": "We've received your payment", "snippet": "", "from": "Capital One <capitalone@notification.capitalone.com>"}, "accept": false}
+{"id": "amex-payment-is-a-transfer", "rule": "R8.1", "input": "import all receipts", "message": {"subject": "We've received your payment", "snippet": "", "from": "American Express <americanexpress@welcome.americanexpress.com>"}, "accept": false}

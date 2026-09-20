@@ -1,0 +1,8 @@
+.form { margin-top: var(--s-4); display: grid; gap: var(--s-2); max-width: 30rem; }
+.label { font-size: var(--text-sm); font-weight: 500; }
+.row { display: flex; flex-wrap: wrap; gap: var(--s-2); }
+.input { flex: 1 1 14rem; min-width: 0; height: var(--tap); padding: 0 var(--s-3); border: 1px solid var(--line-strong); border-radius: var(--r-sm); background: var(--surface); color: var(--ink); font: inherit; }
+.input:focus-visible { border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-soft); }
+.locate { margin-top: var(--s-1); }
+.note { min-height: 1.25rem; color: var(--muted); font-size: var(--text-xs); }
+.note:empty { display: none; }

@@ -1,0 +1,23 @@
+.env
+.env.*
+!.env.example
+.next/
+node_modules/
+coverage/
+*.log
+.DS_Store
+
+# Private text exported from your own chats for review
+evals/candidates/
+
+# Screenshots from npm run ui:check
+ui-shots/
+
+# Build and tool output
+*.tsbuildinfo
+supabase/.temp/
+.vercel/
+.sentryclirc
+
+# Private working transcript (contains personal details and pasted images)
+/# Build personal assistant agent.md

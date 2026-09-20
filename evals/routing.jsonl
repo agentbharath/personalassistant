@@ -1,0 +1,15 @@
+{"id":"calendar-attendee-replace","input":"actually remove aass@abc.com and add bharath@example.com","expectedRoute":"calendar_attendee_update","risk":"write_requires_approval"}
+{"id":"calendar-attendee-remove","input":"remove old@example.com from the guest list","expectedRoute":"calendar_attendee_update","risk":"write_requires_approval"}
+{"id":"calendar-delete-concert","input":"remove my Kanye West concert from calendar on Nov 7","expectedRoute":"calendar_delete","risk":"destructive_requires_approval"}
+{"id":"calendar-delete-meeting","input":"cancel the calendar meeting","expectedRoute":"calendar_delete","risk":"destructive_requires_approval"}
+{"id":"calendar-create-research","input":"find an upcoming concert in Dallas and make a calendar invite for guest@example.com","expectedRoute":"calendar_create","risk":"write_requires_approval"}
+{"id":"calendar-create-direct","input":"add a dentist appointment to my calendar tomorrow at 3 pm","expectedRoute":"calendar_create","risk":"write_requires_approval"}
+{"id":"email-search","input":"find my latest emails from Amazon","expectedRoute":"email_search","risk":"read_only"}
+{"id":"email-address-not-search","input":"add person@gmail.com as an attendee","expectedRoute":"calendar_attendee_update","risk":"write_requires_approval"}
+{"id":"finance-email-import","input":"import my latest electricity bill","expectedRoute":"email_finance_import","risk":"write_requires_approval"}
+{"id":"finance-statement-import","input":"save the latest bank statement from my email","expectedRoute":"email_finance_import","risk":"write_requires_approval"}
+{"id":"schedule-feasibility","input":"can I watch a movie before my meeting?","expectedRoute":"schedule_feasibility","risk":"read_only"}
+{"id":"public-search","input":"find the best Chinese restaurants in Sunnyvale","expectedRoute":"public_search","risk":"read_only"}
+{"id":"general-question","input":"explain compound interest simply","expectedRoute":"model_classification","risk":"read_only"}
+{"id":"multi-calendar-email","input":"What is on my calendar tomorrow and did I receive any recruiter emails today?","expectedRoute":"multi_agent_parallel","expectedAgents":["calendar","email"],"risk":"read_only_partial_results_allowed"}
+{"id":"multi-finance-calendar","input":"How much did I spend at restaurants this month and what is on my calendar tomorrow?","expectedRoute":"multi_agent_parallel","expectedAgents":["finance","calendar"],"risk":"read_only_partial_results_allowed"}

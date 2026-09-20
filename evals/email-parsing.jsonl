@@ -1,0 +1,24 @@
+{"id": "typo-plural-store", "rule": "R2.1,R2.2,R3.1", "input": "all iherb recipts", "expect": {"intent": "receipt", "sender": "iherb"}}
+{"id": "import-plural", "rule": "R2.2", "input": "import all iherb receipts", "expect": {"importRoute": true, "sender": "iherb"}}
+{"id": "import-with-filler", "rule": "R1.4,R2.2", "input": "i mean import all iherb recipts", "expect": {"importRoute": true, "sender": "iherb"}}
+{"id": "exclusion-not-topic", "rule": "R2.3,R3.2,R3.4", "input": "Show receipts from my last 30 days of emails, but skip anything promotional.", "expect": {"intent": "receipt", "sender": null, "recencyDays": 30, "excluded": ["promotional"]}}
+{"id": "brand-before-noun", "rule": "R3.1,R3.3", "input": "Did my Amazon order confirmation arrive, or was it just a promotion for a similar product?", "expect": {"intent": "receipt", "sender": "Amazon"}}
+{"id": "cold-typo-invoice", "rule": "R2.1,R3.1", "input": "find latest invoic from adobee and tel me the totl", "expect": {"intent": "receipt", "sender": "adobee"}}
+{"id": "adobe-invoice-facts", "rule": "R3.1", "input": "Find the latest invoice from Adobe and tell me the amount and billing date.", "expect": {"intent": "receipt", "sender": "Adobe"}}
+{"id": "pronoun-not-sender", "rule": "R3.2", "input": "Show receipts from the past 30 days", "expect": {"sender": null, "recencyDays": 30}}
+{"id": "adjective-not-sender", "rule": "R3.2", "input": "Did I receive any duplicate receipts or invoices for the same purchase?", "expect": {"intent": "receipt", "sender": null}}
+{"id": "recent-not-sender", "rule": "R3.2", "input": "show me recent invoices", "expect": {"sender": null}}
+{"id": "exclusions-keep-terms", "rule": "R2.3,R3.6", "input": "Emails from PG&E this week that are actual statements, not climate credit or safety notices.", "expect": {"sender": "PG&E", "excluded": ["climate", "credit", "safety"]}}
+{"id": "exclusion-skips-sender-name", "rule": "R3.6", "input": "Any emails from Amazon Web Services today, not regular Amazon?", "expect": {"sender": "Amazon Web Services", "excluded": []}}
+{"id": "rolling-month", "rule": "R3.4", "input": "emails from Google last one month", "expect": {"sender": "Google", "recencyDays": 30}}
+{"id": "rolling-weeks", "rule": "R3.4", "input": "emails from Google past 2 weeks", "expect": {"recencyDays": 14}}
+{"id": "rolling-week", "rule": "R3.4", "input": "emails from Google last week", "expect": {"recencyDays": 7}}
+{"id": "rolling-year-capped", "rule": "R3.4", "input": "emails from Google last year", "expect": {"recencyDays": 365}}
+{"id": "recruiter-topic", "rule": "R3.3", "input": "Did any recruiters email me today about software engineering roles?", "expect": {"intent": "recruiter"}}
+{"id": "promo-topic", "rule": "R3.3", "input": "Find promotional emails from today with a discount of at least 20%.", "expect": {"intent": "promotion"}}
+{"id": "mutation-delete", "rule": "R7.3", "input": "Delete the Adobe invoice email.", "expect": {"mutation": true}}
+{"id": "mutation-forward", "rule": "R7.3", "input": "Forward my latest invoice to alex@abc.com", "expect": {"mutation": true}}
+{"id": "calendar-cancel-not-email-write", "rule": "R7.3,R1.5", "input": "Cancel my 2 PM meeting and email everyone that I'm sorry.", "expect": {"mutation": false}}
+{"id": "plain-read-not-mutation", "rule": "R7.1", "input": "Show my latest emails", "expect": {"mutation": false}}
+{"id": "import-refinement-routes-to-import", "rule": "R5.5", "input": "import all my latest iherb receipts last 30 days", "expect": {"importRoute": true, "sender": "iherb", "recencyDays": 30}}
+{"id": "mean-is-not-a-sender", "rule": "R3.2,R5.8", "input": "I didn't mean order confirmation mails, i meant the amount receipts", "expect": {"sender": null, "topic": "receipt", "action": "amounts"}}

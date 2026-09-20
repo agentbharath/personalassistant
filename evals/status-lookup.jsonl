@@ -1,0 +1,10 @@
+{"id": "status-of-dispute", "rule": "R18.1", "input": "what's the status of my chase dispute", "expect": {"sender": "chase", "matter": "dispute"}}
+{"id": "any-update-refund", "rule": "R18.1", "input": "any update on my amazon refund?", "expect": {"sender": "amazon", "matter": "refund"}}
+{"id": "where-is-claim", "rule": "R18.1", "input": "where is my uber eats claim", "expect": {"sender": "uber eats", "matter": "claim"}}
+{"id": "has-responded", "rule": "R18.1", "input": "has capital one responded to my dispute", "expect": {"sender": "capital one", "matter": "dispute"}}
+{"id": "whats-status-with-typo-case", "rule": "R18.1", "input": "What's the status on the Discover chargeback?", "expect": {"sender": "Discover", "matter": "chargeback"}}
+{"id": "plural-matter", "rule": "R18.1", "input": "status of my chase disputes", "expect": {"sender": "chase", "matter": "dispute"}}
+{"id": "not-a-company-pronoun", "rule": "R18.1", "input": "what's the status of my dispute", "expect": null}
+{"id": "plain-search-is-not-a-status", "rule": "R18.1", "input": "find emails from chase about a dispute", "expect": null}
+{"id": "spending-is-not-a-status", "rule": "R18.1", "input": "what is the status of my spending", "expect": null}
+{"id": "calendar-is-not-a-status", "rule": "R18.1", "input": "what's the status of my meeting", "expect": null}

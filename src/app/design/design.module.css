@@ -1,0 +1,7 @@
+.page { max-width: 56rem; margin: 0 auto; padding: var(--s-12) var(--s-4); display: grid; gap: var(--s-10); }
+.page h2 { margin-bottom: var(--s-4); font-size: var(--text-lg); }
+.note { color: var(--muted); }
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3); }
+.swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr)); gap: var(--s-3); font-size: var(--text-xs); color: var(--muted); }
+.swatches i { display: block; height: 3rem; margin-bottom: var(--s-1); border: 1px solid var(--line); border-radius: var(--r-sm); }
+.thread { display: flex; flex-direction: column; gap: var(--s-8); max-width: var(--measure); }

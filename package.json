@@ -1,0 +1,48 @@
+{
+  "name": "personal-assistant",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "eval": "vitest run src/lib/evals",
+    "check:secrets": "node scripts/check-secrets.mjs",
+    "check:migrations": "node scripts/validate-migrations.mjs",
+    "ci": "npm run check:secrets && npm run check:migrations && npm run eval && npm test && npm run typecheck && npm run build",
+    "secrets:fill": "./scripts/fill-security-secrets.sh",
+    "eval:live": "LIVE_EVAL=run node --env-file=.env.local node_modules/vitest/vitest.mjs run --reporter=verbose src/lib/evals/interpreter-live.test.ts src/lib/evals/router-live.test.ts",
+    "feedback:export": "FEEDBACK_EXPORT=run node --env-file=.env.local node_modules/vitest/vitest.mjs run --reporter=verbose src/lib/evals/export-feedback.test.ts",
+    "ui:check": "node scripts/ui-check.mjs",
+    "eval:cost": "LIVE_EVAL=plan node --env-file=.env.local node_modules/vitest/vitest.mjs run --reporter=verbose src/lib/evals/interpreter-live.test.ts src/lib/evals/router-live.test.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.126.0",
+    "@js-temporal/polyfill": "^0.5.1",
+    "@sentry/nextjs": "^10.75.0",
+    "@supabase/ssr": "latest",
+    "@supabase/supabase-js": "latest",
+    "@upstash/redis": "^1.38.4",
+    "@vercel/otel": "^2.1.3",
+    "next": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
+    "zod": "latest"
+  },
+  "devDependencies": {
+    "@rolldown/binding-darwin-arm64": "^1.2.9",
+    "@types/node": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "axe-core": "^4.13.0",
+    "playwright-core": "^1.63.0",
+    "supabase": "^2.117.0",
+    "typescript": "latest",
+    "vitest": "latest"
+  }
+}

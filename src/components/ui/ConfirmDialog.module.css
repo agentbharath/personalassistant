@@ -1,0 +1,7 @@
+.backdrop { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; padding: var(--s-4); background: var(--scrim); }
+.dialog { width: min(24rem, 100%); padding: var(--s-5); border: 1px solid var(--line-strong); border-radius: var(--r-md); background: var(--surface); box-shadow: var(--shadow-3); }
+.title { font-size: var(--text-base); letter-spacing: -0.01em; }
+.copy { margin-top: var(--s-2); color: var(--muted); font-size: var(--text-sm); overflow-wrap: anywhere; }
+.actions { display: flex; justify-content: flex-end; gap: var(--s-2); margin-top: var(--s-5); }
+.typed { display: grid; gap: var(--s-2); margin-top: var(--s-4); font-size: var(--text-sm); }
+.typed input { height: 2.25rem; padding: 0 var(--s-3); border: 1px solid var(--line-strong); border-radius: var(--r-sm); background: var(--bg); color: var(--ink); font: inherit; }

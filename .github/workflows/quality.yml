@@ -1,0 +1,34 @@
+name: Agent quality gate
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ci-placeholder
+      SUPABASE_SECRET_KEY: ci-placeholder
+      APP_ENCRYPTION_KEY: ci-placeholder-key-32-characters-minimum
+      PII_HMAC_KEY: ci-placeholder-hmac-32-characters-minimum
+      INTERNAL_TOKEN_SIGNING_KEY: ci-placeholder-signing-key-with-at-least-48-characters
+      CRON_SECRET: ci-placeholder-cron-secret-32-characters-minimum
+      ANTHROPIC_API_KEY: ci-placeholder
+      UPSTASH_REDIS_REST_URL: https://example.upstash.io
+      UPSTASH_REDIS_REST_TOKEN: ci-placeholder
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run ci

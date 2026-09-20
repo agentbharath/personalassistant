@@ -1,0 +1,6 @@
+{"id": "default-window-labelled", "rule": "R11.1,R11.2", "input": "all iherb receipts", "expect": "receipts \u00b7 from iherb \u00b7 last 30 days (default)"}
+{"id": "explicit-window-not-labelled", "rule": "R11.1", "input": "all iherb receipts last 90 days", "expect": "receipts \u00b7 from iherb \u00b7 last 90 days"}
+{"id": "calendar-window", "rule": "R11.2", "input": "unread recruiter emails today", "expect": "recruiter emails \u00b7 today \u00b7 unread only"}
+{"id": "exclusion-shown", "rule": "R11.2", "input": "Show receipts from iherb, but skip anything promotional.", "expect": "receipts \u00b7 from iherb \u00b7 last 30 days (default) \u00b7 excluding: anything promotional"}
+{"id": "facts-shown", "rule": "R11.2", "input": "Find the latest invoice from Adobe and tell me the amount and billing date.", "expect": "latest invoice, amount and date \u00b7 from Adobe \u00b7 last 30 days (default)"}
+{"id": "amounts-shown", "rule": "R11.2,R13.7", "input": "show the amounts on my iherb receipts", "expect": "receipts with amounts \u00b7 from iherb \u00b7 last 30 days (default)"}

@@ -1,0 +1,12 @@
+{"id": "pge-statement", "rule": "R17.1", "subject": "Your PG&E Energy Statement is Ready to View", "expect": "bill"}
+{"id": "bill-available", "rule": "R17.1", "subject": "Your bill is available to view", "expect": "bill"}
+{"id": "amount-due", "rule": "R17.1", "subject": "Amount due: your monthly statement", "expect": "bill"}
+{"id": "statement-now-available", "rule": "R17.1", "subject": "Your latest statement is now available", "expect": "bill"}
+{"id": "payment-received", "rule": "R17.1", "subject": "Payment received - thank you", "expect": "payment"}
+{"id": "received-your-payment", "rule": "R17.1", "subject": "We've received your payment", "expect": "payment"}
+{"id": "payment-confirmation", "rule": "R17.1", "subject": "Payment Confirmation", "expect": "payment"}
+{"id": "autopay-processed", "rule": "R17.1", "subject": "Your AutoPay payment was processed", "expect": "payment"}
+{"id": "payment-for-bill-is-a-payment", "rule": "R17.1", "subject": "Payment received for your energy bill", "expect": "payment"}
+{"id": "order-confirmed", "rule": "R17.1", "subject": "Order Confirmed #947597212", "expect": "purchase"}
+{"id": "receipt", "rule": "R17.1", "subject": "Your receipt from Blue Bottle Coffee", "expect": "purchase"}
+{"id": "doordash", "rule": "R17.1", "subject": "Order Confirmation for Bharath Kumar from Brundavan", "expect": "purchase"}

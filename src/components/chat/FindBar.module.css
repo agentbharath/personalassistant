@@ -1,0 +1,4 @@
+.bar { display: flex; flex: none; align-items: center; min-height: 2.75rem; pointer-events: auto; align-items: center; gap: var(--s-1); width: min(100%, 26rem); padding: var(--s-1) var(--s-2); border: 1px solid var(--line-strong); border-radius: var(--r-md); background: var(--surface); box-shadow: var(--shadow-2); }
+.field { flex: 1; min-width: 0; height: 2rem; border: 0; outline: 0; background: transparent; color: var(--ink); }
+.field:focus-visible { box-shadow: none; }
+.count { flex: none; min-width: 3.5rem; color: var(--muted); font-size: var(--text-xs); text-align: right; font-variant-numeric: tabular-nums; }

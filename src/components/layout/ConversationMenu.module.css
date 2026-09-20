@@ -1,0 +1,2 @@
+.field { flex: 1; min-width: 0; height: 2rem; padding: 0 var(--s-2); border: 1px solid var(--line-strong); border-radius: var(--r-sm); background: var(--surface); color: var(--ink); font-size: var(--text-sm); outline: none; box-shadow: none; }
+.field:focus-visible { border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-soft); }

@@ -1,0 +1,18 @@
+{"id": "cal-duration", "rule": "R14.1", "input": "make my meetings 30 minutes by default", "expect": {"kind": "calendar_duration", "minutes": 30}}
+{"id": "cal-duration-hour", "rule": "R14.1", "input": "by default events should be an hour", "expect": {"kind": "calendar_duration", "minutes": 60}}
+{"id": "cal-duration-half", "rule": "R14.1", "input": "default meeting length is half an hour", "expect": {"kind": "calendar_duration", "minutes": 30}}
+{"id": "cal-buffer", "rule": "R14.1", "input": "always add a 20 minute buffer", "expect": {"kind": "calendar_buffer", "minutes": 20}}
+{"id": "cal-buffer-from-now-on", "rule": "R14.1", "input": "from now on leave 15 minutes of buffer", "expect": {"kind": "calendar_buffer", "minutes": 15}}
+{"id": "cal-needs-cue", "rule": "R14.3", "input": "my meetings are 30 minutes", "expect": null}
+{"id": "cal-out-of-range", "rule": "R14.1", "input": "always add a 500 minute buffer", "expect": null}
+{"id": "cal-not-email-window", "rule": "R14.3", "input": "always search 90 days", "expect": null}
+{"id": "fin-category", "rule": "R14.2", "input": "iherb is health", "expect": {"kind": "merchant_category", "merchant": "iherb", "category": "health"}}
+{"id": "fin-category-a-noun", "rule": "R14.2", "input": "Curry Point is a restaurant", "expect": {"kind": "merchant_category", "merchant": "Curry Point", "category": "restaurants"}}
+{"id": "fin-categorize", "rule": "R14.2", "input": "categorize Curry Point as restaurants", "expect": {"kind": "merchant_category", "merchant": "Curry Point", "category": "restaurants"}}
+{"id": "fin-put-under", "rule": "R14.2", "input": "put amazon under shopping", "expect": {"kind": "merchant_category", "merchant": "amazon", "category": "shopping"}}
+{"id": "fin-drops-my", "rule": "R14.2", "input": "my rent is housing", "expect": {"kind": "merchant_category", "merchant": "rent", "category": "housing"}}
+{"id": "fin-alias", "rule": "R14.2", "input": "amzn means Amazon", "expect": {"kind": "merchant_alias", "alias": "amzn", "canonical": "Amazon"}}
+{"id": "fin-unknown-category", "rule": "R14.4", "input": "categorize iherb as vitamins", "expect": {"unknownCategory": "vitamins", "merchant": "iherb"}}
+{"id": "fin-chitchat", "rule": "R14.3", "input": "the food is good", "expect": null}
+{"id": "fin-question", "rule": "R14.3", "input": "what is iherb?", "expect": null}
+{"id": "fin-pronoun", "rule": "R14.3", "input": "it is health", "expect": null}

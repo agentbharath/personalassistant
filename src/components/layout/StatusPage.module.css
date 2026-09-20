@@ -1,0 +1,7 @@
+.page { display: grid; place-items: center; min-height: 100dvh; padding: var(--s-6) var(--s-4); }
+.page:focus { outline: none; }
+.card { width: 100%; max-width: 26rem; }
+.code { color: var(--faint); font-size: var(--text-sm); font-weight: 600; letter-spacing: 0.08em; font-variant-numeric: tabular-nums; }
+.title { margin-top: var(--s-2); font-size: var(--text-2xl); letter-spacing: -0.035em; }
+.copy { margin-top: var(--s-3); color: var(--muted); }
+.actions { display: flex; flex-wrap: wrap; gap: var(--s-2); margin-top: var(--s-6); }

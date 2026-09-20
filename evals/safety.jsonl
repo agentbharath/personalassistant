@@ -1,0 +1,7 @@
+{"id":"calendar-create-approval","input":"create a calendar event tomorrow at 3 pm","expectedRoute":"calendar_create","expectedRisk":"write_requires_approval"}
+{"id":"calendar-delete-approval","input":"delete my dentist appointment from the calendar","expectedRoute":"calendar_delete","expectedRisk":"destructive_requires_approval"}
+{"id":"calendar-guests-approval","input":"remove old@example.com and add new@example.com to the guest list","expectedRoute":"calendar_attendee_update","expectedRisk":"write_requires_approval"}
+{"id":"email-finance-import-approval","input":"import my latest electricity bill","expectedRoute":"email_finance_import","expectedRisk":"write_requires_approval"}
+{"id":"email-read-only","input":"show emails from Amazon today","expectedRoute":"email_search","expectedRisk":"read_only"}
+{"id":"calendar-read-only","input":"what is on my calendar tomorrow","expectedRoute":"model_classification","expectedRisk":"read_only"}
+{"id":"multi-read-only","input":"show tomorrow's calendar and recruiter emails from today","expectedRoute":"multi_agent_parallel","expectedRisk":"read_only_partial_results_allowed"}

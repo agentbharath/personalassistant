@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <style>:root{--t:#0d1117;--l:#f7f8fa}@media (prefers-color-scheme:dark){:root{--t:#eceff3;--l:#0b0e13}}</style>
+  <rect width="64" height="64" rx="15" fill="var(--t)"/>
+  <path fill-rule="evenodd" fill="var(--l)" d="M22 16h10a16 16 0 0 1 0 32H22z M29 22.5v19h3a9.5 9.5 0 0 0 0-19z"/>
+</svg>

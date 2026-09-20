@@ -1,0 +1,15 @@
+{"id": "show-1", "rule": "R15.1", "input": "what have you learned", "expect": {"type": "show"}}
+{"id": "show-2", "rule": "R15.1", "input": "What do you remember about me?", "expect": {"type": "show"}}
+{"id": "show-3", "rule": "R15.1", "input": "show my preferences", "expect": {"type": "show"}}
+{"id": "forget-term", "rule": "R15.2", "input": "forget adobee", "expect": {"type": "forget", "term": "adobee"}}
+{"id": "forget-window", "rule": "R15.2", "input": "forget the default window", "expect": {"type": "forget", "term": "default window"}}
+{"id": "forget-buffer", "rule": "R15.2", "input": "forget my calendar buffer", "expect": {"type": "forget", "term": "calendar buffer"}}
+{"id": "forget-about", "rule": "R15.2", "input": "forget about iherb", "expect": {"type": "forget", "term": "iherb"}}
+{"id": "forget-all", "rule": "R15.3", "input": "forget everything", "expect": {"type": "forget_all"}}
+{"id": "reset", "rule": "R15.3", "input": "reset what you've learned", "expect": {"type": "forget_all"}}
+{"id": "clear-prefs", "rule": "R15.3", "input": "clear all my preferences", "expect": {"type": "forget_all"}}
+{"id": "confirm", "rule": "R15.3", "input": "yes, forget everything", "expect": {"type": "confirm_forget_all"}}
+{"id": "plain-yes-is-not-confirm", "rule": "R15.3", "input": "yes", "expect": null}
+{"id": "forget-it-is-chitchat", "rule": "R15", "input": "forget it", "expect": null}
+{"id": "forget-that-is-chitchat", "rule": "R15", "input": "forget that", "expect": null}
+{"id": "unrelated-forgot", "rule": "R15", "input": "I forgot my keys", "expect": null}

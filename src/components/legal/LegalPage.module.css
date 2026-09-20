@@ -1,0 +1,20 @@
+.page { min-height: 100dvh; }
+.top { display: flex; align-items: center; justify-content: space-between; gap: var(--s-4); max-width: 60rem; margin: 0 auto; padding: var(--s-5) var(--s-4); }
+.nav { display: flex; gap: var(--s-5); font-size: var(--text-sm); color: var(--muted); }
+.nav a:hover { color: var(--ink); }
+.main { max-width: 44rem; margin: 0 auto; padding: var(--s-8) var(--s-4) var(--s-16); }
+.main:focus { outline: none; }
+.title { font-size: var(--text-3xl); letter-spacing: -0.04em; }
+.meta { margin-top: var(--s-2); color: var(--muted); font-size: var(--text-sm); }
+.warning { margin-bottom: var(--s-6); padding: var(--s-3) var(--s-4); border-left: 3px solid var(--amber); border-radius: var(--r-sm); background: var(--amber-soft); font-size: var(--text-sm); }
+.body { margin-top: var(--s-8); color: var(--ink-2); line-height: 1.7; }
+.body h2 { margin: var(--s-10) 0 var(--s-3); font-size: var(--text-xl); letter-spacing: -0.02em; }
+.body h3 { margin: var(--s-5) 0 var(--s-2); font-size: var(--text-base); letter-spacing: -0.01em; }
+.body p { margin: 0 0 var(--s-4); }
+.body ul { margin: 0 0 var(--s-4); padding-left: 1.25rem; }
+.body li { margin: var(--s-1) 0; }
+.body a { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+.body table { width: 100%; margin: 0 0 var(--s-4); border-collapse: collapse; font-size: var(--text-sm); }
+.body th, .body td { padding: var(--s-2) var(--s-3); border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+.body th { color: var(--ink); font-weight: 600; }
+.callout { margin: 0 0 var(--s-4); padding: var(--s-4); border: 1px solid var(--line-strong); border-radius: var(--r-md); background: var(--surface); }

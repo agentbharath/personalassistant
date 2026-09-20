@@ -1,0 +1,11 @@
+{"id": "always-days", "rule": "R11.4", "last": {"sender": "adobee"}, "input": "always search 90 days", "expect": {"kind": "default_window", "topic": "all", "days": 90}}
+{"id": "always-days-receipts", "rule": "R11.4", "last": {"sender": null}, "input": "from now on search 3 months for receipts", "expect": {"kind": "default_window", "topic": "receipt", "days": 90}}
+{"id": "alias-i-meant", "rule": "R11.4", "last": {"sender": "adobee"}, "input": "I meant Adobe", "expect": {"kind": "sender_alias", "alias": "adobee", "canonical": "Adobe"}}
+{"id": "alias-no-comma", "rule": "R11.4", "last": {"sender": "amzn"}, "input": "no, Amazon", "expect": {"kind": "sender_alias", "alias": "amzn", "canonical": "Amazon"}}
+{"id": "alias-its", "rule": "R11.4", "last": {"sender": "aws"}, "input": "it's Amazon Web Services", "expect": {"kind": "sender_alias", "alias": "aws", "canonical": "Amazon Web Services"}}
+{"id": "no-cancel-is-not-alias", "rule": "R11.6", "last": {"sender": "adobee"}, "input": "no, cancel", "expect": null}
+{"id": "no-thanks-is-not-alias", "rule": "R11.6", "last": {"sender": "adobee"}, "input": "no thanks", "expect": null}
+{"id": "question-is-not-learning", "rule": "R11.6", "last": {"sender": "adobee"}, "input": "show my latest invoices", "expect": null}
+{"id": "alias-needs-a-previous-sender", "rule": "R11.6", "last": {"sender": null}, "input": "I meant Adobe", "expect": null}
+{"id": "remember-needs-a-number", "rule": "R11.6", "last": {"sender": null}, "input": "always be nice", "expect": null}
+{"id": "meant-a-document-is-not-a-sender", "rule": "R5.8,R11.6", "last": {"sender": "iherb"}, "input": "I meant the amount receipts", "expect": null}

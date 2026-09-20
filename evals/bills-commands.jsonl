@@ -1,0 +1,15 @@
+{"id": "paid-simple", "rule": "R17.5", "input": "I paid the PG&E bill", "expect": {"type": "paid", "merchant": "PG&E", "paidOn": null}}
+{"id": "paid-with-date", "rule": "R17.5", "input": "I paid the PG&E bill on Sep 20, 2026", "expect": {"type": "paid", "merchant": "PG&E", "paidOn": "2026-09-20"}}
+{"id": "paid-just", "rule": "R17.5", "input": "I just paid my Xfinity bill", "expect": {"type": "paid", "merchant": "Xfinity", "paidOn": null}}
+{"id": "mark-paid", "rule": "R17.5", "input": "mark the PG&E bill as paid", "expect": {"type": "paid", "merchant": "PG&E", "paidOn": null}}
+{"id": "bill-was-paid", "rule": "R17.5", "input": "the Comcast bill was paid", "expect": {"type": "paid", "merchant": "Comcast", "paidOn": null}}
+{"id": "autopay-is-on", "rule": "R17.6", "input": "PG&E is on autopay", "expect": {"type": "autopay", "merchant": "PG&E"}}
+{"id": "autopay-set-up", "rule": "R17.6", "input": "I set up autopay for Xfinity", "expect": {"type": "autopay", "merchant": "Xfinity"}}
+{"id": "list-outstanding", "rule": "R17.8", "input": "what bills are outstanding", "expect": {"type": "list"}}
+{"id": "list-owe", "rule": "R17.8", "input": "what do I owe", "expect": {"type": "list"}}
+{"id": "list-my-bills", "rule": "R17.8", "input": "show my bills", "expect": {"type": "list"}}
+{"id": "list-unpaid", "rule": "R17.8", "input": "any unpaid bills?", "expect": {"type": "list"}}
+{"id": "email-search-is-not-a-command", "rule": "R17.8", "input": "find unpaid bills in my email", "expect": null}
+{"id": "email-receipts-not-a-command", "rule": "R17.8", "input": "show my bill receipts", "expect": null}
+{"id": "spending-is-not-a-command", "rule": "R17.8", "input": "how much did I spend on utilities", "expect": null}
+{"id": "paid-past-tense-unrelated", "rule": "R17.5", "input": "I paid cash yesterday", "expect": null}
