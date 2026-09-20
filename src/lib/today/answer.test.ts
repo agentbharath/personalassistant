@@ -37,4 +37,11 @@ describe("the daily view as a chat answer (free)", () => {
     expect(text).toContain("No unpaid bills.");
     expect(text).toContain("No spending recorded in the last 7 days.");
   });
+
+  it("puts a blank line after each heading and before the closing lines, so they do not run together when shown as markdown", () => {
+    const text = renderDailyView(view);
+    for (const heading of ["**Meetings**", "**Bills to pay**", "**Spending, last 7 days**"]) expect(text).toContain(`${heading}\n\n`);
+    expect(text).toMatch(/\n\nBiggest: /);
+    expect(text).toMatch(/\n\nTotal to pay: /);
+  });
 });

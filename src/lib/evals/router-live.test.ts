@@ -27,10 +27,14 @@ const toState = (state?: Case["state"]): EmailState | null => state ? {
 
 async function runAll(items: Case[], complete: Parameters<typeof routeMessage>[1]["complete"], meter: SpendMeter) {
   const out: Array<RouterDecision | null> = [];
-  for (let i = 0; i < items.length; i += 8) {
+  // The first call goes alone so the prompt cache is written once; the rest then read it instead of each paying to write it.
+  for (let i = 0; i < items.length;) {
+    const size = i === 0 ? 1 : 8;
     // Stop before a batch that could pass the limit. The cases not reached stay pending.
-    if (!meter.canAfford(Math.min(8, items.length - i))) break;
-    out.push(...await Promise.all(items.slice(i, i + 8).map((item) => routeMessage({ userId: "live-eval", message: item.input, context: item.context ?? [], emailState: toState(item.state), today: "2026-09-21", pendingApproval: item.pending ?? false, homeLocation: item.home ?? null }, { complete, cache: null }))));
+    if (!meter.canAfford(Math.min(size, items.length - i))) break;
+    const batch = items.slice(i, i + size);
+    out.push(...await Promise.all(batch.map((item) => routeMessage({ userId: "live-eval", message: item.input, context: item.context ?? [], emailState: toState(item.state), today: "2026-09-21", pendingApproval: item.pending ?? false, homeLocation: item.home ?? null }, { complete, cache: null }))));
+    i += batch.length;
   }
   return out;
 }

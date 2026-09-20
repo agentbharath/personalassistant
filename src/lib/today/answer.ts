@@ -22,14 +22,14 @@ const problem = (part: Section<unknown>, what: string) => part.state === "needs_
 export function renderDailyView(view: DailyView) {
   const lines: string[] = [`### ${Temporal.PlainDate.from(view.today).toLocaleString("en-US", { weekday: "long", month: "long", day: "numeric" })}`];
 
-  lines.push("", "**Meetings**");
+  lines.push("", "**Meetings**", "");
   if (view.meetingsToday.state !== "ok") lines.push(problem(view.meetingsToday, "your meetings"));
   else {
     lines.push(...(view.meetingsToday.value.length ? view.meetingsToday.value.map((event) => `- ${when(event, false)} · ${event.summary}${event.location ? ` (${event.location})` : ""}`) : ["Nothing on your calendar today."]));
-    if (view.meetingsAhead.state === "ok" && view.meetingsAhead.value.length) lines.push("", "_Coming up this week_", ...view.meetingsAhead.value.slice(0, 6).map((event) => `- ${when(event, true)} · ${event.summary}`));
+    if (view.meetingsAhead.state === "ok" && view.meetingsAhead.value.length) lines.push("", "_Coming up this week_", "", ...view.meetingsAhead.value.slice(0, 6).map((event) => `- ${when(event, true)} · ${event.summary}`));
   }
 
-  lines.push("", "**Bills to pay**");
+  lines.push("", "**Bills to pay**", "");
   if (view.bills.state !== "ok") lines.push(problem(view.bills, "your bills"));
   else {
     const { overdue, dueToday, dueThisWeek, noDueDate } = view.bills.value;
@@ -38,19 +38,19 @@ export function renderDailyView(view: DailyView) {
     else {
       lines.push(...overdue.map(row("overdue")), ...dueToday.map(row("due today")), ...dueThisWeek.map(row("")), ...noDueDate.map(row("no due date")));
       const total = billsTotal([...overdue, ...dueToday, ...dueThisWeek]);
-      if (total) lines.push(`Total to pay: **${money(total.amountMinor, total.currency)}**. Unpaid bills don't count as spending until they're paid.`);
+      if (total) lines.push("", `Total to pay: **${money(total.amountMinor, total.currency)}**. Unpaid bills don't count as spending until they're paid.`);
     }
   }
 
-  lines.push("", "**Spending, last 7 days**");
+  lines.push("", "**Spending, last 7 days**", "");
   if (view.spending.state !== "ok") lines.push(problem(view.spending, "your spending"));
   else if (!view.spending.value) lines.push("No spending recorded in the last 7 days.");
   else {
     const week = view.spending.value;
     const change = week.changePercent === null ? "" : week.changePercent === 0 ? ", level with the week before" : `, ${week.changePercent > 0 ? "up" : "down"} ${Math.abs(week.changePercent)}% on the week before`;
     lines.push(`**${money(week.total, week.currency)}** across ${week.count} purchase${week.count === 1 ? "" : "s"}${change}.`,
-      ...week.categories.slice(0, 4).map((item) => `- ${titleCase(item.category)}, ${money(item.amountMinor, week.currency)} (${item.sharePercent}%)`));
-    if (week.biggest) lines.push(`Biggest: ${week.biggest.merchant}, ${money(week.biggest.amountMinor, week.currency)} on ${shortDate(week.biggest.occurredOn)}.`);
+      "", ...week.categories.slice(0, 4).map((item) => `- ${titleCase(item.category)}, ${money(item.amountMinor, week.currency)} (${item.sharePercent}%)`));
+    if (week.biggest) lines.push("", `Biggest: ${week.biggest.merchant}, ${money(week.biggest.amountMinor, week.currency)} on ${shortDate(week.biggest.occurredOn)}.`);
   }
   return lines.join("\n");
 }

@@ -50,7 +50,7 @@
 {"id": "learn-show-2", "rule": "R19.3", "input": "what do you remember", "expect": {"operation": "learning_show"}}
 {"id": "learn-forget-1", "rule": "R19.3", "input": "forget adobee", "expect": {"operation": "learning_forget", "term": "adobee"}}
 {"id": "learn-forget-2", "rule": "R19.3", "input": "forget the default window", "expect": {"operation": "learning_forget", "term": "default window"}}
-{"id": "learn-forget-3", "rule": "R15.3, R22", "input": "forget everything", "expect": {"operation": "clarify"}}
+{"id": "learn-forget-3", "rule": "R15.3", "input": "forget everything", "expect": {"operation": "learning_forget", "term": "everything"}}
 {"id": "learn-teach-0", "rule": "R19.3", "input": "iherb is health", "expect": {"operation": "learning_teach"}}
 {"id": "learn-teach-1", "rule": "R19.3", "input": "always search 90 days", "expect": {"operation": "learning_teach"}}
 {"id": "learn-teach-2", "rule": "R19.3", "input": "my meetings are 30 minutes by default", "expect": {"operation": "learning_teach"}}
@@ -203,3 +203,7 @@
 {"id": "daily-view-neg-bills", "rule": "R26", "input": "any bills due this week", "expect": {"operation": "bills_list"}}
 {"id": "daily-view-neg-spend", "rule": "R26", "input": "how much did I spend this week", "expect": {"operation": "finance_spending"}}
 {"id": "daily-view-neg-free", "rule": "R26", "input": "am I free tomorrow afternoon", "expect": {"operation": "calendar_query"}}
+{"id": "retry-bare", "rule": "R22", "input": "retry", "expect": {"operation": "daily_view"}, "context": [{"role": "user", "content": "how's my day looking"}, {"role": "assistant", "content": "Sunday, September 20 Meetings Nothing on your calendar today. Bills to pay No unpaid bills."}]}
+{"id": "retry-with-request", "rule": "R22", "input": "retry how's my day looking", "expect": {"operation": "daily_view"}}
+{"id": "retry-again-bills", "rule": "R22", "input": "try that again", "expect": {"operation": "bills_list"}, "context": [{"role": "user", "content": "what bills are outstanding"}, {"role": "assistant", "content": "No outstanding bills. Anything you paid is already counted in your spending."}]}
+{"id": "retry-nothing-before", "rule": "R22", "input": "retry", "expect": {"operation": "clarify"}}
