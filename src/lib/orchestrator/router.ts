@@ -2,6 +2,7 @@ import type Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import type { InterpretationCache } from "@/lib/agents/email-interpreter";
 import type { EmailState } from "@/lib/conversations/email-state";
+import { reportFailure } from "@/lib/observability/report";
 
 /** R19.7, R19.9: bump on any change to the prompt or schema, then pass `npm run eval:live`. */
 // v7: email drafts, redirect instead of refusing (R23), ask when in doubt with tap-to-answer choices (R22), codes and links left alone (R24).
@@ -353,7 +354,7 @@ export async function routeMessage(input: RouterInput, deps: RouterDeps): Promis
     try { await deps.cache?.set(material, JSON.stringify(decision)); } catch { /* optional */ }
     return { ...decision, source: "model" };
   } catch (error) {
-    console.warn("router_fallback", JSON.stringify({ version: ROUTER_VERSION, reason: error instanceof Error ? error.name : "unknown" }));
+    reportFailure("router_unavailable", error, { version: ROUTER_VERSION });
     return null;
   }
 }

@@ -5,7 +5,7 @@ import { judgeReply, readCachedJudgement, type ReplyJudgeInput } from "./reply-n
 const cache = createInterpretationCache();
 
 export function judgeReplyForUser(input: ReplyJudgeInput) {
-  return judgeReply(input, { complete: (params) => callClaude("reply_needed", params), cache });
+  return judgeReply(input, { complete: (params) => callClaude("reply_needed", params, { userId: input.userId }), cache });
 }
 
 /** A remembered judgement, if any. Checked before mail is read, so a message that was already judged costs no Gmail call and no model call. */

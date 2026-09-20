@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { decryptText, encryptText } from "@/lib/security/encryption";
+import { logEvent, reportFailure } from "@/lib/observability/report";
 
 type Capability = "calendar" | "email" | "email_drafts";
 
@@ -69,7 +70,9 @@ export async function withGoogleCredential<T>(userId: string, capability: Capabi
   // Gets a new access token from the saved refresh token and stores it. Without a refresh token the person has to reconnect.
   const renew = async () => {
     if (!data.refresh_token_ciphertext) throw new GoogleConnectionRequiredError(capability);
-    const renewed = await refreshGoogleAccessToken(decryptText(data.refresh_token_ciphertext as string), capability);
+    let renewed: string;
+    try { renewed = await refreshGoogleAccessToken(decryptText(data.refresh_token_ciphertext as string), capability); }
+    catch (error) { reportFailure("google_token_renew_failed", error, { capability }, { userId }); throw error; }
     const { error: updateError } = await admin.from("oauth_connections").update({
       access_token_ciphertext: encryptText(renewed),
       access_token_expires_at: new Date(Date.now() + 50 * 60 * 1_000).toISOString(),
@@ -85,6 +88,7 @@ export async function withGoogleCredential<T>(userId: string, capability: Capabi
     // Google can reject a token that has not reached its expected expiry (revoked, or replaced by a newer sign-in). Renew once and try again
     // before asking the person to reconnect. A token that was renewed just now is not renewed twice.
     if (!isAuthRejected(error) || accessToken !== decryptText(data.access_token_ciphertext as string)) throw error;
+    logEvent("info", "google_token_renewed", { capability, cause: "rejected" });
     return operation(await renew());
   }
 }

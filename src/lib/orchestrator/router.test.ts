@@ -58,7 +58,7 @@ describe("failure falls back to the rules (R19.8)", () => {
     const cache = cacheOf();
     expect(await routeMessage(input("x"), { complete: make as never, cache })).toBeNull();
     expect(cache.store.size).toBe(0);
-    expect(warn).toHaveBeenCalledWith("router_fallback", expect.stringContaining(ROUTER_VERSION));
+    expect(warn).toHaveBeenCalledWith("router_unavailable", expect.stringContaining(ROUTER_VERSION));
     warn.mockRestore();
   });
   it("a broken cache never blocks an answer", async () => {

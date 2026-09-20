@@ -10,5 +10,5 @@ export function createInterpretationCache(): InterpretationCache {
 const cache = createInterpretationCache();
 
 export function interpretEmailForUser(input: InterpreterInput) {
-  return interpretEmail(input, { complete: (params) => callClaude("email_interpretation", params), cache });
+  return interpretEmail(input, { complete: (params) => callClaude("email_interpretation", params, { userId: input.userId }), cache });
 }

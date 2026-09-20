@@ -4,17 +4,18 @@ import { AppShell } from "@/components/layout/AppShell";
 import { isPerchEnabled } from "@/lib/replies/dismissals";
 import { getConversation, listConversations } from "@/lib/conversations/store";
 import { signOut } from "../auth/actions";
+import { logEvent, reportFailure } from "@/lib/observability/report";
 
 export default async function HomePage({ searchParams }: { searchParams: Promise<{ conversation?: string }> }) {
   const supabase = await createClient();
   const { data } = await supabase.auth.getClaims();
   const email = typeof data?.claims?.email === "string" ? data.claims.email : "Google connected";
   const userId = typeof data?.claims?.sub === "string" ? data.claims.sub : undefined;
-  if (!userId) console.error("home_no_user_claims", { hasClaims: Boolean(data?.claims), claimKeys: Object.keys(data?.claims ?? {}) });
+  if (!userId) logEvent("error", "home_no_user_claims", { hasClaims: Boolean(data?.claims), claimKeys: Object.keys(data?.claims ?? {}).join(",") });
   const requestedConversationId = (await searchParams).conversation;
   const [conversation, recent] = userId ? await Promise.all([
     requestedConversationId ? getConversation(userId, requestedConversationId).catch(() => null) : Promise.resolve(null),
-    listConversations(userId, { limit: 40 }).catch((error) => { console.error("home_list_conversations_failed", error); return []; }),
+    listConversations(userId, { limit: 40 }).catch((error) => { reportFailure("home_list_conversations_failed", error, {}, { userId }); return []; }),
   ]) : [null, []];
 
   const perchEnabled = await isPerchEnabled(userId);

@@ -4,6 +4,7 @@ import { GoogleConnectionRequiredError } from "@/lib/auth/google-credential-brok
 import { GoogleGmailAccessError, readGmailMessage, searchGmail, searchGmailInThreads } from "@/lib/tools/email/google-gmail";
 import { createEncryptedCache, type TextCache } from "@/lib/runtime/encrypted-cache";
 import { listDismissedThreads, loadPerchPrefs, threadKey, type PerchPrefs } from "./dismissals";
+import { reportFailure } from "@/lib/observability/report";
 
 export type WaitingReply = { threadId: string; messageId: string; from: string; subject: string; receivedAt: number; reason: string; kind: ReplyKind };
 /** `items` are everything the model says needs a reply; the card shows the kinds the owner chose and says how many it is hiding. */
@@ -55,17 +56,21 @@ export async function loadWaitingReplies(userId: string, deps = defaultDeps): Pr
     for (const { message, judgement } of remembered) if (judgement) record(message, judgement);
     const fresh = remembered.filter((entry) => !entry.judgement).map((entry) => entry.message).slice(0, MAX_JUDGED_PER_VISIT);
 
+    let failed = 0;
+    let lastFailure: unknown;
     const work = Promise.all(fresh.map(async (message) => {
       try {
         const email = await deps.read(userId, message.id);
         record(message, await deps.judge({ userId, messageId: message.id, from: message.from, subject: message.subject, text: email.text || message.snippet, sentAt: new Date(message.receivedAt).toISOString() }));
-      } catch { /* leave it for the next visit */ }
+      } catch (error) { failed += 1; lastFailure = error; /* leave it for the next visit */ }
     }));
     await Promise.race([work, new Promise((resolve) => setTimeout(resolve, BUDGET_MS))]);
+    if (failed > 0) reportFailure("waiting_replies_partial", lastFailure, { failed, checkedNew: fresh.length }, { userId });
     // Waiting longest first: those are the ones most likely to be forgotten.
     return { state: "ok", items: [...found].sort((left, right) => left.receivedAt - right.receivedAt), checked, total: candidates.length, prefs };
   } catch (error) {
-    console.warn("waiting_replies_failed", JSON.stringify({ reason: error instanceof Error ? error.name : "unknown", detail: (error as { reason?: string }).reason }));
+    // A Google connection that needs renewing is expected and handled; anything else is worth knowing about.
+    if (!(error instanceof GoogleConnectionRequiredError)) reportFailure("waiting_replies_failed", error, {}, { userId });
     if (error instanceof GoogleConnectionRequiredError || (error instanceof GoogleGmailAccessError && error.reason === "insufficient_scope")) return { state: "needs_connection" };
     return { state: "unavailable" };
   }

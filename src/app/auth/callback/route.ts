@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { NEXT_COOKIE, safeNextPath } from "@/lib/auth/next-path";
 import { createClient } from "@/lib/supabase/server";
 import { storeGoogleCredentials } from "@/lib/auth/google-credential-broker";
+import { reportFailure } from "@/lib/observability/report";
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -18,7 +19,7 @@ export async function GET(request: Request) {
       try {
         await storeGoogleCredentials(data.session.user.id, data.session.provider_token, data.session.provider_refresh_token);
       } catch (credentialError) {
-        console.error("google_credential_store_failed", credentialError instanceof Error ? credentialError.message : "unknown");
+        reportFailure("google_credential_store_failed", credentialError, {}, { level: "error", userId: data.session.user.id });
       }
       const response = NextResponse.redirect(new URL(next, url.origin));
       response.cookies.set(NEXT_COOKIE, "", { path: "/", maxAge: 0 });

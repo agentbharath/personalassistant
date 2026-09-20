@@ -1,6 +1,7 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import type { InterpretationCache } from "./email-interpreter";
+import { reportFailure } from "@/lib/observability/report";
 
 /**
  * R27: mail that is waiting on the owner's reply. Code finds the candidates by structure (a message in Primary or Updates, in the inbox, from
@@ -100,7 +101,7 @@ export async function judgeReply(input: ReplyJudgeInput, deps: ReplyJudgeDeps): 
     try { await deps.cache?.set(material, JSON.stringify(judgement)); } catch { /* optional */ }
     return judgement;
   } catch (error) {
-    console.warn("reply_judge_unavailable", JSON.stringify({ version: REPLY_JUDGE_VERSION, reason: error instanceof Error ? error.name : "unknown" }));
+    reportFailure("reply_judge_unavailable", error, { version: REPLY_JUDGE_VERSION });
     return null;
   }
 }

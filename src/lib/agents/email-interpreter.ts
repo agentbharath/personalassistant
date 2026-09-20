@@ -2,6 +2,7 @@ import type Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import type { EmailState } from "@/lib/conversations/email-state";
 import type { EmailRequest } from "./email-request";
+import { reportFailure } from "@/lib/observability/report";
 
 /** R16.3, R16.8: bump on any change to the prompt or schema, then pass `npm run eval:live`. */
 export const INTERPRETER_VERSION = "email-v9";
@@ -219,7 +220,7 @@ export async function interpretEmail(input: InterpreterInput, deps: InterpreterD
     return { ...interpretation, source: "model" };
   } catch (error) {
     // R20.5: no rule-based reading. The caller says the model is unavailable and does nothing.
-    console.warn("email_interpreter_unavailable", JSON.stringify({ version: INTERPRETER_VERSION, reason: error instanceof Error ? error.name : "unknown" }));
+    reportFailure("email_interpreter_unavailable", error, { version: INTERPRETER_VERSION });
     return UNAVAILABLE;
   }
 }

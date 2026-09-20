@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { reportFailure } from "@/lib/observability/report";
 
 export type QueryTelemetry = {
   userId: string;
@@ -31,5 +32,5 @@ export async function recordQueryTelemetry(event: QueryTelemetry) {
     p_cache_hits: event.cacheHits ?? 0,
     p_cache_misses: event.cacheMisses ?? 0,
   });
-  if (error) console.warn("query_telemetry_persist_failed", JSON.stringify({ requestId: event.requestId, code: error.code }));
+  if (error) reportFailure("query_telemetry_persist_failed", error, { requestId: event.requestId });
 }

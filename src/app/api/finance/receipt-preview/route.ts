@@ -2,6 +2,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { appendMessage, createConversation, getConversation } from "@/lib/conversations/store";
 import { prepareReceiptImport } from "@/lib/agents/receipt";
+import { reportFailure } from "@/lib/observability/report";
 
 const conversationSchema = z.string().uuid().optional();
 
@@ -31,7 +32,7 @@ export async function POST(request: Request) {
     await appendMessage(userId, conversationId, { role: "assistant", content: answer });
     return Response.json({ answer, conversationId, agents: ["finance"], confidence: 1, status: "waiting_for_user" });
   } catch (receiptError) {
-    console.error("receipt_preview_failed", receiptError instanceof Error ? receiptError.message : "unknown");
+    reportFailure("receipt_preview_failed", receiptError, {}, { level: "error", userId });
     return Response.json({ error: "RECEIPT_PREVIEW_FAILED", message: "I couldn’t process that receipt. Nothing was stored; please try again." }, { status: 503 });
   }
 }

@@ -2,6 +2,7 @@ import type Anthropic from "@anthropic-ai/sdk";
 import { Temporal } from "@js-temporal/polyfill";
 import { z } from "zod";
 import type { InterpretationCache } from "./email-interpreter";
+import { reportFailure } from "@/lib/observability/report";
 
 /**
  * R20.5: which day, range or time a message means is read by a model, never by patterns. The model returns concrete local date-times; the
@@ -132,7 +133,7 @@ export async function interpretTime(input: TimeInput, deps: TimeDeps): Promise<T
     try { await deps.cache?.set(material, JSON.stringify(output)); } catch { /* optional */ }
     return toReading(output, input);
   } catch (error) {
-    console.warn("time_interpreter_unavailable", JSON.stringify({ version: TIME_INTERPRETER_VERSION, reason: error instanceof Error ? error.name : "unknown" }));
+    reportFailure("time_interpreter_unavailable", error, { version: TIME_INTERPRETER_VERSION });
     return { kind: "unavailable" };
   }
 }
