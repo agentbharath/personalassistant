@@ -25,7 +25,7 @@ Dates are resolved from **today's date and the user's time zone**. Anything assu
 
 | ID | Someone might say | Reads as | Daylark should | Status |
 | --- | --- | --- | --- | --- |
-| CA-020 | am I free at 3 / free tomorrow afternoon / anything after lunch | free/busy at a time or part of day | Yes/no plus the neighbouring events; define "afternoon" (12–5) in the answer | ◐ |
+| CA-020 | am I free at 3 (**asks AM or PM** with buttons, R22, verified) / free tomorrow afternoon / anything after lunch | free/busy at a time or part of day | Yes/no plus the neighbouring events; define "afternoon" (12–5) in the answer | ◐ |
 | CA-021 | when am I free this week for a 30 minute call | find a slot; duration=30 | Up to three slots inside working hours; say the hours assumed | ? |
 | CA-022 | find a time for a long lunch friday | slot with a soft duration | Ask "how long is a long lunch?" or offer 90 minutes and say so | ? |
 | CA-023 | do I have a two hour window before my 6pm | window before an event | The gap before that event | ✅ |

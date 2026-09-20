@@ -12,7 +12,7 @@ import { caseHash, estimateLiveCost, liveMode, loadLedger, pendingCases, planTex
 const mode = liveMode();
 const REPEAT = Number(process.env.LIVE_EVAL_REPEAT ?? 0);
 
-type Case = { id: string; rule: string; input: string; pending?: boolean; state?: { topic: string; sender: string; action: string; results: number }; context?: Array<{ role: "user" | "assistant"; content: string }>; expect: RouterExpect };
+type Case = { id: string; rule: string; input: string; pending?: boolean; home?: string; state?: { topic: string; sender: string; action: string; results: number }; context?: Array<{ role: "user" | "assistant"; content: string }>; expect: RouterExpect };
 const cases = readFileSync(resolve(process.cwd(), "evals/router.jsonl"), "utf8").trim().split("\n").map((line) => JSON.parse(line) as Case);
 const idOf = (item: Case) => item.id;
 const hashOf = (item: Case) => caseHash(item);
@@ -27,7 +27,7 @@ const toState = (state?: Case["state"]): EmailState | null => state ? {
 async function runAll(items: Case[], complete: Parameters<typeof routeMessage>[1]["complete"]) {
   const out: Array<RouterDecision | null> = [];
   for (let i = 0; i < items.length; i += 8) {
-    out.push(...await Promise.all(items.slice(i, i + 8).map((item) => routeMessage({ userId: "live-eval", message: item.input, context: item.context ?? [], emailState: toState(item.state), today: "2026-09-21", pendingApproval: item.pending ?? false }, { complete, cache: null }))));
+    out.push(...await Promise.all(items.slice(i, i + 8).map((item) => routeMessage({ userId: "live-eval", message: item.input, context: item.context ?? [], emailState: toState(item.state), today: "2026-09-21", pendingApproval: item.pending ?? false, homeLocation: item.home ?? null }, { complete, cache: null }))));
   }
   return out;
 }

@@ -32,7 +32,10 @@ Read `docs/use-cases/README.md` first. It holds 436 use cases, the schema propos
 ## Model and quality (approval and cost quote first, R21)
 - [ ] Set up a separate, spend-capped Anthropic API key for evals, plus an assistant-side cost prompt before any live run (offered earlier, not decided).
 - [x] Router v7 written (free): drafts, redirect, choices, ask-when-in-doubt (threshold 0.8); 84 new router cases (190 total) covering drafts, redirects, not-available asks, email codes, asks with choices and calibration cases that must not become questions; the grader is tested. 901 tests pass.
-- [ ] **Run the router v7 live eval once (needs your approval).** 190 cases, about $1.19 at most (cost check, no calls made). Then fix only what fails and re-run only those cases.
+- [x] **Router v7 verified live: 193 of 193 (2026-09-20).** One full pass (176 of 190), then only failures and changed cases were re-run (about $1.4 at most in total; your Anthropic console has the exact figure). The router is now given the saved home location.
+- [ ] **Recommended before release, needs your approval:** a sample re-run of the highest-risk groups (approvals and denials, forgetting, clarifying questions, the "clear requests must not become questions" group, drafts) because the prompt changed after the first 176 passes. About 45 cases, roughly $0.30. Not a full-set run.
+- [ ] The router's redirect replies and pivots are read by dispatch, but a pivot's follow-up (the search, the calendar look) only happens when the person says yes; that loop is verified for one example. Add more follow-up cases as redirects grow.
+- [ ] Remove the rule-based fallback and the remaining rule-based interpretation (R20.5): the email interpreter overrides, calendar date parsing, and the rule chain in `run.ts`.
 - [ ] (Superseded: verify router v6. v7 replaces it.)
 - [ ] Convert the email interpreter and email turn to model-filled fields (R20.4), running live evals incrementally.
 - [ ] Turn bad-answer ratings into eval cases: `npm run feedback:export`, then write the expected behaviour for each row.

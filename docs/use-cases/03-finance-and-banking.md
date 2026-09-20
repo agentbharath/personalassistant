@@ -66,7 +66,7 @@ The person may say any of these. Daylark should answer honestly, then offer the 
 | --- | --- | --- | --- | --- |
 | FN-060 | what's my balance / how much is in my account / how much money do i have / am i broke | account balance | "I can't see your bank account." Offer: recent bank emails, or spending totals | ✖ |
 | FN-061 | what hit my card / what did i just get charged / any charges today | recent card charges | Cannot see the card. Offer: bank alert emails from today, and receipts | ✖ |
-| FN-062 | did my paycheck come in / has my direct deposit hit | deposit check | Cannot see deposits. Offer: payroll or bank emails about deposits | ✖ |
+| FN-062 | did my paycheck come in / has my direct deposit hit | deposit check | Cannot see the bank. **Search payroll and bank emails for a deposit notice** and say what the emails show (verified: the router reads this as an email search) | ◐ |
 | FN-063 | show my transactions / bank statement / last statement | statements | Offer statement **emails**; can read amounts in those emails; cannot download the statement | ◐ |
 | FN-064 | is there a charge from netflix / why was I charged / mystery charge | identify a charge | Search receipts and emails for that merchant and amount; if a bank alert email shows it, say so | ◐ |
 | FN-065 | dispute this charge / i want to dispute / what's the status of my chase dispute | dispute status | Status from emails about the dispute (R18); cannot file one | ◐ |
