@@ -83,10 +83,6 @@ export function TodayView({ view }: { view: DailyView }) {
             : <p className={styles.empty}>No spending recorded in the last 7 days. Tell Daylark what you spent, or ask it to import receipts from your email.</p>}
         </section>
 
-        <section className={styles.card} aria-label="Reminders">
-          <h2 className={styles.head}><ClockIcon />Reminders</h2>
-          <p className={styles.empty}>Daylark can’t keep reminders yet. Anything with a time belongs on your calendar, and it shows under Meetings above.</p>
-        </section>
       </div>
     </div>
   );
