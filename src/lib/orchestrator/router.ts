@@ -6,7 +6,7 @@ import { reportFailure } from "@/lib/observability/report";
 
 /** R19.7, R19.9: bump on any change to the prompt or schema, then pass `npm run eval:live`. */
 // v7: email drafts, redirect instead of refusing (R23), ask when in doubt with tap-to-answer choices (R22), codes and links left alone (R24).
-export const ROUTER_VERSION = "router-v8";
+export const ROUTER_VERSION = "router-v9";
 /** R22: when in doubt, ask. Below this the router's one question is asked and nothing runs. */
 export const ROUTER_CONFIDENCE_THRESHOLD = 0.8;
 
@@ -61,6 +61,8 @@ export type RouterDecision = {
   choices?: string[] | null;
   draft?: DraftIntent | null;
   redirect?: RedirectPlan | null;
+  /** The web search to run, with typos fixed and the person's place in it when they meant "near me". */
+  searchQuery?: string | null;
   reading: string;
   source: "model" | "cache";
 };
@@ -87,6 +89,7 @@ const outputSchema = z.object({
     category: z.enum(["none", ...REDIRECT_CATEGORIES]), reply: z.string(), distress: z.boolean(),
     pivot: z.enum(["none", ...PIVOT_CAPABILITIES]), ask: z.string(),
   }).nullish(),
+  searchQuery: z.string().nullish(),
   reading: z.string(),
 });
 type ModelOutput = z.infer<typeof outputSchema>;
@@ -96,7 +99,7 @@ const nullableNumber = { anyOf: [{ type: "number" }, { type: "null" }] };
 export const ROUTER_JSON_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["operation", "agents", "sender", "matter", "merchant", "paidOn", "term", "lesson", "confidence", "clarification", "choices", "draft", "redirect", "reading"],
+  required: ["operation", "agents", "sender", "matter", "merchant", "paidOn", "term", "lesson", "confidence", "clarification", "choices", "draft", "redirect", "searchQuery", "reading"],
   properties: {
     operation: { type: "string", enum: [...OPERATIONS] },
     agents: { type: "array", items: { type: "string", enum: [...AGENTS] } },
@@ -118,6 +121,7 @@ export const ROUTER_JSON_SCHEMA = {
     confidence: { type: "number" },
     clarification: nullableString,
     choices: { type: "array", items: { type: "string" } },
+    searchQuery: { type: "string" },
     draft: {
       type: "object",
       additionalProperties: false,
@@ -148,7 +152,7 @@ const NO_DRAFT = { action: "none", kind: "none", to: "", replyTo: "", instructio
 const NO_REDIRECT = { category: "none", reply: "", distress: false, pivot: "none", ask: "" } as const;
 const draftOf = (over: Partial<NonNullable<ModelOutput["draft"]>>): NonNullable<ModelOutput["draft"]> => ({ ...NO_DRAFT, ...over });
 const redirectOf = (over: Partial<NonNullable<ModelOutput["redirect"]>>): NonNullable<ModelOutput["redirect"]> => ({ ...NO_REDIRECT, ...over });
-const blank: Omit<ModelOutput, "operation" | "confidence" | "reading"> = { agents: [], sender: null, matter: null, merchant: null, paidOn: null, term: null, lesson: null, clarification: null, choices: [], draft: NO_DRAFT, redirect: NO_REDIRECT };
+const blank: Omit<ModelOutput, "operation" | "confidence" | "reading"> = { agents: [], sender: null, matter: null, merchant: null, paidOn: null, term: null, lesson: null, clarification: null, choices: [], draft: NO_DRAFT, redirect: NO_REDIRECT, searchQuery: "" };
 const lesson = (kind: (typeof LESSON_KINDS)[number], over: Partial<NonNullable<ModelOutput["lesson"]>> = {}): NonNullable<ModelOutput["lesson"]> => ({ kind, topic: null, days: null, minutes: null, merchant: null, category: null, alias: null, canonical: null, ...over });
 const EXAMPLES: Array<[string, ModelOutput]> = [
   ['"all iherb recipts"', { ...blank, operation: "email", confidence: 0.97, reading: "Show iHerb receipts" }],
@@ -171,7 +175,9 @@ const EXAMPLES: Array<[string, ModelOutput]> = [
   ['"delete the concert from my calendar"', { ...blank, operation: "calendar_delete", confidence: 0.96, reading: "Delete a calendar event" }],
   ['"remove old@example.com from the guest list"', { ...blank, operation: "calendar_attendees", confidence: 0.96, reading: "Change who is invited" }],
   ['"can I watch a movie at 3 and be back for my 6pm meeting"', { ...blank, operation: "schedule_feasibility", confidence: 0.9, reading: "Check the schedule against the meeting" }],
-  ['"best ramen near Santa Clara"', { ...blank, operation: "web_search", confidence: 0.95, reading: "Search the web" }],
+  ['"best ramen near Santa Clara"', { ...blank, operation: "web_search", searchQuery: "best ramen in Santa Clara, CA", confidence: 0.95, reading: "Search the web" }],
+  ['"suggest some indina cuisines near me" with homeLocation "Sunnyvale, CA"', { ...blank, operation: "web_search", searchQuery: "Indian restaurants in Sunnyvale, CA", confidence: 0.95, reading: "Search the web near the saved home" }],
+  ['"coffee shops near me" with homeLocation null', { ...blank, operation: "clarify", confidence: 0.5, clarification: "Which city or ZIP code should I look near?", choices: ["Use my saved location", "I'll type a city"], reading: "Near me needs a place and none is saved" }],
   ['"am I free Saturday at 3 and did the venue email me a ticket"', { ...blank, operation: "multi", agents: ["calendar", "email"], confidence: 0.93, reading: "Calendar and email" }],
   ['"delete the adobe invoice email"', { ...blank, operation: "email_write_declined", confidence: 0.96, reading: "Email cannot be changed" }],
   ['"yes go ahead" (pendingApproval is true)', { ...blank, operation: "approve", confidence: 0.96, reading: "Approve the pending action" }],
@@ -210,7 +216,7 @@ Operations:
 - learning_show: what Daylark has learned or remembers. learning_forget: any "forget <something>" or "unlearn <something>" (term), or forget everything; never ask what it refers to, the handler finds what matches. learning_teach: the user states a lasting preference or correction; fill lesson: default_window (days, and topic all/receipt/promotion/recruiter), receipts_show_amounts, sender_alias (alias is what they typed, canonical is what they meant), calendar_duration or calendar_buffer (minutes), merchant_category (merchant and one category), merchant_alias (alias, canonical: the user says a short or odd name means a company, like "amzn means Amazon"), autopay (merchant). sender_alias is only for a correction of a name the user just searched for in email ("I meant Adobe" after a search for adobee).
 - calendar_query: what is on the calendar or whether the user is free. A part of a day ("tomorrow afternoon", "Saturday morning", "tonight") is a complete time reference: choose calendar_query and do not ask what time. That is different from an hour with no am or pm ("at 3", "at 7"): that is still two readings, so ask "3 AM or 3 PM?" with those choices, for a question about the calendar as well as for creating an event. calendar_create. calendar_delete: deleting, cancelling or removing a calendar event. calendar_attendees: changing who is invited or on the guest list ("the event" means the most recent one; the handler works out which, so do not ask). schedule_feasibility: can the user fit an activity around calendar events, considering travel.
 - daily_view: an overview of the user's day or week across several of their own things at once: "what's my day look like", "give me my daily brief", "anything I need to know today", "my week ahead", "recap", "what's due and what's on this week". A question about only ONE of them is that operation instead: meetings alone is calendar_query, bills alone is bills_list, spending alone is finance_spending.
-- web_search: public facts, places, events, recommendations that need the web.
+- web_search: public facts, places, events, and recommendations (books, films, gifts, things to do) that need the web. Fill searchQuery with the search to run: the user's words with typos fixed and made clear ("indina cuisines near me" becomes "Indian restaurants"). When the request depends on where the person is ("near me", "nearby", "around here", "open now near me") and homeLocation is given, put that place in the query ("Indian restaurants in Sunnyvale, CA"); a place the person names always wins. When it says near me or nearby and homeLocation is null, do not guess a city: choose clarify and ask which city or ZIP code, with a couple of common answers as choices. Weather and other facts that merely happen somewhere ("will it rain tomorrow") stay web_search even with no place. searchQuery is "" for every other operation.
 - multi: one message with several separate asks across agents; list the agents involved in agents.
 - email_draft: the user wants Daylark to WRITE an email for them to send: reply to an email, write a new email, or change, shorten, redo, discard or go back on a draft Daylark already wrote. Fill draft: action (create, edit, discard or revert), kind (reply or new, for create; else none), to (who it is for, as said; empty if not said), replyTo (which email, as said, such as "the second one" or "Sarah's email"; empty if not said), instruction (what it should say, or how to change it), version (which earlier version, as said, for revert; else empty). Daylark only saves drafts in Gmail and never sends; whether drafting is switched on is decided elsewhere, so choose email_draft whenever that is what was asked. "Drafts" means email drafts. When the last assistant message showed or saved an email draft, follow-ups such as "make it shorter", "add that I'm free after 3", "change …", "cc …", "undo that", "go back to the first one" and "delete it" are about that draft.
 - email_write_declined: the user asks to SEND, forward, delete, archive, label, unsubscribe from or otherwise change email, including "send it" about a draft. Never for writing or drafting an email (that is email_draft). "Unsend" or "recall" an email that was already sent is not_available under redirect: Daylark never sends, and Gmail's own Undo send works only for a few seconds. Changes to calendar events or guest lists are not this.
@@ -319,6 +325,7 @@ export function canonicalizeDecision(raw: ModelOutput): Omit<RouterDecision, "so
       const pivot = plan && plan.pivot !== "none" && !distress ? { capability: plan.pivot, ask: trim(plan.ask, 200) } : null;
       return { ...base, operation: "redirect", redirect: { category: plan && plan.category !== "none" ? plan.category : "unrelated", reply, pivot, distress } };
     }
+    case "web_search": return { ...base, operation: "web_search", searchQuery: trim(raw.searchQuery ?? null, 300) };
     default: return { ...base, operation: raw.operation };
   }
 }

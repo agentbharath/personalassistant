@@ -209,3 +209,9 @@
 {"id": "retry-nothing-before", "rule": "R22", "input": "retry", "expect": {"operation": "clarify"}}
 {"id": "lesson-category-software", "rule": "R14.3", "input": "put anthropic under software", "expect": {"operation": "learning_teach", "lesson": {"kind": "merchant_category", "merchant": "anthropic", "category": "software"}}}
 {"id": "lesson-category-software-2", "rule": "R14.3", "input": "github is a software subscription", "expect": {"operation": "learning_teach", "lesson": {"kind": "merchant_category", "merchant": "github", "category": "software"}}}
+{"id": "web-near-home", "rule": "R19.3", "input": "gotcha suggest some indina cuisines near me", "home": "Sunnyvale, CA", "expect": {"operation": "web_search", "searchQueryIncludes": "Sunnyvale"}}
+{"id": "web-near-home-2", "rule": "R19.3", "input": "any good coffee shops nearby", "home": "Sunnyvale, CA", "expect": {"operation": "web_search", "searchQueryIncludes": "Sunnyvale"}}
+{"id": "web-near-named-wins", "rule": "R19.3", "input": "best pizza near Oakland", "home": "Sunnyvale, CA", "expect": {"operation": "web_search", "searchQueryIncludes": "Oakland", "searchQueryExcludes": "Sunnyvale"}}
+{"id": "web-near-no-home", "rule": "R22", "input": "suggest some indian restaurants near me", "expect": {"operation": "clarify", "choices": true}}
+{"id": "web-weather-no-home", "rule": "R19.3", "input": "will it rain tomorrow", "expect": {"operation": "web_search"}}
+{"id": "web-not-local", "rule": "R19.3", "input": "who won the world series in 2016", "home": "Sunnyvale, CA", "expect": {"operation": "web_search", "searchQueryExcludes": "Sunnyvale"}}

@@ -120,6 +120,17 @@ describe("code checks structure and never judges the message (R19.5)", () => {
     expect(canon({ confidence: 0.4, clarification: "Which?" })).toMatchObject({ clarification: "Which?", confidence: 0.4 });
     expect(canon({ operation: "clarify", confidence: 0.4, clarification: null }).clarification).toMatch(/say a bit more/);
   });
+  it("keeps the search the model wrote for a web search, and drops it for anything else", () => {
+    expect(canon({ operation: "web_search", searchQuery: "  Indian restaurants in Sunnyvale, CA  " }).searchQuery).toBe("Indian restaurants in Sunnyvale, CA");
+    expect(canon({ operation: "web_search", searchQuery: "" }).searchQuery).toBeNull();
+    expect(canon({ operation: "email", searchQuery: "ignored" }).searchQuery).toBeUndefined();
+  });
+  it("tells the model to put the saved home place in a near-me search, to let a named place win, and to ask when no place is saved", () => {
+    expect(ROUTER_SYSTEM).toMatch(/searchQuery/);
+    expect(ROUTER_SYSTEM).toMatch(/homeLocation is given, put that place in the query/);
+    expect(ROUTER_SYSTEM).toMatch(/a place the person names always wins/);
+    expect(ROUTER_SYSTEM).toMatch(/homeLocation is null, do not guess a city: choose clarify/);
+  });
   it("reduces confidence to sure or unsure", () => {
     expect(canon({ confidence: 0.97 }).confidence).toBe(canon({ confidence: 0.9 }).confidence);
   });
@@ -127,7 +138,7 @@ describe("code checks structure and never judges the message (R19.5)", () => {
 
 import { ROUTER_JSON_SCHEMA } from "./router";
 
-describe("router v8: drafts, redirects and choices (R22, R23, R25)", () => {
+describe("router v9: drafts, redirects and choices (R22, R23, R25)", () => {
   // The model returns flat objects with "none" and empty strings, not nulls (the API limits how many union-typed fields a schema may have).
   const draft = (over: Record<string, unknown> = {}) => ({ action: "create", kind: "reply", to: "sarah", replyTo: "sarah's email", instruction: "say I'll be there", version: "", ...over });
   const redirect = (over: Record<string, unknown> = {}) => ({ category: "speculation", reply: "I can't tell you how they came by theirs, but I can help you find vintage shops near you.", distress: false, pivot: "web", ask: "", ...over });
@@ -154,8 +165,8 @@ describe("router v8: drafts, redirects and choices (R22, R23, R25)", () => {
     for (const key of ["choices", "draft", "redirect"]) expect(required).toContain(key);
   });
 
-  it("is version 8, asks when in doubt, and teaches drafting, redirecting and choices", () => {
-    expect(ROUTER_VERSION).toBe("router-v8");
+  it("is version 9, asks when in doubt, and teaches drafting, redirecting and choices", () => {
+    expect(ROUTER_VERSION).toBe("router-v9");
     expect(ROUTER_SYSTEM).toMatch(/When in doubt, ask/);
     expect(ROUTER_SYSTEM).toMatch(/email_draft/);
     expect(ROUTER_SYSTEM).toMatch(/Never just "I can't answer that"/);

@@ -48,4 +48,12 @@ describe("grading a router decision (free; a wrong grader would waste credits)",
   it("fails when a redirect was expected but another operation came back", () => {
     expect(checkDecision(decision({ operation: "casual" }), { operation: "redirect", redirect: { category: "contested" } }).join(" ")).toMatch(/wanted redirect, got casual/);
   });
+
+  it("checks that the search the router wrote does or does not include a place", () => {
+    const search = decision({ operation: "web_search", searchQuery: "Indian restaurants in Sunnyvale, CA" } as never);
+    expect(checkDecision(search, { operation: "web_search", searchQueryIncludes: "sunnyvale" })).toEqual([]);
+    expect(checkDecision(search, { operation: "web_search", searchQueryIncludes: "Oakland" })[0]).toMatch(/wanted it to include Oakland/);
+    expect(checkDecision(search, { operation: "web_search", searchQueryExcludes: "Sunnyvale" })[0]).toMatch(/should not include Sunnyvale/);
+    expect(checkDecision(decision({ operation: "web_search" }), { operation: "web_search", searchQueryIncludes: "Sunnyvale" })[0]).toMatch(/wanted it to include/);
+  });
 });

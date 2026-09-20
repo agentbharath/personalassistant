@@ -137,7 +137,8 @@ export async function dispatchDecision(decision: RouterDecision, ctx: DispatchCo
       return done(await answerDailyView(userId), ["calendar", "finance"]);
     case "web_search":
       prepareAgentStage(["general"], "balanced");
-      return done(await answerPublicSearch(input), ["general"]);
+      // R20.5: the router wrote the search (typos fixed, the saved home place added for "near me"); the raw message is the fallback.
+      return done(await answerPublicSearch(decision.searchQuery || input), ["general"]);
     case "multi": {
       const plan = planClauseInstructions(input, decision.agents);
       const outcomes = await executeReadOnlyAgentPlan(plan.tasks, input, userId, context);

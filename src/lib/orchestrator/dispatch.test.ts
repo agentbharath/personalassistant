@@ -45,6 +45,17 @@ beforeEach(() => {
   for (const resolver of [mocks.resolveDelete, mocks.resolveAttendees, mocks.resolveCreate, mocks.resolveFinance]) resolver.mockResolvedValue(null);
 });
 
+describe("a web search uses the search the router wrote (free)", () => {
+  it("passes the router's query, so the saved home place is in it", async () => {
+    await dispatchDecision(decision({ operation: "web_search", searchQuery: "Indian restaurants in Sunnyvale, CA" } as never), ctx);
+    expect(mocks.answerPublicSearch).toHaveBeenCalledWith("Indian restaurants in Sunnyvale, CA");
+  });
+  it("falls back to the person's own words when the router wrote none", async () => {
+    await dispatchDecision(decision({ operation: "web_search" }), ctx);
+    expect(mocks.answerPublicSearch).toHaveBeenCalledWith("the message");
+  });
+});
+
 describe("each operation calls its own handler (R19.4)", () => {
   it.each([
     [decision({ operation: "finance_spending" }), () => mocks.answerFinance, "FINANCE"],
