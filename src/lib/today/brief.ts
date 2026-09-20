@@ -1,5 +1,6 @@
 import { Temporal } from "@js-temporal/polyfill";
 import type { Bill } from "@/lib/agents/bills";
+import { toKnownCategory } from "@/lib/learning/preferences";
 
 /** The daily view (R26): what is due, what is on, and how spending is going. Everything here is plain arithmetic over saved records, with no model involved. */
 export const WEEK_DAYS = 7;
@@ -40,10 +41,9 @@ export type WeeklySpending = {
   /** Change against the seven days before, as a percentage; null when there was no spending then to compare with. */
   changePercent: number | null;
   dailyAverage: number;
-  topCategories: { category: string; amountMinor: number; sharePercent: number }[];
+  /** Every category, largest first, each with the purchases in it. Older records spelled categories in different cases, so they are grouped on the fixed set. */
+  categories: { category: string; amountMinor: number; sharePercent: number; entries: { merchant: string; amountMinor: number; occurredOn: string }[] }[];
   biggest: { merchant: string; amountMinor: number; occurredOn: string } | null;
-  /** Every expense counted in the total, newest first, so the person can check the total against what they remember. */
-  entries: { merchant: string; amountMinor: number; occurredOn: string; category: string }[];
   /** Expenses in other currencies that were left out of the totals. */
   otherCurrencyCount: number;
 };
@@ -71,12 +71,24 @@ export function weeklySpending(records: SpendingRecord[], today: string): Weekly
   const total = mine.reduce((sum, record) => sum + record.amountMinor, 0);
   const previousTotal = expenses.filter((record) => record.currency === currency && record.occurredOn >= previousFrom && record.occurredOn < from).reduce((sum, record) => sum + record.amountMinor, 0);
 
-  const categories = new Map<string, number>();
-  for (const record of mine) categories.set(record.category, (categories.get(record.category) ?? 0) + record.amountMinor);
-  const topCategories = [...categories.entries()]
-    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
-    .slice(0, 3)
-    .map(([category, amountMinor]) => ({ category, amountMinor, sharePercent: Math.round((amountMinor / total) * 100) }));
+  const groups = new Map<string, SpendingRecord[]>();
+  for (const record of mine) {
+    const name = toKnownCategory(record.category);
+    groups.set(name, [...(groups.get(name) ?? []), record]);
+  }
+  const categories = [...groups.entries()]
+    .map(([category, records]) => ({
+      category,
+      amountMinor: records.reduce((sum, record) => sum + record.amountMinor, 0),
+      records,
+    }))
+    .sort((left, right) => right.amountMinor - left.amountMinor || left.category.localeCompare(right.category))
+    .map(({ category, amountMinor, records }) => ({
+      category,
+      amountMinor,
+      sharePercent: Math.round((amountMinor / total) * 100),
+      entries: [...records].sort((left, right) => right.occurredOn.localeCompare(left.occurredOn) || right.amountMinor - left.amountMinor).map(({ merchant, amountMinor: amount, occurredOn }) => ({ merchant, amountMinor: amount, occurredOn })),
+    }));
   const biggest = [...mine].sort((left, right) => right.amountMinor - left.amountMinor)[0];
 
   return {
@@ -88,9 +100,8 @@ export function weeklySpending(records: SpendingRecord[], today: string): Weekly
     previousTotal,
     changePercent: previousTotal > 0 ? Math.round(((total - previousTotal) / previousTotal) * 100) : null,
     dailyAverage: Math.round(total / WEEK_DAYS),
-    topCategories,
+    categories,
     biggest: { merchant: biggest.merchant, amountMinor: biggest.amountMinor, occurredOn: biggest.occurredOn },
-    entries: [...mine].sort((left, right) => right.occurredOn.localeCompare(left.occurredOn) || right.amountMinor - left.amountMinor).map(({ merchant, amountMinor, occurredOn, category }) => ({ merchant, amountMinor, occurredOn, category })),
     otherCurrencyCount: thisWeek.length - mine.length,
   };
 }

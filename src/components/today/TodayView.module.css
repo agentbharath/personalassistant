@@ -61,14 +61,20 @@
   .event { grid-template-columns: 1fr; gap: 0; }
 }
 
-.entries { margin-top: var(--s-4); border-top: 1px solid var(--line); }
-.summary { display: flex; align-items: center; gap: var(--s-2); min-height: 2.5rem; color: var(--muted); font-size: var(--text-sm); font-weight: 500; cursor: pointer; list-style: none; }
-.summary::-webkit-details-marker { display: none; }
-.summary::before { content: ""; width: 0.45rem; height: 0.45rem; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(-45deg); transition: transform 0.15s ease; }
-.entries[open] > .summary::before { transform: rotate(45deg); }
-.summary:hover { color: var(--ink); }
-.summary:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; border-radius: var(--r-xs); }
-.entries[open] > .list { padding-bottom: var(--s-2); }
+.cats { display: grid; }
+.catItem { border-top: 1px solid var(--line); }
+.catItem:first-child { border-top: 0; }
+.catSummary { display: grid; gap: 6px; padding: var(--s-3) 0; list-style: none; cursor: pointer; }
+.catSummary::-webkit-details-marker { display: none; }
+.catRow { display: flex; align-items: center; justify-content: space-between; gap: var(--s-4); font-size: var(--text-sm); }
+.catName { display: flex; align-items: center; gap: var(--s-2); }
+.catName::before { content: ""; flex: none; width: 0.45rem; height: 0.45rem; border-right: 1.5px solid var(--muted); border-bottom: 1.5px solid var(--muted); transform: rotate(-45deg); transition: transform 0.15s ease; }
+.catItem[open] > .catSummary .catName::before { transform: rotate(45deg); }
+.catSummary:hover .catName { color: var(--ink); }
+.catSummary:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; border-radius: var(--r-xs); }
+.entryList { display: grid; margin: 0 0 var(--s-3); padding: var(--s-2) var(--s-3); list-style: none; border-radius: var(--r-sm); background: var(--surface-2); }
+.entryList > li { padding: var(--s-2) 0; border-top: 1px solid var(--line); }
+.entryList > li:first-child { border-top: 0; }
 .entry { display: flex; align-items: center; justify-content: space-between; gap: var(--s-4); }
 .entry .what { display: grid; gap: 0; }
-@media (prefers-reduced-motion: reduce) { .summary::before { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .catName::before { transition: none; } }

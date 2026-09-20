@@ -49,7 +49,7 @@ export function renderDailyView(view: DailyView) {
     const week = view.spending.value;
     const change = week.changePercent === null ? "" : week.changePercent === 0 ? ", level with the week before" : `, ${week.changePercent > 0 ? "up" : "down"} ${Math.abs(week.changePercent)}% on the week before`;
     lines.push(`**${money(week.total, week.currency)}** across ${week.count} purchase${week.count === 1 ? "" : "s"}${change}.`,
-      ...week.topCategories.map((item) => `- ${titleCase(item.category)}, ${money(item.amountMinor, week.currency)} (${item.sharePercent}%)`));
+      ...week.categories.slice(0, 4).map((item) => `- ${titleCase(item.category)}, ${money(item.amountMinor, week.currency)} (${item.sharePercent}%)`));
     if (week.biggest) lines.push(`Biggest: ${week.biggest.merchant}, ${money(week.biggest.amountMinor, week.currency)} on ${shortDate(week.biggest.occurredOn)}.`);
   }
   return lines.join("\n");

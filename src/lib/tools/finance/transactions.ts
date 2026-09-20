@@ -101,7 +101,7 @@ export async function createTransactionCandidate(userId: string, candidate: Tran
     direction: candidate.direction,
     merchant_ciphertext: encryptText(candidate.merchant),
     merchant_hash: piiHmac(merchant),
-    category: candidate.category,
+    category: candidate.category.trim().toLowerCase(),
     note_ciphertext: candidate.note ? encryptText(candidate.note) : null,
     dedupe_fingerprint: dedupeFingerprint,
   }).select("id, occurred_on, amount_minor, currency, direction, merchant_ciphertext, category, note_ciphertext").single();

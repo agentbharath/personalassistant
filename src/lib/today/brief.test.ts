@@ -56,9 +56,22 @@ describe("this week's spending habit (free)", () => {
     expect(week.previousTotal).toBe(105999);
     expect(week.changePercent).toBe(-89);
     expect(week.dailyAverage).toBe(1714);
-    expect(week.topCategories).toEqual([{ category: "groceries", amountMinor: 6000, sharePercent: 50 }, { category: "restaurants", amountMinor: 6000, sharePercent: 50 }]);
-    expect(week.biggest).toEqual({ merchant: "Curry Point", amountMinor: 6000, occurredOn: "2026-09-15" });
-    expect(week.entries.map((entry) => `${entry.occurredOn} ${entry.merchant} ${entry.amountMinor}`)).toEqual(["2026-09-21 Trader Joe's 4000", "2026-09-16 Costco 2000", "2026-09-15 Curry Point 6000"]);
+    expect(week.categories.map(({ category, amountMinor, sharePercent }) => ({ category, amountMinor, sharePercent }))).toEqual([{ category: "groceries", amountMinor: 6000, sharePercent: 50 }, { category: "restaurants", amountMinor: 6000, sharePercent: 50 }]);
+    expect(week.categories[0].entries).toEqual([{ merchant: "Trader Joe's", amountMinor: 4000, occurredOn: "2026-09-21" }, { merchant: "Costco", amountMinor: 2000, occurredOn: "2026-09-16" }]);
+  });
+
+  it("groups one category once even when older records spelled it in another case", () => {
+    const week = weeklySpending([
+      spend({ occurredOn: "2026-09-15", amountMinor: 3553, category: "Shopping", merchant: "iHerb" }),
+      spend({ occurredOn: "2026-09-20", amountMinor: 2000, category: "shopping", merchant: "Anthropic" }),
+      spend({ occurredOn: "2026-09-17", amountMinor: 2450, category: "restaurants", merchant: "Curry Point" }),
+    ], today)!;
+    expect(week.categories.map((item) => [item.category, item.amountMinor, item.entries.length])).toEqual([["shopping", 5553, 2], ["restaurants", 2450, 1]]);
+  });
+
+  it("lists every category, not only the top three", () => {
+    const week = weeklySpending(["groceries", "restaurants", "transport", "shopping", "health"].map((category, index) => spend({ category, amountMinor: 1000 + index })), today)!;
+    expect(week.categories).toHaveLength(5);
   });
 
   it("has no percentage change when the earlier week had no spending", () => {

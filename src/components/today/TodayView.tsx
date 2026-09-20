@@ -66,18 +66,20 @@ function Spending({ week }: { week: WeeklySpending }) {
     </div>
     <p className={styles.sub}>{week.count} purchase{week.count === 1 ? "" : "s"} since {shortDate(week.from)} · about {money(week.dailyAverage, week.currency)} a day{change !== null && <> · last week {money(week.previousTotal, week.currency)}</>}</p>
     <Group label="Where it went">
-      <ul className={styles.list}>{week.topCategories.map((item) => <li className={styles.cat} key={item.category}>
-        <span className={styles.catRow}><span>{titleCase(item.category)}</span><span className={styles.amount}>{money(item.amountMinor, week.currency)} <span className={styles.sub}>· {item.sharePercent}%</span></span></span>
-        <span className={styles.bar} aria-hidden="true"><span className={styles.fill} style={{ width: `${Math.max(item.sharePercent, 3)}%` }} /></span>
-      </li>)}</ul>
+      <div className={styles.cats}>{week.categories.map((item) => <details className={styles.catItem} key={item.category}>
+        <summary className={styles.catSummary}>
+          <span className={styles.catRow}>
+            <span className={styles.catName}>{titleCase(item.category)}<span className={styles.sub}>{item.entries.length} purchase{item.entries.length === 1 ? "" : "s"}</span></span>
+            <span className={styles.amount}>{money(item.amountMinor, week.currency)} <span className={styles.sub}>· {item.sharePercent}%</span></span>
+          </span>
+          <span className={styles.bar} aria-hidden="true"><span className={styles.fill} style={{ width: `${Math.max(item.sharePercent, 3)}%` }} /></span>
+        </summary>
+        <ul className={styles.entryList}>{item.entries.map((entry, index) => <li className={styles.entry} key={`${entry.occurredOn}-${entry.merchant}-${index}`}>
+          <span className={styles.what}>{entry.merchant}<span className={styles.sub}>{shortDate(entry.occurredOn)}</span></span>
+          <span className={styles.amount}>{money(entry.amountMinor, week.currency)}</span>
+        </li>)}</ul>
+      </details>)}</div>
     </Group>
-    <details className={styles.entries}>
-      <summary className={styles.summary}>Show all {week.entries.length} purchase{week.entries.length === 1 ? "" : "s"}</summary>
-      <ul className={styles.list}>{week.entries.map((entry, index) => <li className={styles.entry} key={`${entry.occurredOn}-${entry.merchant}-${index}`}>
-        <span className={styles.what}>{entry.merchant}<span className={styles.sub}>{shortDate(entry.occurredOn)} · {titleCase(entry.category)}</span></span>
-        <span className={styles.amount}>{money(entry.amountMinor, week.currency)}</span>
-      </li>)}</ul>
-    </details>
     <div className={styles.foot}>
       {week.biggest && <p>Biggest: <strong>{week.biggest.merchant}</strong>, {money(week.biggest.amountMinor, week.currency)} on {shortDate(week.biggest.occurredOn)}</p>}
       {week.otherCurrencyCount > 0 && <p>{week.otherCurrencyCount} purchase{week.otherCurrencyCount === 1 ? "" : "s"} in another currency {week.otherCurrencyCount === 1 ? "isn’t" : "aren’t"} included.</p>}

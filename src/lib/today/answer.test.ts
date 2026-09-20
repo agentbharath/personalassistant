@@ -8,7 +8,7 @@ const view: DailyView = {
   meetingsToday: { state: "ok", value: [{ id: "e", summary: "Dentist", start: "2026-09-21T21:00:00Z", end: "2026-09-21T22:00:00Z", allDay: false, location: "Bay Dental" }] },
   meetingsAhead: { state: "ok", value: [{ id: "f", summary: "Dinner", start: "2026-09-23T01:00:00Z", end: "2026-09-23T03:00:00Z", allDay: false }] },
   bills: { state: "ok", value: { overdue: [bill("Comcast", 8999, "2026-09-15")], dueToday: [bill("PG&E", 15000, "2026-09-21")], dueThisWeek: [bill("Rent", 240000, "2026-09-28")], noDueDate: [] } },
-  spending: { state: "ok", value: { currency: "USD", from: "2026-09-15", to: "2026-09-21", total: 41250, count: 9, previousTotal: 33000, changePercent: 25, dailyAverage: 5893, topCategories: [{ category: "groceries", amountMinor: 18000, sharePercent: 44 }], biggest: { merchant: "Costco", amountMinor: 11000, occurredOn: "2026-09-16" }, entries: [], otherCurrencyCount: 0 } },
+  spending: { state: "ok", value: { currency: "USD", from: "2026-09-15", to: "2026-09-21", total: 41250, count: 9, previousTotal: 33000, changePercent: 25, dailyAverage: 5893, categories: [{ category: "groceries", amountMinor: 18000, sharePercent: 44, entries: [] }], biggest: { merchant: "Costco", amountMinor: 11000, occurredOn: "2026-09-16" }, otherCurrencyCount: 0 } },
 };
 
 describe("the daily view as a chat answer (free)", () => {
