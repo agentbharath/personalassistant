@@ -19,7 +19,11 @@ const MOCK: DailyView = {
 };
 
 /** Development-only Today view with mock data. */
-export default function DesignTodayPage() {
+export default async function DesignTodayPage({ searchParams }: { searchParams: Promise<{ state?: string }> }) {
   if (process.env.NODE_ENV === "production") notFound();
-  return <AppShell title="Today" email="you@example.com" signOutAction={signOut} recent={MOCK_RECENT} activeView="today"><TodayView view={MOCK} /></AppShell>;
+  // ?state=connect shows the not-connected and empty states.
+  const view: DailyView = (await searchParams).state === "connect"
+    ? { ...MOCK, meetingsToday: { state: "needs_connection" }, meetingsAhead: { state: "needs_connection" }, bills: { state: "ok", value: { overdue: [], dueToday: [], dueThisWeek: [], noDueDate: [] } }, spending: { state: "ok", value: null } }
+    : MOCK;
+  return <AppShell title="Today" email="you@example.com" signOutAction={signOut} recent={MOCK_RECENT} activeView="today"><TodayView view={view} /></AppShell>;
 }

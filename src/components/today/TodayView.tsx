@@ -1,89 +1,123 @@
 import Link from "next/link";
-import { CalendarIcon, ClockIcon, WalletIcon } from "@/components/ui/icons";
+import type { ReactNode } from "react";
+import { Temporal } from "@js-temporal/polyfill";
+import { CalendarIcon, CheckIcon, ClockIcon, WalletIcon } from "@/components/ui/icons";
 import { eventWhen, shortDate, titleCase } from "@/components/today/format";
 import { billsTotal, money, type WeeklySpending } from "@/lib/today/brief";
-import type { DailyView, Section } from "@/lib/today/load";
+import type { DailyView } from "@/lib/today/load";
 import type { Bill } from "@/lib/agents/bills";
+import type { CalendarEvent } from "@/lib/tools/calendar/google-calendar";
 import styles from "./TodayView.module.css";
+
+type Tone = "blue" | "amber" | "green";
+
+function Card({ label, tone, icon, badge, children }: { label: string; tone: Tone; icon: ReactNode; badge?: string; children: ReactNode }) {
+  return <section className={styles.card} aria-label={label}>
+    <header className={styles.head}>
+      <span className={`${styles.chip} ${styles[tone]}`}>{icon}</span>
+      <h2 className={styles.cardTitle}>{label}</h2>
+      {badge && <span className={styles.badge}>{badge}</span>}
+    </header>
+    {children}
+  </section>;
+}
 
 function Unavailable({ what, state }: { what: string; state: "needs_connection" | "unavailable" }) {
   return state === "needs_connection"
-    ? <p className={styles.empty}>Connect Google in <Link className={styles.link} href="/settings">Settings</Link> to see {what}.</p>
-    : <p className={styles.empty}>I couldn’t load {what} just now. Nothing was changed; try again in a moment.</p>;
+    ? <div className={styles.empty}><p>Connect Google to see {what}.</p><Link className={styles.action} href="/settings">Open Settings</Link></div>
+    : <div className={styles.empty}><p>I couldn’t load {what} just now. Nothing was changed.</p></div>;
 }
 
-function BillRows({ bills, showDue }: { bills: Bill[]; showDue: boolean }) {
-  return <ul className={styles.rows}>{bills.map((bill) => <li className={styles.row} key={bill.id}>
-    <span>{bill.merchant}</span><span>{money(bill.amountMinor, bill.currency)}{showDue && bill.dueDate ? ` · due ${shortDate(bill.dueDate)}` : ""}</span>
+function Meetings({ events, withDay }: { events: CalendarEvent[]; withDay: boolean }) {
+  return <ul className={styles.list}>{events.map((event) => <li className={styles.event} key={event.id}>
+    <span className={styles.when}>{eventWhen(event, withDay)}</span>
+    <span className={styles.what}>{event.summary}{event.location && <span className={styles.sub}>{event.location}</span>}</span>
   </li>)}</ul>;
+}
+
+function daysUntil(today: string, due: string) {
+  return Temporal.PlainDate.from(due).since(Temporal.PlainDate.from(today), { largestUnit: "days" }).days;
+}
+
+function BillRows({ bills, today, kind }: { bills: Bill[]; today: string; kind: "overdue" | "today" | "soon" | "open" }) {
+  return <ul className={styles.list}>{bills.map((bill) => {
+    const days = bill.dueDate ? daysUntil(today, bill.dueDate) : null;
+    const pill = kind === "overdue" ? { text: `${Math.abs(days ?? 0)} day${Math.abs(days ?? 0) === 1 ? "" : "s"} late`, tone: styles.pillAmber }
+      : kind === "today" ? { text: "Due today", tone: styles.pillBlue }
+      : kind === "soon" ? { text: `${bill.dueDate ? shortDate(bill.dueDate) : ""} · in ${days} day${days === 1 ? "" : "s"}`, tone: styles.pillPlain }
+      : { text: "No due date", tone: styles.pillPlain };
+    return <li className={styles.bill} key={bill.id}>
+      <span className={styles.what}>{bill.merchant}<span className={`${styles.pill} ${pill.tone}`}>{pill.text}</span></span>
+      <span className={styles.amount}>{money(bill.amountMinor, bill.currency)}</span>
+    </li>;
+  })}</ul>;
+}
+
+function Group({ label, tone, children }: { label: string; tone?: "late"; children: ReactNode }) {
+  return <div className={styles.group}><p className={`${styles.label} ${tone === "late" ? styles.late : ""}`}>{label}</p>{children}</div>;
 }
 
 function Spending({ week }: { week: WeeklySpending }) {
   const change = week.changePercent;
   return <>
-    <p className={styles.big}>{money(week.total, week.currency)}</p>
-    <p className={styles.note}>{week.count} purchase{week.count === 1 ? "" : "s"} since {shortDate(week.from)} · about {money(week.dailyAverage, week.currency)} a day
-      {change === null ? "" : <> · <span className={change > 0 ? styles.up : styles.down}>{change > 0 ? "up" : change < 0 ? "down" : "level"}{change === 0 ? "" : ` ${Math.abs(change)}%`}</span> on the week before ({money(week.previousTotal, week.currency)})</>}
-    </p>
-    <div className={styles.group}>
-      <p className={styles.label}>Where it went</p>
-      <ul className={styles.rows}>{week.topCategories.map((item) => <li className={styles.row} key={item.category}><span>{titleCase(item.category)}</span><span>{money(item.amountMinor, week.currency)} · {item.sharePercent}%</span></li>)}</ul>
+    <div className={styles.hero}>
+      <p className={styles.big}>{money(week.total, week.currency)}</p>
+      {change !== null && <span className={`${styles.pill} ${change > 0 ? styles.pillAmber : styles.pillGreen}`}>{change === 0 ? "Level with last week" : `${change > 0 ? "▲" : "▼"} ${Math.abs(change)}% vs last week`}</span>}
     </div>
-    {week.biggest && <p className={styles.note} style={{ marginTop: "var(--s-3)" }}>Biggest: {week.biggest.merchant}, {money(week.biggest.amountMinor, week.currency)} on {shortDate(week.biggest.occurredOn)}.</p>}
-    {week.otherCurrencyCount > 0 && <p className={styles.note}>{week.otherCurrencyCount} purchase{week.otherCurrencyCount === 1 ? "" : "s"} in another currency {week.otherCurrencyCount === 1 ? "isn’t" : "aren’t"} included.</p>}
+    <p className={styles.sub}>{week.count} purchase{week.count === 1 ? "" : "s"} since {shortDate(week.from)} · about {money(week.dailyAverage, week.currency)} a day{change !== null && <> · last week {money(week.previousTotal, week.currency)}</>}</p>
+    <Group label="Where it went">
+      <ul className={styles.list}>{week.topCategories.map((item) => <li className={styles.cat} key={item.category}>
+        <span className={styles.catRow}><span>{titleCase(item.category)}</span><span className={styles.amount}>{money(item.amountMinor, week.currency)} <span className={styles.sub}>· {item.sharePercent}%</span></span></span>
+        <span className={styles.bar} aria-hidden="true"><span className={styles.fill} style={{ width: `${Math.max(item.sharePercent, 3)}%` }} /></span>
+      </li>)}</ul>
+    </Group>
+    <div className={styles.foot}>
+      {week.biggest && <p>Biggest: <strong>{week.biggest.merchant}</strong>, {money(week.biggest.amountMinor, week.currency)} on {shortDate(week.biggest.occurredOn)}</p>}
+      {week.otherCurrencyCount > 0 && <p>{week.otherCurrencyCount} purchase{week.otherCurrencyCount === 1 ? "" : "s"} in another currency {week.otherCurrencyCount === 1 ? "isn’t" : "aren’t"} included.</p>}
+    </div>
   </>;
 }
 
-const done = <T,>(part: Section<T>) => part.state === "ok";
-
 export function TodayView({ view }: { view: DailyView }) {
   const heading = new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: "UTC" }).format(new Date(`${view.today}T00:00:00Z`));
-  return (
-    <div className={styles.page}>
-      <p className={styles.eyebrow}>Today</p>
-      <h1 className={styles.title}>{heading}</h1>
-      <p className={styles.lede}>What’s on, what’s due, and how spending is going. Only you can see this.</p>
-      <div className={styles.stack}>
-        <section className={styles.card} aria-label="Meetings">
-          <h2 className={styles.head}><CalendarIcon />Meetings</h2>
-          {!done(view.meetingsToday) ? <Unavailable what="your meetings" state={(view.meetingsToday as { state: "needs_connection" | "unavailable" }).state} /> : <>
-            <div className={styles.group}>
-              <p className={styles.label}>Today</p>
-              {view.meetingsToday.state === "ok" && view.meetingsToday.value.length
-                ? <ul className={styles.rows}>{view.meetingsToday.value.map((event) => <li className={styles.row} key={event.id}><span>{event.summary}{event.location ? ` · ${event.location}` : ""}</span><span>{eventWhen(event, false)}</span></li>)}</ul>
-                : <p className={styles.empty}>Nothing on your calendar today.</p>}
+  const meetings = view.meetingsToday, ahead = view.meetingsAhead, bills = view.bills, spending = view.spending;
+  const billCount = bills.state === "ok" ? bills.value.overdue.length + bills.value.dueToday.length + bills.value.dueThisWeek.length : 0;
+
+  return <div className={styles.page}>
+    <p className={styles.eyebrow}>Today</p>
+    <h1 className={styles.title}>{heading}</h1>
+    <p className={styles.lede}>What’s on, what’s due, and how spending is going. Only you can see this.</p>
+    <div className={styles.stack}>
+      <Card label="Meetings" tone="blue" icon={<CalendarIcon />} badge={meetings.state === "ok" ? (meetings.value.length ? `${meetings.value.length} today` : "Clear today") : undefined}>
+        {meetings.state !== "ok" ? <Unavailable what="your meetings" state={meetings.state} /> : <>
+          <Group label="Today">{meetings.value.length ? <Meetings events={meetings.value} withDay={false} /> : <p className={styles.quiet}>Nothing on your calendar today.</p>}</Group>
+          {ahead.state === "ok" && ahead.value.length > 0 && <Group label="Coming up this week"><Meetings events={ahead.value.slice(0, 8)} withDay /></Group>}
+        </>}
+      </Card>
+
+      <Card label="Bills to pay" tone="amber" icon={<ClockIcon />} badge={billCount ? `${billCount} due` : undefined}>
+        {bills.state !== "ok" ? <Unavailable what="your bills" state={bills.state} /> : (() => {
+          const { overdue, dueToday, dueThisWeek, noDueDate } = bills.value;
+          if (!overdue.length && !dueToday.length && !dueThisWeek.length && !noDueDate.length) return <p className={styles.allClear}><CheckIcon />No unpaid bills. Anything you paid is already counted in your spending.</p>;
+          const total = billsTotal([...overdue, ...dueToday, ...dueThisWeek]);
+          return <>
+            {overdue.length > 0 && <Group label="Overdue" tone="late"><BillRows bills={overdue} today={view.today} kind="overdue" /></Group>}
+            {dueToday.length > 0 && <Group label="Due today"><BillRows bills={dueToday} today={view.today} kind="today" /></Group>}
+            {dueThisWeek.length > 0 && <Group label="Due in the next 7 days"><BillRows bills={dueThisWeek} today={view.today} kind="soon" /></Group>}
+            {noDueDate.length > 0 && <Group label="No due date"><BillRows bills={noDueDate} today={view.today} kind="open" /></Group>}
+            <div className={styles.foot}>
+              {total && <p className={styles.footRow}><span>To pay in all</span><strong>{money(total.amountMinor, total.currency)}</strong></p>}
+              <p>Unpaid bills don’t count as spending until they’re paid. Tell Daylark “I paid the electric bill” to update them.</p>
             </div>
-            {view.meetingsAhead.state === "ok" && view.meetingsAhead.value.length > 0 && <div className={styles.group}>
-              <p className={styles.label}>Coming up this week</p>
-              <ul className={styles.rows}>{view.meetingsAhead.value.slice(0, 8).map((event) => <li className={styles.row} key={event.id}><span>{event.summary}</span><span>{eventWhen(event, true)}</span></li>)}</ul>
-            </div>}
-          </>}
-        </section>
+          </>;
+        })()}
+      </Card>
 
-        <section className={styles.card} aria-label="Bills">
-          <h2 className={styles.head}><ClockIcon />Bills to pay</h2>
-          {view.bills.state !== "ok" ? <Unavailable what="your bills" state={view.bills.state} /> : (() => {
-            const { overdue, dueToday, dueThisWeek, noDueDate } = view.bills.value;
-            if (!overdue.length && !dueToday.length && !dueThisWeek.length && !noDueDate.length) return <p className={styles.empty}>No unpaid bills. Anything you paid is already counted in your spending.</p>;
-            const total = billsTotal([...overdue, ...dueToday, ...dueThisWeek]);
-            return <>
-              {overdue.length > 0 && <div className={styles.group}><p className={`${styles.label} ${styles.late}`}>Overdue</p><BillRows bills={overdue} showDue /></div>}
-              {dueToday.length > 0 && <div className={styles.group}><p className={styles.label}>Due today</p><BillRows bills={dueToday} showDue={false} /></div>}
-              {dueThisWeek.length > 0 && <div className={styles.group}><p className={styles.label}>Due in the next 7 days</p><BillRows bills={dueThisWeek} showDue /></div>}
-              {noDueDate.length > 0 && <div className={styles.group}><p className={styles.label}>No due date</p><BillRows bills={noDueDate} showDue={false} /></div>}
-              {total && <p className={styles.note} style={{ marginTop: "var(--s-3)" }}>{money(total.amountMinor, total.currency)} to pay in all. Unpaid bills don’t count as spending until they’re paid. Tell Daylark “I paid the electric bill” to update them.</p>}
-            </>;
-          })()}
-        </section>
-
-        <section className={styles.card} aria-label="Spending this week">
-          <h2 className={styles.head}><WalletIcon />Spending this week</h2>
-          {view.spending.state !== "ok" ? <Unavailable what="your spending" state={view.spending.state} />
-            : view.spending.value ? <Spending week={view.spending.value} />
-            : <p className={styles.empty}>No spending recorded in the last 7 days. Tell Daylark what you spent, or ask it to import receipts from your email.</p>}
-        </section>
-
-      </div>
+      <Card label="Spending this week" tone="green" icon={<WalletIcon />}>
+        {spending.state !== "ok" ? <Unavailable what="your spending" state={spending.state} />
+          : spending.value ? <Spending week={spending.value} />
+          : <div className={styles.empty}><p>No spending recorded in the last 7 days. Tell Daylark what you spent, or ask it to import receipts from your email.</p></div>}
+      </Card>
     </div>
-  );
+  </div>;
 }

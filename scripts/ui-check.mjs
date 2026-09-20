@@ -14,6 +14,7 @@ const pages = [
   ["chat-thread", "/design/app?view=thread"],
   ["history", "/design/history"],
   ["today", "/design/today"],
+  ["today-empty", "/design/today?state=connect"],
   ["privacy", "/privacy"],
   ["design", "/design"],
 ];
