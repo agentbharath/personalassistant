@@ -123,7 +123,7 @@ type RedirectSlots = { category: "speculation"|"advice_stakes"|"contested"|"crea
 
 | Domain | Operations |
 | --- | --- |
-| email | `email.search`, `email.count`, `email.read`, `email.facts`, `email.import`, `email.status_lookup`, `email.draft` (write; creates a Gmail draft, R25), `email.edit_draft` (write) |
+| email | `email.search`, `email.count`, `email.read`, `email.facts`, `email.import`, `email.status_lookup`, `email.draft` (write; creates a Gmail draft, R25), `email.edit_draft` (write), `email.discard_draft` (destructive), `email.revert_draft` (write; restores a saved version) |
 | compose | `compose.suggest_message` (read; wording shown in the chat only, no mailbox change) |
 | calendar | `calendar.view`, `calendar.find_free`, `calendar.create`, `calendar.update`, `calendar.delete`, `calendar.attendees`, `calendar.feasibility` |
 | finance | `finance.query`, `finance.record`, `finance.import` |
@@ -202,6 +202,7 @@ Stored encrypted, one row per conversation (`conversation_state_ciphertext`), wi
 | `saved_places` (kind: home, work, named; encrypted) replacing the single `home_location` lesson | "near my office", "from mom's" (SR-042) |
 | `interpretation_log` (opt-in; frame hash, operation, validation result, step outcomes; **no message text by default**) | Measuring quality in real use without keeping private text |
 | `feedback` already exists; add `frame_hash` so a bad rating points to the reading that produced it | Turning ratings into eval cases |
+| `email_drafts` (encrypted: user, conversation, Gmail draft id, thread id, `versions` list with time and wording, `discarded_at`); the only source of "drafts Daylark created", so nothing else in the mailbox can be touched | Draft undo and version restore (R25.8) |
 | `entity_aliases` (canonical, alias, source, user-confirmed) folded from `sender_alias` and `merchant_alias` lessons | One canonical-entity model for email, finance and calendar |
 
 ## 9. Migration plan
