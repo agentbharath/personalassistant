@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { ActionForm } from "@/components/ui/ActionForm";
-import { CheckIcon, MailIcon } from "@/components/ui/icons";
+import { CheckIcon, MailIcon, SettingsIcon } from "@/components/ui/icons";
 import { dismissReply, savePerchChoices } from "@/app/perch/actions";
 import { REPLY_KINDS, type ReplyKind } from "@/lib/agents/reply-needed";
 import { displayName, type WaitingResult } from "@/lib/replies/waiting";
@@ -73,7 +73,7 @@ export function WaitingCard({ result, now = Date.now(), dismiss = dismissReply, 
     {unchecked > 0 && <p className={card.sub} style={{ marginTop: "var(--s-3)" }}>Checked {result.state === "ok" ? result.checked : 0} of {result.state === "ok" ? result.total : 0} recent messages so far. Refresh to check the rest.</p>}
 
     {result.state === "ok" && <details className={styles.choose}>
-      <summary className={styles.chooseSummary}>What should I remind you about?</summary>
+      <summary className={styles.chooseSummary}><SettingsIcon />Choose what to remind me about</summary>
       <ActionForm action={save} success="Saved." className={styles.chooseForm}>
         <input type="hidden" name="scope" value="kinds" />
         <KindOptions selected={result.prefs.kinds} />

@@ -13,7 +13,11 @@ import { NO_PERCH_PREFS, loadPerchPrefs } from "@/lib/replies/dismissals";
 import { SettingsLegalLinks } from "@/components/legal/LegalLinks";
 import { signOut } from "../auth/actions";
 import { ConnectionsFallback, ConnectionsSection } from "./ConnectionsSection";
+import { CalendarIcon, EditIcon, LocateIcon, MailIcon, SettingsIcon, SunIcon, WalletIcon } from "@/components/ui/icons";
+import { SettingsGroup, SettingsSection } from "./SettingsSection";
 import styles from "./settings.module.css";
+
+const SECTIONS = [["connections", "Connections"], ["perch", "Perch"], ["location", "Location"], ["appearance", "Appearance"], ["learned", "Learned"], ["data", "Your data"], ["account", "Account"]] as const;
 
 export default async function SettingsPage() {
   const supabase = await createClient();
@@ -29,57 +33,51 @@ export default async function SettingsPage() {
   return <AppShell title="Settings" email={email} signOutAction={signOut} recent={recent} activeView="settings" perchEnabled={perch.perchEnabled}>
     <div className={styles.page}>
       <h1 className={styles.title}>Settings</h1>
+      <nav className={styles.jump} aria-label="Jump to a section">
+        {SECTIONS.map(([id, label]) => <a className={styles.jumpLink} href={`#${id}`} key={id}>{label}</a>)}
+      </nav>
 
-      <section className={styles.section} aria-labelledby="connections">
-        <h2 id="connections">Connections</h2>
-        <p className={styles.help}>What Daylark can reach in your Google account.</p>
-        <Suspense fallback={<ConnectionsFallback />}><ConnectionsSection userId={userId} /></Suspense>
-      </section>
+      <SettingsGroup label="Google">
+        <SettingsSection id="connections" title="Connections" help="What Daylark can reach in your Google account." icon={<MailIcon />} tone="green">
+          <Suspense fallback={<ConnectionsFallback />}><ConnectionsSection userId={userId} /></Suspense>
+        </SettingsSection>
+      </SettingsGroup>
 
-      <section className={styles.section} aria-labelledby="location">
-        <h2 id="location">Location</h2>
-        <p className={styles.help}>Used as your starting point for drive times and to look for places near you. It is sent to Google Maps and the search provider only when a request needs it. Anything you name in a message takes priority.</p>
-        <LocationField initial={home} />
-      </section>
+      <SettingsGroup label="Preferences">
+        <SettingsSection id="perch" title="Perch and reminders" help="Perch is your day at a glance. Reminders list mail in Primary and Updates that seems to be waiting for your reply. Turn either off any time." icon={<CalendarIcon />} tone="violet">
+          <PerchSettings prefs={perch} />
+        </SettingsSection>
+        <SettingsSection id="location" title="Location" help="Used as your starting point for drive times and to look for places near you. It is sent to Google Maps and the search provider only when a request needs it. Anything you name in a message takes priority." icon={<LocateIcon />} tone="blue">
+          <LocationField initial={home} />
+        </SettingsSection>
+        <SettingsSection id="appearance" title="Appearance" help="Choose how Daylark looks. “System” follows your device." icon={<SunIcon />} tone="amber">
+          <ThemePicker />
+        </SettingsSection>
+      </SettingsGroup>
 
-      <section className={styles.section} aria-labelledby="perch">
-        <h2 id="perch">Perch and reminders</h2>
-        <p className={styles.help}>Perch is your day at a glance. Reminders list mail in Primary and Updates that seems to be waiting for your reply. Turn either off any time.</p>
-        <PerchSettings prefs={perch} />
-      </section>
+      <SettingsGroup label="Memory">
+        <SettingsSection id="learned" title="What Daylark has learned" help="Preferences picked up when you correct me. Forget any of them and I go back to the default." icon={<EditIcon />} tone="neutral" focusable>
+          {learnings.length === 0
+            ? <p className={styles.empty}>Nothing yet. I learn when you say things like “I meant Adobe” or “always search 90 days”.</p>
+            : <ul className={styles.list}>{learnings.map((learning) => {
+              const id = `${learning.kind}:${learningKey(learning)}`;
+              return <li key={id} className={styles.row}>
+                <span>{describeLearning(learning)}</span>
+                <ForgetButton id={id} what={describeLearning(learning)} />
+              </li>;
+            })}</ul>}
+          {learnings.length > 1 && <ForgetAll />}
+        </SettingsSection>
+      </SettingsGroup>
 
-      <section className={styles.section} aria-labelledby="appearance">
-        <h2 id="appearance">Appearance</h2>
-        <p className={styles.help}>Choose how Daylark looks. “System” follows your device.</p>
-        <ThemePicker />
-      </section>
-
-      <section className={styles.section} aria-labelledby="learned">
-        <h2 id="learned" tabIndex={-1} className={styles.focusable}>What Daylark has learned</h2>
-        <p className={styles.help}>Preferences picked up when you correct me. Forget any of them and I go back to the default.</p>
-        {learnings.length === 0
-          ? <p className={styles.empty}>Nothing yet. I learn when you say things like “I meant Adobe” or “always search 90 days”.</p>
-          : <ul className={styles.list}>{learnings.map((learning) => {
-            const id = `${learning.kind}:${learningKey(learning)}`;
-            return <li key={id} className={styles.row}>
-              <span>{describeLearning(learning)}</span>
-              <ForgetButton id={id} what={describeLearning(learning)} />
-            </li>;
-          })}</ul>}
-        {learnings.length > 1 && <ForgetAll />}
-      </section>
-
-      <section className={styles.section} aria-labelledby="data">
-        <h2 id="data">Your data</h2>
-        <p className={styles.help}>Take a copy, or remove what Daylark keeps about you.</p>
-        <DataControls />
-      </section>
-
-      <section className={styles.section} aria-labelledby="account">
-        <h2 id="account">Account</h2>
-        <p className={styles.help}>Signed in as {email}. Email access is read-only, and anything that changes your calendar or records asks for your approval first.</p>
-        <SettingsLegalLinks />
-      </section>
+      <SettingsGroup label="Data and account">
+        <SettingsSection id="data" title="Your data" help="Take a copy, or remove what Daylark keeps about you." icon={<WalletIcon />} tone="neutral">
+          <DataControls />
+        </SettingsSection>
+        <SettingsSection id="account" title="Account" help={`Signed in as ${email}. Email access is read-only, and anything that changes your calendar or records asks for your approval first.`} icon={<SettingsIcon />} tone="neutral">
+          <SettingsLegalLinks />
+        </SettingsSection>
+      </SettingsGroup>
     </div>
   </AppShell>;
 }

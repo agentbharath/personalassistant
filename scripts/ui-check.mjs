@@ -15,6 +15,7 @@ const pages = [
   ["history", "/design/history"],
   ["perch", "/design/perch"],
   ["perch-empty", "/design/perch?state=connect"],
+  ["settings", "/design/settings"],
   ["privacy", "/privacy"],
   ["design", "/design"],
 ];
