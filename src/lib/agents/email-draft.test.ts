@@ -4,7 +4,7 @@ import type { EmailContent, EmailSearchResult } from "@/lib/tools/email/google-g
 vi.mock("@/lib/drafts/service", () => ({ draftsEnabled: () => true, latestDraft: vi.fn() }));
 vi.mock("@/lib/drafts/writer-runtime", () => ({ writeDraftForUser: vi.fn() }));
 vi.mock("@/lib/tools/email/google-gmail", () => ({ GoogleGmailAccessError: class extends Error { reason = "unavailable"; }, readGmailMessage: vi.fn(), searchGmail: vi.fn() }));
-vi.mock("@/lib/workflows/email-draft", () => ({ createDraftApproval: vi.fn(), pendingDraftPayload: vi.fn(), resolvePendingEmailDraft: vi.fn() }));
+vi.mock("@/lib/workflows/email-draft", () => ({ createDraftApproval: vi.fn(), lastDraftPreview: vi.fn(), resolvePendingEmailDraft: vi.fn() }));
 vi.mock("@/lib/auth/google-credential-broker", () => ({ GoogleConnectionRequiredError: class extends Error {} }));
 
 import { DRAFTS_NOT_AVAILABLE, pickVersion, prepareEmailDraft, type DraftContext, type DraftDeps, type DraftIntent } from "./email-draft";
@@ -23,7 +23,7 @@ beforeEach(() => {
     write: vi.fn().mockResolvedValue({ subject: "Hello", body: "Hi Sarah,\n\nYes, I can make it.\n\nThanks" }),
     latest: vi.fn().mockResolvedValue(null),
     approve: vi.fn().mockResolvedValue(undefined),
-    pending: vi.fn().mockResolvedValue(null),
+    lastPreview: vi.fn().mockResolvedValue(null),
     cancelPending: vi.fn().mockResolvedValue(null),
   } as unknown as DraftDeps;
 });
@@ -152,41 +152,53 @@ describe("changing a draft already saved (free)", () => {
   });
 });
 
-describe("changing a preview that is still waiting for Confirm (free)", () => {
-  const waiting = { action: "create" as const, spec: { to: ["sam@lee.com"], subject: "Lease", body: "Hi Sam, quick question about the lease.", inReplyTo: { messageId: "<a@m>", references: [], threadId: "t1" } } };
+describe("changing a draft that was shown but not saved (free)", () => {
+  const unsaved = { action: "create" as const, spec: { to: ["sam@lee.com"], subject: "Lease", body: "Hi Sam, quick question about the lease.", inReplyTo: { messageId: "<a@m>", references: [], threadId: "t1" } } };
+  const last = (state: string, payload: unknown = unsaved) => (deps.lastPreview as ReturnType<typeof vi.fn>).mockResolvedValue({ state, payload });
 
-  it("rewrites the preview instead of saying there is no draft, and keeps who it is for and the thread", async () => {
-    (deps.pending as ReturnType<typeof vi.fn>).mockResolvedValue(waiting);
+  it.each(["pending", "cancelled", "expired"])("rewrites the last draft shown even if it is %s, keeping who it is for and the thread", async (state) => {
+    last(state);
     const reply = await prepareEmailDraft(intent({ action: "edit", instruction: "make it professional" }), ctx, deps);
     expect(deps.write).toHaveBeenCalledWith("u1", { kind: "edit", instruction: "make it professional", ownerName: "Bharath", current: { subject: "Lease", body: "Hi Sam, quick question about the lease." } });
-    expect(deps.approve).toHaveBeenCalledWith("u1", "c1", { action: "create", spec: { ...waiting.spec, subject: "Hello", body: "Hi Sarah,\n\nYes, I can make it.\n\nThanks" } });
+    expect(deps.approve).toHaveBeenCalledWith("u1", "c1", { action: "create", spec: { ...unsaved.spec, subject: "Hello", body: "Hi Sarah,\n\nYes, I can make it.\n\nThanks" } });
     expect(reply.answer).toContain("Draft reply — not sent");
     expect(reply.answer).toContain("**To:** sam@lee.com");
     expect(reply.answer).not.toMatch(/don't have a draft/);
     expect(deps.latest).not.toHaveBeenCalled();
   });
 
-  it("keeps changing the same preview, one change after another", async () => {
-    (deps.pending as ReturnType<typeof vi.fn>).mockResolvedValue({ action: "edit", draftId: "d1", subject: "S", body: "B" });
+  it("keeps changing the same draft, one change after another", async () => {
+    last("pending", { action: "edit", draftId: "d1", subject: "S", body: "B" });
     await prepareEmailDraft(intent({ action: "edit", instruction: "shorter" }), ctx, deps);
     expect(deps.approve).toHaveBeenCalledWith("u1", "c1", { action: "edit", draftId: "d1", subject: "Hello", body: "Hi Sarah,\n\nYes, I can make it.\n\nThanks" });
   });
 
-  it("scraps the preview when asked, saving and sending nothing", async () => {
-    (deps.pending as ReturnType<typeof vi.fn>).mockResolvedValue(waiting);
-    const reply = await prepareEmailDraft(intent({ action: "discard" }), ctx, deps);
+  it("scraps a waiting draft when asked, and says a cancelled one was never saved", async () => {
+    last("pending");
+    expect((await prepareEmailDraft(intent({ action: "discard" }), ctx, deps)).answer).toMatch(/Nothing was saved or sent/);
     expect(deps.cancelPending).toHaveBeenCalledWith("u1", "c1");
-    expect(reply.answer).toMatch(/Nothing was saved or sent/);
+    (deps.cancelPending as ReturnType<typeof vi.fn>).mockClear();
+    last("cancelled");
+    expect((await prepareEmailDraft(intent({ action: "discard" }), ctx, deps)).answer).toMatch(/never saved/);
+    expect(deps.cancelPending).not.toHaveBeenCalled();
     expect(deps.approve).not.toHaveBeenCalled();
   });
 
   it("says there is nothing earlier to go back to when nothing is saved yet", async () => {
-    (deps.pending as ReturnType<typeof vi.fn>).mockResolvedValue(waiting);
+    last("pending");
     expect((await prepareEmailDraft(intent({ action: "revert", version: "first" }), ctx, deps)).answer).toMatch(/Nothing has been saved yet/);
   });
 
+  it("uses the saved Gmail draft once the last one shown was saved", async () => {
+    last("completed");
+    (deps.latest as ReturnType<typeof vi.fn>).mockResolvedValue({ id: "d1", versions: [{ at: "t", subject: "S", body: "Saved body", to: ["a@b.com"], cc: [], note: "" }] });
+    await prepareEmailDraft(intent({ action: "edit", instruction: "shorter" }), ctx, deps);
+    expect(deps.write).toHaveBeenCalledWith("u1", expect.objectContaining({ current: { subject: "S", body: "Saved body" } }));
+    expect(deps.approve).toHaveBeenCalledWith("u1", "c1", expect.objectContaining({ action: "edit", draftId: "d1" }));
+  });
+
   it("does not change a pending delete or restore; it looks at the saved draft instead", async () => {
-    (deps.pending as ReturnType<typeof vi.fn>).mockResolvedValue({ action: "discard", draftId: "d1" });
+    last("pending", { action: "discard", draftId: "d1" });
     expect((await prepareEmailDraft(intent({ action: "edit", instruction: "shorter" }), ctx, deps)).answer).toMatch(/don't have a draft/);
   });
 });

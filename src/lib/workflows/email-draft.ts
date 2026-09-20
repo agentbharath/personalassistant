@@ -22,17 +22,27 @@ export async function createDraftApproval(userId: string, conversationId: string
   if (approvalError) throw approvalError;
 }
 
-/** The draft action waiting for Confirm in this conversation, if any: what the last preview showed. "Make it shorter" changes this before anything is saved. */
-export async function pendingDraftPayload(userId: string, conversationId: string): Promise<DraftPayload | null> {
+export type DraftPreviewState = "pending" | "cancelled" | "expired" | "completed";
+
+/**
+ * The newest draft preview in this conversation, in whatever state it ended up: still waiting, cancelled, expired or saved. "Make it shorter" or
+ * "make it professional" refers to the last draft that was shown, so it must not depend on whether the person confirmed it.
+ */
+export async function lastDraftPreview(userId: string, conversationId: string): Promise<{ state: DraftPreviewState; payload: DraftPayload } | null> {
   const admin = createAdminClient();
-  const { data } = await admin.from("workflow_checkpoints").select("id,checkpoint").eq("user_id", userId).eq("conversation_id", conversationId).eq("workflow_type", WORKFLOW).eq("state", "pending_approval").order("created_at", { ascending: false }).limit(1);
+  const { data } = await admin.from("workflow_checkpoints").select("id,state,checkpoint").eq("user_id", userId).eq("conversation_id", conversationId).eq("workflow_type", WORKFLOW).order("created_at", { ascending: false }).limit(1);
   const checkpoint = data?.[0];
   if (!checkpoint) return null;
-  const { data: approval } = await admin.from("approvals").select("expires_at,status").eq("workflow_checkpoint_id", checkpoint.id).eq("status", "pending").maybeSingle();
-  if (!approval || new Date(approval.expires_at as string).getTime() <= Date.now()) return null;
   const ciphertext = (checkpoint.checkpoint as { payloadCiphertext?: string }).payloadCiphertext;
   if (!ciphertext) return null;
-  try { return JSON.parse(decryptText(ciphertext)) as DraftPayload; } catch { return null; }
+  let payload: DraftPayload;
+  try { payload = JSON.parse(decryptText(ciphertext)) as DraftPayload; } catch { return null; }
+  if (checkpoint.state === "pending_approval") {
+    const { data: approval } = await admin.from("approvals").select("expires_at").eq("workflow_checkpoint_id", checkpoint.id).eq("status", "pending").maybeSingle();
+    const live = approval && new Date(approval.expires_at as string).getTime() > Date.now();
+    return { state: live ? "pending" : "expired", payload };
+  }
+  return { state: checkpoint.state === "completed" ? "completed" : checkpoint.state === "expired" ? "expired" : "cancelled", payload };
 }
 
 type Outcome = { answer: string; status: "completed" | "waiting_for_user" };

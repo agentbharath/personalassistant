@@ -21,7 +21,7 @@ vi.mock("@/lib/auth/google-credential-broker", () => ({ GoogleConnectionRequired
 vi.mock("@/lib/tools/email/google-gmail", () => ({ GoogleGmailAccessError: class extends Error { reason = "unavailable"; } }));
 vi.mock("@/lib/drafts/service", () => ({ ...service, DraftsDisabledError: class extends Error {}, DraftNotFoundError: class extends Error {} }));
 
-import { pendingDraftPayload, resolvePendingEmailDraft, runDraftPayload } from "./email-draft";
+import { lastDraftPreview, resolvePendingEmailDraft, runDraftPayload } from "./email-draft";
 
 const payload = { action: "create" as const, spec: { to: ["a@b.com"], subject: "Lease", body: "Hi" } };
 const pending = (extra: object = {}) => {
@@ -103,15 +103,24 @@ describe("Confirm and Cancel on a draft (free, fake database)", () => {
   });
 });
 
-describe("the preview waiting for Confirm (free, fake database)", () => {
-  it("returns what the last preview showed, so a change can rewrite it", async () => {
+describe("the newest draft preview, whatever became of it (free, fake database)", () => {
+
+  it("returns a waiting preview as pending", async () => {
     pending();
-    expect(await pendingDraftPayload("u1", "c1")).toEqual(payload);
+    state.queues.workflow_checkpoints = [{ data: [{ id: "cp1", state: "pending_approval", checkpoint: { payloadCiphertext: `enc(${JSON.stringify(payload)})` } }], error: null }];
+    expect(await lastDraftPreview("u1", "c1")).toEqual({ state: "pending", payload });
   });
 
-  it("returns nothing when no preview is waiting, or it has expired", async () => {
-    expect(await pendingDraftPayload("u1", "c1")).toBeNull();
-    pending({ expires_at: new Date(Date.now() - 1000).toISOString() });
-    expect(await pendingDraftPayload("u1", "c1")).toBeNull();
+  it.each([["cancelled", "cancelled"], ["expired", "expired"], ["completed", "completed"]])("returns a %s preview too, so a change does not depend on what the person pressed", async (stored, expected) => {
+    state.queues.workflow_checkpoints = [{ data: [{ id: "cp1", state: stored, checkpoint: { payloadCiphertext: `enc(${JSON.stringify(payload)})` } }], error: null }];
+    expect(await lastDraftPreview("u1", "c1")).toEqual({ state: expected, payload });
+  });
+
+  it("calls a preview whose approval has run out expired, and returns nothing when there is none", async () => {
+    state.queues.workflow_checkpoints = [{ data: [{ id: "cp1", state: "pending_approval", checkpoint: { payloadCiphertext: `enc(${JSON.stringify(payload)})` } }], error: null }];
+    state.queues.approvals = [{ data: null, error: null }];
+    expect((await lastDraftPreview("u1", "c1"))?.state).toBe("expired");
+    state.queues = {};
+    expect(await lastDraftPreview("u1", "c1")).toBeNull();
   });
 });

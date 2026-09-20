@@ -8,7 +8,7 @@ import type { WriterInput } from "@/lib/drafts/writer";
 import { GoogleConnectionRequiredError } from "@/lib/auth/google-credential-broker";
 import { GoogleGmailAccessError, readGmailMessage, searchGmail, type EmailContent, type EmailSearchResult } from "@/lib/tools/email/google-gmail";
 import type { EmailState } from "@/lib/conversations/email-state";
-import { createDraftApproval, pendingDraftPayload, resolvePendingEmailDraft } from "@/lib/workflows/email-draft";
+import { createDraftApproval, lastDraftPreview, resolvePendingEmailDraft, type DraftPreviewState } from "@/lib/workflows/email-draft";
 
 export type DraftIntent = NonNullable<RouterDecision["draft"]>;
 /** The router's fields with the empty ones as "", so the rest of the code reads plain text. */
@@ -29,11 +29,11 @@ export type DraftDeps = {
   write: typeof writeDraftForUser;
   latest: typeof latestDraft;
   approve: (userId: string, conversationId: string, payload: DraftPayload) => Promise<void>;
-  /** The preview waiting for Confirm, and a way to drop it. */
-  pending: (userId: string, conversationId: string) => Promise<DraftPayload | null>;
+  /** The newest draft preview shown in this chat, whether it was confirmed, cancelled, expired or is still waiting, and a way to drop a waiting one. */
+  lastPreview: (userId: string, conversationId: string) => Promise<{ state: DraftPreviewState; payload: DraftPayload } | null>;
   cancelPending: (userId: string, conversationId: string) => Promise<unknown>;
 };
-const defaults: DraftDeps = { enabled: draftsEnabled, search: searchGmail, read: readGmailMessage, write: writeDraftForUser, latest: latestDraft, approve: createDraftApproval, pending: pendingDraftPayload, cancelPending: (userId, conversationId) => resolvePendingEmailDraft(userId, conversationId, "cancel") };
+const defaults: DraftDeps = { enabled: draftsEnabled, search: searchGmail, read: readGmailMessage, write: writeDraftForUser, latest: latestDraft, approve: createDraftApproval, lastPreview: lastDraftPreview, cancelPending: (userId, conversationId) => resolvePendingEmailDraft(userId, conversationId, "cancel") };
 
 const quote = (text: string) => text.split("\n").map((line) => (line ? `> ${line}` : ">")).join("\n");
 const day = (date: string) => { const parsed = Date.parse(date); return Number.isNaN(parsed) ? "" : new Date(parsed).toLocaleDateString("en-US", { month: "short", day: "numeric" }); };
@@ -64,9 +64,10 @@ export async function prepareEmailDraft(raw: DraftIntent, ctx: DraftContext, dep
   const conversationId = ctx.conversationId;
   try {
     if (intent.action === "create") return intent.kind === "reply" ? await prepareReply(intent, ctx, conversationId, deps) : await prepareNew(intent, ctx, conversationId, deps);
-    // A preview that is still waiting for Confirm is the draft "this" means: changing it rewrites the preview, and nothing has been saved yet.
-    const waiting = await deps.pending(ctx.userId, conversationId);
-    if (waiting && waiting.action !== "discard" && waiting.action !== "revert") return await changeWaiting(intent, waiting, ctx, conversationId, deps);
+    // The last draft shown is the one "this" means. If it was never saved (still waiting, cancelled or expired), changing it writes a fresh preview from
+    // it, exactly as if the person had never pressed anything. Once it is saved in Gmail, changes go to the saved draft.
+    const shown = await deps.lastPreview(ctx.userId, conversationId);
+    if (shown && shown.state !== "completed" && (shown.payload.action === "create" || shown.payload.action === "edit")) return await changeUnsaved(intent, shown.payload, shown.state, ctx, conversationId, deps);
     const current = await deps.latest(ctx.userId, conversationId);
     if (!current) return ask(NO_DRAFT);
     const last = current.versions.at(-1)!;
@@ -93,11 +94,11 @@ export async function prepareEmailDraft(raw: DraftIntent, ctx: DraftContext, dep
   }
 }
 
-/** Edit or scrap the preview that is still waiting. A new preview replaces it, so Confirm saves the latest wording. */
-async function changeWaiting(intent: Intent, waiting: DraftPayload, ctx: DraftContext, conversationId: string, deps: DraftDeps): Promise<DraftReply> {
+/** Change or scrap a draft that was shown but not saved. A new preview replaces any older one, so Confirm always saves the latest wording. */
+async function changeUnsaved(intent: Intent, waiting: DraftPayload, state: DraftPreviewState, ctx: DraftContext, conversationId: string, deps: DraftDeps): Promise<DraftReply> {
   if (intent.action === "discard") {
-    await deps.cancelPending(ctx.userId, conversationId);
-    return { answer: "Scrapped that draft. Nothing was saved or sent.", status: "completed" };
+    if (state === "pending") await deps.cancelPending(ctx.userId, conversationId);
+    return { answer: state === "pending" ? "Scrapped that draft. Nothing was saved or sent." : "That draft was never saved, so there is nothing to delete. Nothing was sent.", status: "completed" };
   }
   if (intent.action === "revert") return ask("Nothing has been saved yet, so there is no earlier version to go back to. Tell me what to change, or choose **Cancel**.");
   if (!intent.instruction.trim()) return ask("What would you like to change?");
