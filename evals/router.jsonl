@@ -207,3 +207,5 @@
 {"id": "retry-with-request", "rule": "R22", "input": "retry how's my day looking", "expect": {"operation": "daily_view"}}
 {"id": "retry-again-bills", "rule": "R22", "input": "try that again", "expect": {"operation": "bills_list"}, "context": [{"role": "user", "content": "what bills are outstanding"}, {"role": "assistant", "content": "No outstanding bills. Anything you paid is already counted in your spending."}]}
 {"id": "retry-nothing-before", "rule": "R22", "input": "retry", "expect": {"operation": "clarify"}}
+{"id": "lesson-category-software", "rule": "R14.3", "input": "put anthropic under software", "expect": {"operation": "learning_teach", "lesson": {"kind": "merchant_category", "merchant": "anthropic", "category": "software"}}}
+{"id": "lesson-category-software-2", "rule": "R14.3", "input": "github is a software subscription", "expect": {"operation": "learning_teach", "lesson": {"kind": "merchant_category", "merchant": "github", "category": "software"}}}

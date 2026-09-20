@@ -84,7 +84,7 @@ export function categoryBreakdown(transactions: Array<{ category: string; amount
     .join("\n");
 }
 
-const CATEGORY_WORDS = /^(?:restaurants?|food|dining|groceries|transport|shopping|utilities|entertainment|health|housing|everything|anything|stuff|things|money)$/i;
+const CATEGORY_WORDS = /^(?:restaurants?|food|dining|groceries|transport|shopping|utilities|entertainment|software|health|housing|everything|anything|stuff|things|money)$/i;
 
 const NOT_A_MERCHANT = /^(?:a|an|the|my|me|it|that|this|these|those|much|money|total|so|last|more|less|in|over|since|during|today|yesterday|all|every|each)$/i;
 
@@ -136,7 +136,7 @@ export function spendingRange(input: string) {
 }
 
 function requestedCategory(input: string) {
-  const match = ["restaurants", "groceries", "transport", "shopping", "utilities", "entertainment", "health", "housing"]
+  const match = ["restaurants", "groceries", "transport", "shopping", "utilities", "entertainment", "software", "health", "housing"]
     .find((category) => input.toLowerCase().includes(category) || (category === "restaurants" && /\b(food|dining|restaurant)\b/i.test(input)));
   return match ?? null;
 }

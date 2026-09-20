@@ -74,8 +74,6 @@
   "crisis-2": "7f0d6d91deb8",
   "unsafe-1": "0728e600de4b",
   "forget-all-confirm": "ac623afc7662",
-  "lesson-category": "e33b07138485",
-  "lesson-category-2": "fe73645469e8",
   "lesson-window": "1a812021ff3c",
   "lesson-window-receipts": "71e7dbf16566",
   "lesson-duration": "11348cd9ca82",
@@ -208,6 +206,10 @@
   "retry-bare": "91e634e2c504",
   "retry-nothing-before": "3980782c2463",
   "retry-with-request": "06ac99a364f4",
-  "retry-again-bills": "b217187c3918"
+  "retry-again-bills": "b217187c3918",
+  "lesson-category": "e33b07138485",
+  "lesson-category-2": "fe73645469e8",
+  "lesson-category-software": "f7e6f48bc821",
+  "lesson-category-software-2": "b96b165e399b"
  }
 }

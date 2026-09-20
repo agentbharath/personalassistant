@@ -1,7 +1,7 @@
 import type { Learning, Learnings } from "./learnings";
 
 // ---------- R14.4: fixed category set ----------
-export const CATEGORIES = ["restaurants", "groceries", "transport", "shopping", "utilities", "entertainment", "health", "housing", "other"] as const;
+export const CATEGORIES = ["restaurants", "groceries", "transport", "shopping", "utilities", "entertainment", "software", "health", "housing", "other"] as const;
 const SYNONYMS: Record<string, (typeof CATEGORIES)[number]> = {
   restaurant: "restaurants", restaurants: "restaurants", food: "restaurants", dining: "restaurants", "eating out": "restaurants", takeout: "restaurants",
   grocery: "groceries", groceries: "groceries",
@@ -9,6 +9,7 @@ const SYNONYMS: Record<string, (typeof CATEGORIES)[number]> = {
   shopping: "shopping", retail: "shopping", clothes: "shopping", clothing: "shopping",
   utilities: "utilities", utility: "utilities", bills: "utilities", bill: "utilities",
   entertainment: "entertainment", fun: "entertainment", streaming: "entertainment", movies: "entertainment",
+  software: "software", subscription: "software", subscriptions: "software", saas: "software", app: "software", apps: "software", ai: "software", cloud: "software", hosting: "software", tools: "software",
   health: "health", medical: "health", wellness: "health", supplements: "health", fitness: "health", pharmacy: "health",
   housing: "housing", rent: "housing", mortgage: "housing", home: "housing",
   other: "other", misc: "other", miscellaneous: "other",
@@ -37,6 +38,7 @@ const MERCHANT_CATEGORIES: Array<[RegExp, (typeof CATEGORIES)[number]]> = [
   [/instacart|safeway|kroger|whole foods|trader joe|aldi|albertsons|sprouts|grocery|supermarket/i, "groceries"],
   [/uber|lyft|parking|clipper|bart\b|chevron|shell|exxon|airlines?|united|delta|southwest|amtrak|greyhound|fuel|gas station/i, "transport"],
   [/pg&e|pge\b|pacific gas|comcast|xfinity|at&t|verizon|t-mobile|conservice|water|electric|utility|utilities|internet/i, "utilities"],
+  [/anthropic|openai|chatgpt|github|adobe|microsoft 365|office 365|dropbox|notion|slack\b|zoom\b|1password|figma|vercel|supabase|cloudflare|digitalocean|heroku|\baws\b|amazon web services|google workspace|google one|icloud|jetbrains|atlassian|canva/i, "software"],
   [/netflix|spotify|hulu|disney|cinemark|\bamc\b|regal|ticketmaster|seatgeek|stubhub|steam|playstation|xbox|nintendo|google play|apple music|youtube/i, "entertainment"],
   [/cvs|walgreens|pharmacy|clinic|dental|dentist|medical|hospital|urgent care|optometr|vision/i, "health"],
   [/apartments?|property|properties|rent\b|leasing|mortgage|landlord|realty|heritage park/i, "housing"],

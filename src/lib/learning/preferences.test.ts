@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { acknowledgeLearning, describeLearning, matchesForget, renderLearnings } from "./commands";
 import { NO_LEARNINGS, applyLearnedAction, learnFromReinterpretation, withLearning, type Learning } from "./learnings";
 import { parseEmailRequest } from "@/lib/agents/email-request";
-import { applyMerchantLearnings, normalizeCategory } from "./preferences";
+import { CATEGORIES, applyMerchantLearnings, guessCategory, normalizeCategory, toKnownCategory } from "./preferences";
 
 const all: Learning[] = [
   { kind: "default_window", topic: "receipt", days: 90 },
@@ -118,5 +118,23 @@ describe("learning what a request means (R11.8)", () => {
     expect(applyLearnedAction(list, false, NO_LEARNINGS).applied).toBe(false);
     expect(applyLearnedAction(parseEmailRequest("promotional emails"), false, learned).applied).toBe(false);
     expect(applyLearnedAction(parseEmailRequest("import all iherb receipts"), false, learned).applied).toBe(false);
+  });
+});
+
+describe("the software category (free)", () => {
+  it("is part of the fixed set, and everyday words map to it", () => {
+    expect(CATEGORIES).toContain("software");
+    for (const word of ["software", "subscription", "subscriptions", "saas", "cloud", "hosting"]) expect(normalizeCategory(word)).toBe("software");
+  });
+
+  it("recognises well-known software merchants by name, and leaves other merchants alone", () => {
+    for (const merchant of ["Anthropic, PBC", "OpenAI", "GitHub", "Adobe", "Vercel", "Amazon Web Services", "Google One"]) expect(guessCategory(merchant)).toBe("software");
+    expect(guessCategory("Netflix")).toBe("entertainment");
+    expect(guessCategory("Whole Foods")).toBe("groceries");
+  });
+
+  it("turns a free-form label into software", () => {
+    expect(toKnownCategory("Software & Subscriptions")).toBe("software");
+    expect(toKnownCategory("AI credits")).toBe("software");
   });
 });

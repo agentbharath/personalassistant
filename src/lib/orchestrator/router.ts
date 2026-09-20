@@ -18,7 +18,7 @@ export const OPERATIONS = [
 export type Operation = (typeof OPERATIONS)[number];
 const AGENTS = ["email", "calendar", "finance", "general"] as const;
 export type RouterAgent = (typeof AGENTS)[number];
-export const CATEGORY_NAMES = ["restaurants", "groceries", "transport", "shopping", "utilities", "entertainment", "health", "housing", "other"] as const;
+export const CATEGORY_NAMES = ["restaurants", "groceries", "transport", "shopping", "utilities", "entertainment", "software", "health", "housing", "other"] as const;
 const LESSON_KINDS = ["default_window", "receipts_show_amounts", "sender_alias", "calendar_duration", "calendar_buffer", "merchant_category", "merchant_alias", "autopay"] as const;
 const TOPICS = ["all", "receipt", "promotion", "recruiter"] as const;
 

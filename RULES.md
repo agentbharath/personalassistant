@@ -118,7 +118,7 @@ Each rule above has rows in `evals/` (`email-parsing.jsonl`, `email-variants.jso
 - **R14.1 Calendar.** Two learnable preferences: a default event length (used only when the event has no end or length) and a buffer in minutes (added to "can I make it" answers).
 - **R14.2 Finance.** Two learnable corrections: merchant to category ("iHerb is health") and merchant alias ("amzn means Amazon"). They apply to every new record or import preview (typed, email, receipt, bulk) and are not retroactive.
 - **R14.3** Triggers are explicit: "by default", "always", "from now on" for calendar preferences; "X is <category>", "categorize X as <category>", "put X under <category>", "X means Y" for finance. Each is confirmed in one line.
-- **R14.4** Categories come from a fixed set (restaurants, groceries, transport, shopping, utilities, entertainment, health, housing, other). Synonyms map to it; anything else is not learned and Daylark asks which category was meant.
+- **R14.4** Categories come from a fixed set (restaurants, groceries, transport, shopping, utilities, entertainment, software, health, housing, other; software covers subscriptions, developer tools, cloud services and AI credits, added 2026-09-21). Synonyms map to it; anything else is not learned and Daylark asks which category was meant.
 
 ## R15. Seeing and forgetting what was learned
 - **R15.1** "What have you learned", "what do you remember" and "show my preferences" list everything, grouped, in plain words.

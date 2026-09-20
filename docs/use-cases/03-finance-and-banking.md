@@ -98,5 +98,5 @@ The person may say any of these. Daylark should answer honestly, then offer the 
 | FN-090 | iherb is health / put whole foods under groceries | Learn the category; applies to new records | ✅ |
 | FN-091 | amzn means amazon | Learn an alias | ✅ |
 | FN-092 | why is starbucks under shopping | Explain the mapping; offer to change it | ◐ |
-| FN-093 | what categories do you have | The nine categories: restaurants, groceries, transport, shopping, utilities, entertainment, health, housing, other | ✅ |
+| FN-093 | what categories do you have | The ten categories: restaurants, groceries, transport, shopping, utilities, entertainment, software, health, housing, other | ✅ |
 | FN-094 | make a new category for pets | Custom categories are not supported today | ✖ |
