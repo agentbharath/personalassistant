@@ -27,7 +27,7 @@ export async function withPublicQueryCache(query: string, load: () => Promise<st
     recordCache(false);
     return load();
   }
-  const key = `public-search:v4:${createHash("sha256").update(normalizePublicQuery(query)).digest("hex")}`;
+  const key = `public-search:v5:${createHash("sha256").update(normalizePublicQuery(query)).digest("hex")}`;
   try {
     const cached = await getRedis()?.get<string>(key);
     if (cached) {
