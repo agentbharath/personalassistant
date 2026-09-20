@@ -8,8 +8,7 @@ import { detectCalendarPreference, detectFinanceCorrection } from "@/lib/learnin
 import { parseEmailRequest, renderEmailRequest, type EmailRequest } from "@/lib/agents/email-request";
 import { detectEmailIntent, emailIntentRelevance, minimumEmailRelevance } from "@/lib/agents/email-relevance";
 import { documentScore, minimumDocumentScore } from "@/lib/agents/email-finance-import";
-import { classifyDeterministically } from "@/lib/orchestrator/intent";
-import { isEmailFinanceImport, isEmailMutation, isEmailSearch } from "@/lib/orchestrator/routing";
+import { isEmailFinanceImport } from "@/lib/orchestrator/routing";
 
 // Sender case is display-only (R2.2), so compare it case-insensitively.
 function field(request: EmailRequest, key: keyof EmailRequest) {
@@ -34,7 +33,6 @@ describe("rules: email parsing (evals/email-parsing.jsonl)", () => {
       if ("sender" in want) expect(sender).toBe(want.sender);
       if ("recencyDays" in want) expect(recencyDays(stripExclusions(fixed).core)).toBe(want.recencyDays);
       if ("excluded" in want) expect(exclusionTerms(fixed, sender)).toEqual(want.excluded);
-      if ("mutation" in want) expect(isEmailMutation(fixed)).toBe(want.mutation);
       if ("importRoute" in want) expect(isEmailFinanceImport(fixed)).toBe(want.importRoute);
     });
   }

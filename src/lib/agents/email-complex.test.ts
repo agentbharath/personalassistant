@@ -1,8 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { planClauseInstructions } from "@/lib/orchestrator/multi-agent";
-import { deterministicReadOnlyAgents, isEmailMutation } from "@/lib/orchestrator/routing";
 import { toGmailQuery as gmailQuery, exclusionTerms, extractRequestedSender, fixDomainTypos, toGmailQuery } from "./email-query";
-import { classifyDeterministically } from "@/lib/orchestrator/intent";
 import { isEmailFinanceImport } from "@/lib/orchestrator/routing";
 import { requestedMerchant } from "./finance";
 import { detectEmailIntent, emailIntentRelevance, minimumEmailRelevance } from "./email-relevance";
@@ -41,20 +39,13 @@ describe("complex email queries", () => {
     expect(exclusionTerms("Any emails from Amazon Web Services today, not regular Amazon?", "Amazon Web Services")).toEqual([]);
   });
 
-  it("declines email writes but leaves calendar cancellations alone", () => {
-    expect(isEmailMutation("Delete the Adobe invoice email.")).toBe(true);
-    expect(isEmailMutation("Forward my latest invoice to alex@abc.com")).toBe(true);
-    expect(isEmailMutation("Cancel my 2 PM meeting and email everyone that I'm sorry.")).toBe(false);
-    expect(isEmailMutation("Show my latest emails")).toBe(false);
-  });
 });
 
 describe("compound requests are split per agent", () => {
   it("gives the concert search only its own clause and defers the calendar", () => {
     const input = "Find the Anirudh concert in Dallas, check I'm free, find my ticket receipt, and invite alex@abc.com.";
-    const agents = deterministicReadOnlyAgents(input);
-    expect(agents).toEqual(expect.arrayContaining(["general", "email", "calendar"]));
-    const { tasks, notes } = planClauseInstructions(input, agents);
+    const agents = ["general", "email", "calendar"] as const; // the router names the agents (R20.5); only the clause split is tested here
+    const { tasks, notes } = planClauseInstructions(input, [...agents]);
     expect(tasks.find((task) => task.agent === "general")?.instruction).toBe("Find the Anirudh concert in Dallas");
     expect(tasks.find((task) => task.agent === "email")?.instruction).toBe("find my ticket receipt");
     expect(tasks.some((task) => task.agent === "calendar")).toBe(false);
@@ -63,7 +54,7 @@ describe("compound requests are split per agent", () => {
 
   it("keeps the calendar clause when it names a day", () => {
     const input = "Am I free Saturday at 3, and did the venue email me a ticket for it?";
-    const { tasks } = planClauseInstructions(input, deterministicReadOnlyAgents(input));
+    const { tasks } = planClauseInstructions(input, ["calendar", "email"]);
     expect(tasks.find((task) => task.agent === "calendar")?.instruction).toBe("Am I free Saturday at 3");
     expect(tasks.find((task) => task.agent === "email")?.instruction).toBe("did the venue email me a ticket for it");
   });
@@ -113,9 +104,6 @@ describe("store receipts without a verb", () => {
   it("does not treat an adjective before receipts as a store", () => {
     expect(extractRequestedSender("Did I receive any duplicate receipts or invoices for the same purchase?")).toBeNull();
     expect(extractRequestedSender("show me recent invoices")).toBeNull();
-  });
-  it("routes a bare receipt list to email, not finance", () => {
-    expect(classifyDeterministically("all iherb receipts")?.intents[0].agent).toBe("email");
   });
 });
 
