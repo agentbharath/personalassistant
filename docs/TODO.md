@@ -37,6 +37,8 @@ Read `docs/use-cases/README.md` first. It holds 436 use cases, the schema propos
 - [ ] The router's redirect replies and pivots are read by dispatch, but a pivot's follow-up (the search, the calendar look) only happens when the person says yes; that loop is verified for one example. Add more follow-up cases as redirects grow.
 - [ ] Remove the rule-based fallback and the remaining rule-based interpretation (R20.5): the email interpreter overrides, calendar date parsing, and the rule chain in `run.ts`.
 - [ ] (Superseded: verify router v6. v7 replaces it.)
+- [x] **Email interpreter email-v8 verified live: 127 of 128 (2026-09-20)**, final full run, measured $0.37. **No more full evals** (owner decision).
+- [ ] One interpreter miss to fix later, in a single-case re-run you approve first (about half a cent): `follow-up: state-please-import-those`, "please import those" with several listed results read as `import`, expected `import_all`. Low severity: the approval card shows what would be imported before anything is saved.
 - [ ] Convert the email interpreter and email turn to model-filled fields (R20.4), running live evals incrementally.
 - [ ] Turn bad-answer ratings into eval cases: `npm run feedback:export`, then write the expected behaviour for each row.
 
