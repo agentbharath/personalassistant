@@ -37,7 +37,7 @@ async function revokeGoogleAccess(userId: string) {
  */
 export async function deleteAccount(userId: string) {
   await revokeGoogleAccess(userId);
-  for (const table of ["approvals", "workflow_checkpoints", "message_feedback", "conversation_messages", "conversations"]) await remove(table, userId);
+  for (const table of ["approvals", "workflow_checkpoints", "message_feedback", "email_drafts", "conversation_messages", "conversations"]) await remove(table, userId);
   await deleteSpendingData(userId);
   for (const table of ["user_learnings", "oauth_connections", "query_runs", "model_usage_events", "model_usage_daily"]) await remove(table, userId);
   const { error } = await createAdminClient().auth.admin.deleteUser(userId);

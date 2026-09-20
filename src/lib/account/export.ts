@@ -30,7 +30,7 @@ async function readAll(table: string, columns: string, userId: string, order: st
  * feedback. Sign-in tokens are left out on purpose (they are credentials, not the user's data); only which connections exist is listed.
  */
 export async function buildAccountExport(userId: string, email: string | null) {
-  const [conversations, messages, learnings, transactions, sources, bills, feedback, connections] = await Promise.all([
+  const [conversations, messages, learnings, transactions, sources, bills, feedback, connections, drafts] = await Promise.all([
     readAll("conversations", "id, title_ciphertext, pinned_at, created_at, updated_at", userId, "created_at"),
     readAll("conversation_messages", "conversation_id, role, content_ciphertext, sequence_number, created_at", userId, "created_at"),
     readAll("user_learnings", "kind, value_ciphertext, created_at, updated_at", userId, "created_at"),
@@ -39,6 +39,7 @@ export async function buildAccountExport(userId: string, email: string | null) {
     readAll("finance_bills", "id, merchant_ciphertext, amount_minor, currency, category, statement_date, due_date, status, paid_on, created_at", userId, "statement_date"),
     readAll("message_feedback", "conversation_id, sequence_number, rating, note_ciphertext, created_at", userId, "created_at"),
     readAll("oauth_connections", "capability, scopes, created_at, updated_at", userId, "created_at"),
+    readAll("email_drafts", "versions_ciphertext, discarded_at, created_at", userId, "created_at"),
   ]);
 
   const byConversation = new Map<string, Row[]>();
@@ -88,6 +89,8 @@ export async function buildAccountExport(userId: string, email: string | null) {
       paidOn: bill.paid_on,
     })),
     answerFeedback: feedback.map((item) => ({ conversationId: item.conversation_id, message: item.sequence_number, rating: item.rating, note: plain(item.note_ciphertext) })),
+    // Drafts Daylark saved in Gmail, with the versions of their wording. Discarded drafts keep no wording.
+    emailDrafts: drafts.map((draft) => ({ createdAt: draft.created_at, discardedAt: draft.discarded_at, versions: (() => { const text = plain(draft.versions_ciphertext); try { return text ? JSON.parse(text) : []; } catch { return []; } })() })),
     connections: connections.map((connection) => ({ service: connection.capability, permissions: connection.scopes, connectedAt: connection.created_at })),
   };
 }

@@ -1,7 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { decryptText, encryptText } from "@/lib/security/encryption";
 
-type Capability = "calendar" | "email";
+type Capability = "calendar" | "email" | "email_drafts";
 
 const CAPABILITY_SCOPES: Record<Capability, readonly string[]> = {
   calendar: [
@@ -9,6 +9,11 @@ const CAPABILITY_SCOPES: Record<Capability, readonly string[]> = {
   ],
   email: [
     "https://www.googleapis.com/auth/gmail.readonly",
+  ],
+  // R25: only present when a person grants it (see DRAFTS_ENABLED). Google has no drafts-only permission, so the guard in
+  // tools/email/gmail-drafts.ts, not this scope, is what keeps Daylark from ever sending.
+  email_drafts: [
+    "https://www.googleapis.com/auth/gmail.compose",
   ],
 };
 

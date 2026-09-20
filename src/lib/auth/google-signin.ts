@@ -1,12 +1,16 @@
 import { createClient } from "@/lib/supabase/client";
 import { NEXT_COOKIE, safeNextPath } from "./next-path";
 
+// Email drafting (R25) is off until the owner turns it on, and only then is the extra permission requested.
+const DRAFTS_ON = process.env.NEXT_PUBLIC_DRAFTS_ENABLED === "true";
+
 export const GOOGLE_SCOPES = [
   "openid",
   "email",
   "profile",
   "https://www.googleapis.com/auth/calendar.events",
   "https://www.googleapis.com/auth/gmail.readonly",
+  ...(DRAFTS_ON ? ["https://www.googleapis.com/auth/gmail.compose"] : []),
 ].join(" ");
 
 /** Starts Google sign-in with every permission Daylark needs. Used to sign in and to reconnect. Returns true when it could not start. */
