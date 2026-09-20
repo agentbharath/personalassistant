@@ -8,6 +8,7 @@ import { NO_LEARNINGS, applyLearnings, describeSearch } from "@/lib/learning/lea
 import { createInterpretationCache } from "./email-interpreter-runtime";
 import { applyMerchantLearnings, guessCategory } from "@/lib/learning/preferences";
 import { listBills } from "@/lib/tools/finance/bills";
+import { previewDuplicate } from "@/lib/tools/finance/transactions";
 import { classifyDocument, extractDueDate, matchPayment, type Bill, type DocumentKind } from "./bills";
 import { loadLearnings } from "@/lib/learning/store";
 import { mentionsAll, parseEmailRequest } from "./email-request";
@@ -350,6 +351,15 @@ async function prepareBulkEmailImport(input: string, userId: string, conversatio
       const counts = votes.get(item.candidate.merchant.toLowerCase())!;
       item.candidate.category = [...counts.entries()].sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))[0][0];
     }
+    // What is already recorded is left out of the preview and the total, so the card says what confirming will really add. Bills have their own check.
+    const recorded: typeof items = [];
+    for (const item of [...items]) {
+      if (item.importKind === "bill") continue;
+      const hit = await previewDuplicate(userId, item.candidate, item.source).catch(() => null);
+      if (hit) { recorded.push(item); items.splice(items.indexOf(item), 1); }
+    }
+    const recordedNote = recorded.length ? `Already recorded, so left out (${recorded.length}): ${recorded.map((item) => `${escape(item.candidate.merchant)} ${formatMoney(item.candidate.amountMinor, item.candidate.currency)} on ${item.candidate.occurredOn}`).join("; ")}.` : "";
+    if (!items.length && recorded.length) return `All ${recorded.length} of these ${recorded.length === 1 ? "is" : "are"} already recorded, so there is nothing to import.\n\n${recordedNote}${skippedNote}`;
     if (!items.length) return `I found ${scope} email, but none could be imported. Nothing was imported.${skippedNote}`;
     await createFinanceImportApproval(userId, conversationId, { items: items.map(({ candidate, source, importKind, billId, dueOn }) => ({ candidate, source, ...(importKind === "expense" ? {} : { kind: importKind, billId, dueOn }) })) });
     // R13.1, R5.7: the card is a numbered list of orders, so "import only the second one" has something to point at.
@@ -366,7 +376,7 @@ async function prepareBulkEmailImport(input: string, userId: string, conversatio
     const rows = items.map((item, index) => `${index + 1}. **${item.candidate.merchant}** — ${formatMoney(item.candidate.amountMinor, item.candidate.currency)} · ${item.candidate.occurredOn}${item.usedEmailDate ? " (email date)" : ""} · ${item.candidate.category}${label(item)}  \n   ${escape(item.subject)}`);
     const dates = items.map((item) => item.candidate.occurredOn).sort();
     const searched = `_Searched: ${terms}${days ? "" : ", up to 50 recent matches"}. These orders span ${dates[0]} to ${dates.at(-1)}. Not what you meant? Say “last 90 days”, “I meant …”, or “always search 90 days”._`;
-    const notes = [searched, eligible.length > BULK_LIMIT ? `Showing the ${BULK_LIMIT} most recent of ${eligible.length} orders; ask again after confirming to continue.` : ""].filter(Boolean);
+    const notes = [searched, recordedNote, eligible.length > BULK_LIMIT ? `Showing the ${BULK_LIMIT} most recent of ${eligible.length} orders; ask again after confirming to continue.` : ""].filter(Boolean);
     return `### Review ${items.length} imports\n\n${rows.join("\n")}\n\n${currencies.size === 1 ? `**Counts as spending: ${formatMoney(items.filter((item) => item.importKind !== "bill").reduce((sum, item) => sum + item.candidate.amountMinor, 0), [...currencies][0])}**${items.some((item) => item.importKind === "bill") ? ` (bills aren’t included until paid)` : ""}\n\n` : ""}${notes.join(" ")}${skippedNote}\n\nChoose **Confirm** to import all of them or **Cancel** to leave your finances unchanged. To take just one, say “import only the second one”. Anything already recorded is skipped, and this preview expires in 30 minutes.`;
   } catch (error) {
     if (error instanceof GoogleConnectionRequiredError) return "Gmail read access is not connected. Reconnect Google and approve read-only Gmail access.";

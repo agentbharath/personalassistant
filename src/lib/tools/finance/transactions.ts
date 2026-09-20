@@ -36,9 +36,12 @@ function nearbyDates(date: string) {
   return { from: shift(-3), to: shift(3) };
 }
 
-export async function createTransactionCandidate(userId: string, candidate: TransactionCandidate, source: TransactionSource = { type: "user_input" }) {
+type DuplicateHit = { row: Record<string, unknown>; kind: "source" | "exact" | "probable" };
+const COLUMNS = "id, occurred_on, amount_minor, currency, direction, merchant_ciphertext, category, note_ciphertext";
+
+/** Does this transaction already exist? Looks by the email it came from, by an identical record, then by the same merchant and amount on nearby dates. Reads only. */
+async function findDuplicate(supabase: ReturnType<typeof createAdminClient>, userId: string, candidate: TransactionCandidate, source: TransactionSource): Promise<DuplicateHit | null> {
   assertToolAllowed("finance", "finance.create_candidate");
-  const supabase = createAdminClient();
   if (source.externalRef) {
     const { data: linkedSource, error: sourceLookupError } = await supabase
       .from("finance_transaction_sources")
@@ -49,35 +52,21 @@ export async function createTransactionCandidate(userId: string, candidate: Tran
       .maybeSingle();
     if (sourceLookupError) throw sourceLookupError;
     if (linkedSource) {
-      const { data: linkedTransaction, error: linkedError } = await supabase
-        .from("finance_transactions")
-        .select("id, occurred_on, amount_minor, currency, direction, merchant_ciphertext, category, note_ciphertext")
-        .eq("id", linkedSource.transaction_id)
-        .eq("user_id", userId)
-        .single();
+      const { data: linkedTransaction, error: linkedError } = await supabase.from("finance_transactions").select(COLUMNS).eq("id", linkedSource.transaction_id).eq("user_id", userId).single();
       if (linkedError) throw linkedError;
-      return { transaction: decode(linkedTransaction), duplicate: true, duplicateKind: "source" as const };
+      return { row: linkedTransaction, kind: "source" };
     }
   }
   const currency = candidate.currency.toUpperCase();
-  const dedupeFingerprint = fingerprint({ ...candidate, currency });
-  const { data: exact, error: exactError } = await supabase
-    .from("finance_transactions")
-    .select("id, occurred_on, amount_minor, currency, direction, merchant_ciphertext, category, note_ciphertext")
-    .eq("user_id", userId)
-    .eq("dedupe_fingerprint", dedupeFingerprint)
-    .maybeSingle();
+  const { data: exact, error: exactError } = await supabase.from("finance_transactions").select(COLUMNS).eq("user_id", userId).eq("dedupe_fingerprint", fingerprint({ ...candidate, currency })).maybeSingle();
   if (exactError) throw exactError;
-  if (exact) {
-    await linkExternalSource(supabase, userId, exact.id as string, source);
-    return { transaction: decode(exact), duplicate: true, duplicateKind: "exact" as const };
-  }
+  if (exact) return { row: exact, kind: "exact" };
 
   assertToolAllowed("finance", "finance.find_similar_transactions");
   const dates = nearbyDates(candidate.occurredOn);
   const { data: nearby, error: nearbyError } = await supabase
     .from("finance_transactions")
-    .select("id, occurred_on, amount_minor, currency, direction, merchant_ciphertext, category, note_ciphertext")
+    .select(COLUMNS)
     .eq("user_id", userId)
     .eq("amount_minor", candidate.amountMinor)
     .eq("currency", currency)
@@ -88,11 +77,26 @@ export async function createTransactionCandidate(userId: string, candidate: Tran
   if (nearbyError) throw nearbyError;
   const merchant = normalizeMerchant(candidate.merchant);
   const probable = (nearby ?? []).find((row) => normalizeMerchant(decryptText(row.merchant_ciphertext as string)) === merchant);
-  if (probable) {
-    await linkExternalSource(supabase, userId, probable.id as string, source);
-    return { transaction: decode(probable), duplicate: true, duplicateKind: "probable" as const };
-  }
+  return probable ? { row: probable, kind: "probable" } : null;
+}
 
+/** For a preview: is this already recorded? Changes nothing, so a preview can leave out what confirming would only skip. */
+export async function previewDuplicate(userId: string, candidate: TransactionCandidate, source: TransactionSource = { type: "user_input" }) {
+  const hit = await findDuplicate(createAdminClient(), userId, candidate, source);
+  return hit ? { transaction: decode(hit.row), duplicateKind: hit.kind } : null;
+}
+
+export async function createTransactionCandidate(userId: string, candidate: TransactionCandidate, source: TransactionSource = { type: "user_input" }) {
+  const supabase = createAdminClient();
+  const hit = await findDuplicate(supabase, userId, candidate, source);
+  if (hit) {
+    // The same purchase seen through a new email is linked to the record that already exists, so it is recognised next time.
+    if (hit.kind !== "source") await linkExternalSource(supabase, userId, hit.row.id as string, source);
+    return { transaction: decode(hit.row), duplicate: true, duplicateKind: hit.kind };
+  }
+  const currency = candidate.currency.toUpperCase();
+  const dedupeFingerprint = fingerprint({ ...candidate, currency });
+  const merchant = normalizeMerchant(candidate.merchant);
   const { data: inserted, error: insertError } = await supabase.from("finance_transactions").insert({
     user_id: userId,
     occurred_on: candidate.occurredOn,
