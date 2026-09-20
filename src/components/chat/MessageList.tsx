@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/Button";
 import { windowMessages } from "@/lib/ui/grouping";
 import { AssistantMessage, PendingMessage, UserMessage } from "./Message";
 import styles from "./MessageList.module.css";
-import { followUps, hasApprovalActions, type Message } from "./types";
+import { answerChoices, followUps, hasApprovalActions, type Message } from "./types";
 
 const VISIBLE = 120;
 const STEP = 120;
@@ -33,7 +33,9 @@ export function MessageList({ messages, pending, progress, takingLonger, hasEarl
   const [visible, setVisible] = useState(VISIBLE);
   const { shown, hidden, offset } = windowMessages(messages, visible);
   const lastIndex = messages.length - 1;
-  const suggestions = pending ? [] : followUps(messages[lastIndex]);
+  const choices = pending ? [] : answerChoices(messages[lastIndex]);
+  // A question with choices takes the place of the usual next-step suggestions.
+  const suggestions = pending || choices.length ? [] : followUps(messages[lastIndex]);
 
   // Jump to the current find match, revealing it first if it is in the hidden older part.
   useEffect(() => {
@@ -70,6 +72,9 @@ export function MessageList({ messages, pending, progress, takingLonger, hasEarl
       >{message.content}</AssistantMessage>;
     })}
     {pending && <PendingMessage label={progress} takingLonger={takingLonger} />}
+    {choices.length > 0 && <div className={styles.suggestions} role="group" aria-label="Choose an answer">
+      {choices.map((text) => <button key={text} type="button" className={styles.chip} onClick={() => onFollowUp(text)}>{text}</button>)}
+    </div>}
     {suggestions.length > 0 && <div className={styles.suggestions} role="group" aria-label="Suggested follow-ups">
       {suggestions.map((text) => <button key={text} type="button" className={styles.chip} onClick={() => onFollowUp(text)}>{text}</button>)}
     </div>}

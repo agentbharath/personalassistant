@@ -127,7 +127,9 @@ describe("picking one order from an import card (R13)", () => {
 
   it("asks which one when the reference is ambiguous, and says how many there are when it is out of range", async () => {
     mocks.state = card;
-    expect((await handleEmailConversationTurn("import that one", "u1", "c1", []))?.answer).toMatch(/Say a number from 1 to 4/);
+    const asked = await handleEmailConversationTurn("import that one", "u1", "c1", []);
+    expect(asked?.answer).toMatch(/Say a number from 1 to 4/);
+    expect(asked?.choices).toEqual(["1", "2", "3", "4"]);
     expect((await handleEmailConversationTurn("import the fifth one", "u1", "c1", []))?.answer).toMatch(/only showed 4 results/);
     expect(mocks.importForMessage).not.toHaveBeenCalled();
   });

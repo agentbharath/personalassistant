@@ -109,6 +109,7 @@ export function useChat({ conversationId: initialConversationId, initialMessages
         sequence: typeof body?.sequence === "string" ? body.sequence : undefined,
         agents: Array.isArray(body?.agents) ? (body.agents as string[]) : undefined,
         status: typeof body?.status === "string" ? body.status : undefined,
+        choices: Array.isArray(body?.choices) ? (body.choices as unknown[]).filter((choice): choice is string => typeof choice === "string") : undefined,
       }]);
       setAttachment(null);
     } catch (error) {

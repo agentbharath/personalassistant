@@ -8,6 +8,8 @@ export type Message = {
   /** Which agents produced this answer; only known for answers received in this session. */
   agents?: string[];
   status?: string;
+  /** Tap-to-answer options for a question Daylark just asked. */
+  choices?: string[];
 };
 
 export function hasApprovalActions(content: string) {
@@ -38,4 +40,10 @@ export function followUps(message: Message | undefined) {
   if (!message || message.role !== "assistant" || message.notice || message.status !== "completed") return [];
   const agent = message.agents?.find((name) => FOLLOW_UPS[name]);
   return agent ? FOLLOW_UPS[agent] : [];
+}
+
+/** The options to show under a question Daylark just asked. Only for a live question with a few answers; free text always still works. */
+export function answerChoices(message: Message | undefined) {
+  if (!message || message.role !== "assistant" || message.notice || message.status !== "waiting_for_user") return [];
+  return (message.choices ?? []).filter((choice) => choice.trim().length > 0).slice(0, 8);
 }

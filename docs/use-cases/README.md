@@ -20,7 +20,7 @@ Every domain file is a set of tables:
 
 0. **DO NOT USE RULES TO CLASSIFY THE USER QUERY. USE MODELS (R20.5).** There is no rule-based classification anywhere, and no rule-based fallback. Intent, dates, places, names, and whether a message is in scope are all decided by a model. When no model is available Daylark says it cannot interpret requests right now; it never guesses with patterns. Code only checks that a model's answer is well-formed (R20.6).
 1. **The model reads the request; code does not judge meaning (R19, R20).**
-2. **Email is read-only.** Daylark never sends, deletes, drafts, labels, archives or changes email (R7).
+2. **Email is read-only today; once drafting ships (R25) the only mailbox change is a draft.** Daylark never sends, deletes, archives, labels or moves email. It will be able to create a draft, after approval, for the person to review and send in Gmail. Until R25 ships, drafting requests are declined and the wording can be offered only after the owner enables it.
 3. **Anything that changes data needs approval first**: calendar create, update, delete; saving an expense; marking a bill paid (R7, R17).
 4. **When in doubt, always ask** (R22). One clear question, with the candidates listed when there are few. The one exception is a default the owner already defined for an unstated detail: the rolling 30-day window when no period is given (R11), shown in the search terms.
 5. **Default search window is a rolling 30 days**; "last month" means the last 30 days (R11). Search terms are shown with the answer.
@@ -34,7 +34,7 @@ Every domain file is a set of tables:
 
 | Area | Can do | Cannot do (must decline gracefully) |
 | --- | --- | --- |
-| Email | Search and list by sender, topic, time, unread; show amounts on receipts; read one message's facts (amount, date); import a receipt to spending; find payment and dispute status | Send, reply, forward, draft, delete, archive, label, mark read, unsubscribe, snooze |
+| Email | Search and list by sender, topic, time, unread; show amounts on receipts; read one message's facts (amount, date); import a receipt to spending; find payment and dispute status. **Planned (R25): create a draft reply or new email in Gmail, after approval** | Send, forward, delete, archive, label, mark read, unsubscribe, snooze. (Drafts: not until R25 ships) |
 | Calendar | Read events for a day or range; find free time; create, change attendees, and delete events after approval; check whether an activity fits between commitments, with drive time | Reminders and tasks; find meeting rooms; respond to invitations (accept or decline); read other people's calendars |
 | Money | Totals and breakdowns from records you saved or approved; add an expense by typing it; import from an email or an uploaded receipt (PDF or image); outstanding bills; mark a bill paid; autopay | Read a bank or card account, balances, or live transactions; move money; pay a bill; budgets and alerts; edit or delete a single record |
 | Search | Look up public information (events, showtimes, places, facts) | Book, buy, or reserve anything |

@@ -32,6 +32,8 @@ export interface OrchestratorResult {
   agents: string[];
   confidence: number;
   status: "completed" | "waiting_for_user" | "partially_completed";
+  /** When the answer is a question with a few possible answers, they are offered as tap-to-answer choices (free text is still accepted). */
+  choices?: string[];
 }
 
 type ContextMessage = { role: "user" | "assistant"; content: string };
@@ -137,7 +139,7 @@ export async function runOrchestrator(input: string, userId: string, context: Co
     return { requestId, answer: await prepareCalendarCreate(input, userId, conversationId), agents: /\b(find|look up|concert|show|game|public event)\b/i.test(input) ? ["general", "calendar"] : ["calendar"], confidence: 0.94, status: "waiting_for_user" };
   }
   const emailTurn = await handleEmailConversationTurn(input, userId, conversationId, context);
-  if (emailTurn) return { requestId, answer: emailTurn.answer, agents: emailTurn.agents, confidence: 0.9, status: emailTurn.status };
+  if (emailTurn) return { requestId, answer: emailTurn.answer, agents: emailTurn.agents, confidence: 0.9, status: emailTurn.status, choices: emailTurn.choices };
   if (isEmailFinanceImport(input)) {
     prepareAgentStage(["email", "finance"], "balanced");
     return { requestId, answer: await prepareEmailFinanceImport(input, userId, conversationId), agents: ["email", "finance"], confidence: 0.96, status: "waiting_for_user" };

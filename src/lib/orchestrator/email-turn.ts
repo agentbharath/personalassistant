@@ -13,7 +13,10 @@ import { loadLearnings, saveLearning } from "@/lib/learning/store";
 import { prepareAgentStage } from "@/lib/runtime/query-budget";
 
 type ContextMessage = { role: "user" | "assistant"; content: string };
-export type EmailTurn = { answer: string; agents: Array<"email" | "finance">; status: "completed" | "waiting_for_user" };
+export type EmailTurn = { answer: string; agents: Array<"email" | "finance">; status: "completed" | "waiting_for_user"; choices?: string[] };
+
+/** "1", "2", ... for a short list of results, so the person can tap instead of typing. Longer lists are not offered as buttons. */
+const numberChoices = (count: number) => (count >= 2 && count <= 8 ? Array.from({ length: count }, (_, index) => String(index + 1)) : undefined);
 
 const TIME_ZONE = process.env.DEFAULT_USER_TIMEZONE ?? "America/Los_Angeles";
 const NO_LIST = "I don't have a list in front of me to point at. Want me to search again?";
@@ -25,8 +28,8 @@ function lastAssistantWasEmail(context: ContextMessage[]) {
 
 /** R13: "import the second one", "how much was #3", "show me the latest one". */
 async function handleOrdinal(ref: OrdinalReference, state: EmailState, userId: string, conversationId: string | undefined): Promise<EmailTurn> {
-  if ("ask" in ref) return { answer: `Which one? Say a number from 1 to ${state.results.length}.`, agents: ["email"], status: "waiting_for_user" };
-  if ("outOfRange" in ref) return { answer: `I only showed ${ref.outOfRange} result${ref.outOfRange === 1 ? "" : "s"}. Pick a number between 1 and ${ref.outOfRange}.`, agents: ["email"], status: "waiting_for_user" };
+  if ("ask" in ref) return { answer: `Which one? Say a number from 1 to ${state.results.length}.`, agents: ["email"], status: "waiting_for_user", choices: numberChoices(state.results.length) };
+  if ("outOfRange" in ref) return { answer: `I only showed ${ref.outOfRange} result${ref.outOfRange === 1 ? "" : "s"}. Pick a number between 1 and ${ref.outOfRange}.`, agents: ["email"], status: "waiting_for_user", choices: numberChoices(ref.outOfRange) };
   const target = state.results[ref.index];
   if (ref.action === "import") {
     prepareAgentStage(["email", "finance"], "balanced");

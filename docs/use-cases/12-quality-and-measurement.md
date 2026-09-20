@@ -125,6 +125,8 @@ Decided by the owner on 2026-09-20 (now in `RULES.md` as R20.5, R22, R23, R24):
 
 | # | Decision | Outcome |
 | --- | --- | --- |
+| D-1 | Drafting | **Create a Gmail draft for emails; never send; chat-only wording for other messages** (R25). Needs your confirmation of the permission trade-off below |
+| D-7 | Clickable answer choices for clarifying questions | **Yes.** Built: the plumbing and the first source (ordinal questions); model-provided choices come with the next router version |
 | D-2 | One-time codes and reset links in email | **Leave them alone.** Never shown, quoted or acted on (R24). Stated in the Privacy Policy and Terms |
 | D-3 | Ambiguous asks: default or ask? | **Always ask when in doubt** (R22). The owner-defined 30-day default for an unstated window stays (R22.1) |
 | D-4 | "3 o'clock" with no am or pm | **Ask**, unless the context makes only one reading plausible; the model judges that |
@@ -136,20 +138,22 @@ Still open:
 
 | # | Decision | Why it matters | Recommendation |
 | --- | --- | --- | --- |
-| D-1 | Drafting: see the explanation below | EM-091 | Draft in chat only, for mail and calendar related messages |
 | D-5 | Which languages are required at launch? | IQ-050…054 | English first, then Spanish |
 | D-6 | Store an opt-in interpretation log for measurement, and how long? | `11` §8 | Opt-in, hashed, 90 days, no message text unless the owner opts in |
-| D-7 | Clickable answer choices for clarifying questions (small UI addition) | `11` §10 | Yes: "always ask" makes questions frequent, so one tap beats typing |
 | D-8 | Week starts Monday or Sunday by default? | EM-042, IQ-062 | Follow the user's locale (Sunday in the US) |
 | D-9 | Who labels the real-traffic set? | §4 | The owner, on a small sample, plus a second reviewer |
 | D-10 | Budget for building the 30,000 to 300,000-case measurement set | §4 | Build in stages; each stage needs a cost quote and approval (R21) |
 
-### What "drafting" means (D-1)
+### Drafting (D-1): decided, with a consequence you must accept
 
-It is about **the words in the chat window**, for any message, not the Gmail drafts folder. Daylark is signed in with Gmail's **read-only** permission, so it cannot create a Gmail draft, and it cannot send. If someone asks "help me reply to this" or "write a message to my landlord about the leak", the choices are:
+**Decision (2026-09-20):** for emails, Daylark creates a **draft in the person's Gmail** after showing the wording and getting approval. It never sends. For other messages (a text, another app), the wording appears in the chat only. Recorded as R25.
 
-1. **No drafting.** Daylark declines and offers to summarise the email being replied to.
-2. **Draft in the chat.** Daylark writes the wording in its reply; the person copies it into Gmail or a text and sends it themselves. Nothing is created or sent. Suitable when the message is about the person's mail or calendar.
-3. **Create a real Gmail draft.** Needs a broader Gmail permission (`gmail.compose`), a heavier Google review, and a change to the "we cannot change your email" promise in the Privacy Policy and Terms. Not recommended.
+**The consequence:** Google has no drafts-only permission. To create drafts, Daylark must ask for `gmail.compose`, and to my knowledge that permission technically also lets an app **send** mail. What keeps Daylark from sending is our own code (an allow-list of Gmail calls), not Google. So:
 
-Until decided, behaviour is option 1.
+- The promise changes from "Daylark **cannot** send or change your email" to "Daylark **does not** send anything; it can only save a draft, and only after you approve". That is a weaker guarantee and must be stated plainly.
+- The Privacy Policy, the Terms, the sign-in page and Settings must change in the same release as the feature.
+- Everyone who has already signed in must reconnect Google to grant the new permission.
+- `gmail.compose` is a restricted Google permission like today's read-only one, but the Google review looks harder at apps that can write to a mailbox.
+
+**Nothing has been changed in the app yet.** Please confirm you accept this trade-off before it is built (see `docs/TODO.md`).
+

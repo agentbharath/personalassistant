@@ -111,6 +111,7 @@ type EmailSearchSlots  = { sender?: EntityRef; topic?: Topic; unread?: boolean; 
                            exclude?: EntityRef[]; amountFilter?: { op: ">"|"<"|"between"; min?: number; max?: number; currency?: string } };
 type CalendarCreateSlots = { title: string; where?: string; attendees?: EntityRef[]; allDay?: boolean; reminderMinutes?: number };
 type FinanceQuerySlots = { category?: Category; merchant?: EntityRef; compareTo?: TimeSpec; metric: "total"|"average"|"count"|"top"|"breakdown" };
+type EmailDraftSlots = { kind: "reply" | "reply_all" | "new"; inReplyTo?: MessageRef; to: EntityRef[]; cc?: EntityRef[]; subject?: string; body: string; tone?: "casual" | "formal" };
 type FinanceRecordSlots = { amount: { minor: number; currency: string }; merchant: EntityRef; category?: Category; note?: string; direction: "expense"|"income"|"refund" };
 type RefusalSlots = { reason: "email_write"|"payments"|"bank_data"|"reminders"|"booking"|"messaging"|"other_account"|"other"; offer: string };
 type RedirectSlots = { category: "speculation"|"advice_stakes"|"contested"|"creative_or_academic"|"emotional"|"other_person"|"unrelated";
@@ -122,7 +123,8 @@ type RedirectSlots = { category: "speculation"|"advice_stakes"|"contested"|"crea
 
 | Domain | Operations |
 | --- | --- |
-| email | `email.search`, `email.count`, `email.read`, `email.facts`, `email.import`, `email.status_lookup` |
+| email | `email.search`, `email.count`, `email.read`, `email.facts`, `email.import`, `email.status_lookup`, `email.draft` (write; creates a Gmail draft, R25), `email.edit_draft` (write) |
+| compose | `compose.suggest_message` (read; wording shown in the chat only, no mailbox change) |
 | calendar | `calendar.view`, `calendar.find_free`, `calendar.create`, `calendar.update`, `calendar.delete`, `calendar.attendees`, `calendar.feasibility` |
 | finance | `finance.query`, `finance.record`, `finance.import` |
 | bills | `bills.list`, `bills.mark_paid`, `bills.autopay` |
