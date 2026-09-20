@@ -12,6 +12,9 @@ const mono = Geist_Mono({ subsets: ["latin"], variable: "--font-geist-mono", dis
 export const metadata: Metadata = {
   title: { default: "Daylark", template: "%s · Daylark" },
   description: "A private, durable personal assistant for calendar, email, and finances.",
+  // iPhone: opens full-screen from the home screen with its own name, and the status bar blends with the page.
+  appleWebApp: { capable: true, title: "Daylark", statusBarStyle: "default" },
+  formatDetection: { telephone: false },
 };
 
 export const viewport: Viewport = {
