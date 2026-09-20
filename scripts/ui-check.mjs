@@ -13,8 +13,8 @@ const pages = [
   ["chat-empty", "/design/app"],
   ["chat-thread", "/design/app?view=thread"],
   ["history", "/design/history"],
-  ["today", "/design/today"],
-  ["today-empty", "/design/today?state=connect"],
+  ["perch", "/design/perch"],
+  ["perch-empty", "/design/perch?state=connect"],
   ["privacy", "/privacy"],
   ["design", "/design"],
 ];

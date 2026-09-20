@@ -72,8 +72,8 @@ Done: the saved home location (Settings, encrypted like other preferences, migra
 Sign-in gate moved to `src/proxy.ts` (it was not running), sign-in returns to the page you asked for, download and delete controls in Settings, live Google connection check, error and 404 pages, PNG app icons, `npm run ui:check`.
 
 ## Daily view (R26)
-- [x] `/today`: meetings, bills (overdue, today, 7 days), weekly spending habit; mock preview at `/design/today` in `npm run ui:check`.
+- [x] `/perch` (the daily view, named Perch by the owner 2026-09-21): meetings, bills (overdue, today, 7 days), weekly spending habit; mock preview at `/design/perch` in `npm run ui:check`.
 - [~] Reminders: skipped for now (owner decision 2026-09-21): there are no push notifications, so a reminder could not reach anyone.
-- [x] Chat entry: router op `daily_view` (router-v8), same data as /today.
-- [~] Emailed or pushed digests: not wanted (owner decision 2026-09-21). The Today page is the recap: people come and look, as with a Slack recap.
+- [x] Chat entry: router op `daily_view` (router-v8), same data as /perch.
+- [~] Emailed or pushed digests: not wanted (owner decision 2026-09-21). The Perch page is the recap: people come and look, as with a Slack recap.
 - [ ] Email interpreter v9 live re-verification (148 cases, needs an owner-stated dollar limit and `LIVE_EVAL_MAX_CASES=148`).

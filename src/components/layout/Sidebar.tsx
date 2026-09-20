@@ -12,7 +12,7 @@ import styles from "./Sidebar.module.css";
 
 export type SidebarProps = {
   activeConversationId?: string;
-  activeView?: "chat" | "today" | "history" | "settings";
+  activeView?: "chat" | "perch" | "history" | "settings";
   recent: ConversationSummary[];
   /** Called after any navigation, so the mobile drawer can close. */
   onNavigate?: () => void;
@@ -70,7 +70,7 @@ export function Sidebar({ activeConversationId, activeView = "chat", recent, onN
         </section>}
     </div>
     <div className={styles.foot}>
-      <Link className={`${styles.all} ${activeView === "today" ? styles.allActive : ""}`} href={{ pathname: "/today" }} onClick={onNavigate}><CalendarIcon width={16} height={16} />Today</Link>
+      <Link className={`${styles.all} ${activeView === "perch" ? styles.allActive : ""}`} href={{ pathname: "/perch" }} title="Your day at a glance: meetings, bills and spending" onClick={onNavigate}><CalendarIcon width={16} height={16} />Perch<span className={styles.allHint}>your day</span></Link>
       <Link className={`${styles.all} ${activeView === "history" ? styles.allActive : ""}`} href={{ pathname: "/history" }} onClick={onNavigate}><ClockIcon width={16} height={16} />All history</Link>
       <Link className={`${styles.all} ${activeView === "settings" ? styles.allActive : ""}`} href={{ pathname: "/settings" }} onClick={onNavigate}><SettingsIcon width={16} height={16} />Settings</Link>
       <p className={styles.note}>Private by design. Anything that changes your data needs your approval.</p>

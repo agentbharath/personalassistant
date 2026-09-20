@@ -18,7 +18,7 @@ const problem = (part: Section<unknown>, what: string) => part.state === "needs_
   ? `I can't see ${what} because Google isn't connected. Connect it in Settings.`
   : `I couldn't load ${what} just now. Nothing was changed.`;
 
-/** R26: the daily view as a chat answer. It is the same data as the Today page, written out, and no model reads or writes any of it. */
+/** R26: the daily view as a chat answer. It is the same data as the Perch page, written out, and no model reads or writes any of it. */
 export function renderDailyView(view: DailyView) {
   const lines: string[] = [`### ${Temporal.PlainDate.from(view.today).toLocaleString("en-US", { weekday: "long", month: "long", day: "numeric" })}`];
 

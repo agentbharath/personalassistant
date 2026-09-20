@@ -22,12 +22,12 @@ const MOCK: DailyView = {
   ], biggest: { merchant: "Costco", amountMinor: 11000, occurredOn: "2026-09-16" }, otherCurrencyCount: 0 } },
 };
 
-/** Development-only Today view with mock data. */
-export default async function DesignTodayPage({ searchParams }: { searchParams: Promise<{ state?: string }> }) {
+/** Development-only Perch view with mock data. */
+export default async function DesignPerchPage({ searchParams }: { searchParams: Promise<{ state?: string }> }) {
   if (process.env.NODE_ENV === "production") notFound();
   // ?state=connect shows the not-connected and empty states.
   const view: DailyView = (await searchParams).state === "connect"
     ? { ...MOCK, meetingsToday: { state: "needs_connection" }, meetingsAhead: { state: "needs_connection" }, bills: { state: "ok", value: { overdue: [], dueToday: [], dueThisWeek: [], noDueDate: [] } }, spending: { state: "ok", value: null } }
     : MOCK;
-  return <AppShell title="Today" email="you@example.com" signOutAction={signOut} recent={MOCK_RECENT} activeView="today"><TodayView view={view} /></AppShell>;
+  return <AppShell title="Perch" email="you@example.com" signOutAction={signOut} recent={MOCK_RECENT} activeView="perch"><TodayView view={view} /></AppShell>;
 }

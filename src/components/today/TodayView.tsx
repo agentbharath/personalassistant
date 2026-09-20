@@ -93,9 +93,9 @@ export function TodayView({ view }: { view: DailyView }) {
   const billCount = bills.state === "ok" ? bills.value.overdue.length + bills.value.dueToday.length + bills.value.dueThisWeek.length : 0;
 
   return <div className={styles.page}>
-    <p className={styles.eyebrow}>Today</p>
+    <p className={styles.eyebrow}>Your perch · your day at a glance</p>
     <h1 className={styles.title}>{heading}</h1>
-    <p className={styles.lede}>What’s on, what’s due, and how spending is going. Only you can see this.</p>
+    <p className={styles.lede}>From up here: what’s on, what’s due, and how spending is going. Only you can see this.</p>
     <div className={styles.stack}>
       <Card label="Meetings" tone="blue" icon={<CalendarIcon />} badge={meetings.state === "ok" ? (meetings.value.length ? `${meetings.value.length} today` : "Clear today") : undefined}>
         {meetings.state !== "ok" ? <Unavailable what="your meetings" state={meetings.state} /> : <>
@@ -104,15 +104,15 @@ export function TodayView({ view }: { view: DailyView }) {
         </>}
       </Card>
 
-      <Card label="Bills to pay" tone="amber" icon={<ClockIcon />} badge={billCount ? `${billCount} due` : undefined}>
+      <Card label="Bills to pay" tone="amber" icon={<ClockIcon />} badge={bills.state === "ok" ? (billCount ? `${billCount} due` : "Nothing due") : undefined}>
         {bills.state !== "ok" ? <Unavailable what="your bills" state={bills.state} /> : (() => {
           const { overdue, dueToday, dueThisWeek, noDueDate } = bills.value;
           if (!overdue.length && !dueToday.length && !dueThisWeek.length && !noDueDate.length) return <p className={styles.allClear}><CheckIcon />No unpaid bills. Anything you paid is already counted in your spending.</p>;
           const total = billsTotal([...overdue, ...dueToday, ...dueThisWeek]);
           return <>
             {overdue.length > 0 && <Group label="Overdue" tone="late"><BillRows bills={overdue} today={view.today} kind="overdue" /></Group>}
-            {dueToday.length > 0 && <Group label="Due today"><BillRows bills={dueToday} today={view.today} kind="today" /></Group>}
-            {dueThisWeek.length > 0 && <Group label="Due in the next 7 days"><BillRows bills={dueThisWeek} today={view.today} kind="soon" /></Group>}
+            <Group label="Due today">{dueToday.length ? <BillRows bills={dueToday} today={view.today} kind="today" /> : <p className={styles.quiet}>Nothing due today.</p>}</Group>
+            <Group label="Coming up this week">{dueThisWeek.length ? <BillRows bills={dueThisWeek} today={view.today} kind="soon" /> : <p className={styles.quiet}>Nothing due in the next 7 days.</p>}</Group>
             {noDueDate.length > 0 && <Group label="No due date"><BillRows bills={noDueDate} today={view.today} kind="open" /></Group>}
             <div className={styles.foot}>
               {total && <p className={styles.footRow}><span>To pay in all</span><strong>{money(total.amountMinor, total.currency)}</strong></p>}
