@@ -32,11 +32,12 @@ export function saveLedger(name: string, ledger: Ledger) {
   writeFileSync(path, `${JSON.stringify(ledger, null, 1)}\n`);
 }
 
-// Haiku 4.5 list prices, USD per million tokens. Uncached, so this is a ceiling.
+// Haiku 4.5 list prices, USD per million tokens. This is an ESTIMATE, not a ceiling: the real cost is measured from the API's token counts
+// during a run (see spend.ts), and it can be higher. It counts the prompt, the response schema that is sent with every call, and the reply.
 const RATES = { input: 1, output: 5 };
 
-export function estimateLiveCost(calls: number, systemChars: number, avgMessageChars = 350, outputTokens = 110) {
-  const inputTokens = calls * Math.ceil((systemChars + avgMessageChars) / 4);
+export function estimateLiveCost(calls: number, systemChars: number, avgMessageChars = 350, outputTokens = 300, schemaChars = 0) {
+  const inputTokens = calls * Math.ceil((systemChars + schemaChars + avgMessageChars) / 3.2);
   const output = calls * outputTokens;
   return { calls, inputTokens, outputTokens: output, usd: (inputTokens * RATES.input + output * RATES.output) / 1_000_000 };
 }
@@ -53,7 +54,7 @@ export function planText(name: string, total: number, pending: number, version: 
   const verified = total - pending;
   return [
     `${name} live eval: ${total} cases, ${verified} already verified for ${version}, ${pending} pending.`,
-    pending ? `Estimated cost for the pending cases: about $${usd.toFixed(2)} (uncached, a ceiling).` : "Nothing to run.",
-    mode === "run" ? "Running the pending cases now." : "Nothing was called. To run the pending cases: LIVE_EVAL_CONFIRM=yes npm run eval:live",
+    pending ? `Estimated cost for the pending cases: about $${usd.toFixed(2)} (an estimate, not a ceiling; a run measures the real spend).` : "Nothing to run.",
+    mode === "run" ? "Running the pending cases now." : "Nothing was called. A run needs a stated limit and a small case count: LIVE_EVAL_CONFIRM=yes LIVE_EVAL_MAX_USD=<dollars> npm run eval:live",
   ].join("\n");
 }
