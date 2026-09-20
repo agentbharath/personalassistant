@@ -77,3 +77,6 @@ Sign-in gate moved to `src/proxy.ts` (it was not running), sign-in returns to th
 - [x] Chat entry: router op `daily_view` (router-v8), same data as /perch.
 - [~] Emailed or pushed digests: not wanted (owner decision 2026-09-21). The Perch page is the recap: people come and look, as with a Slack recap.
 - [ ] Email interpreter v9 live re-verification (148 cases, needs an owner-stated dollar limit and `LIVE_EVAL_MAX_CASES=148`).
+- [x] Geocoding API enabled and tested (2026-09-21): a reverse lookup returns an address. The location field in Settings can now be tried with real data.
+- [ ] **Waiting on your reply** (owner's meaning of "reminders", 2026-09-21): a Perch card listing mail that seems to need a reply and has none. Only Gmail's Primary and Updates tabs. Read-only. Steps: find threads in those tabs whose last message is from someone else and has no reply from the owner in a set window (default 14 days); a model reads each message and says whether it needs a reply and why in one line (R20.5, no keyword rules); the answer is cached per message so nothing is judged twice; the owner can dismiss one. Later it links to "Draft a reply" (R25). Needs its own eval cases and a stated dollar limit before any live run. Estimated cost about $0.002 to $0.003 per new email judged.
+
