@@ -16,6 +16,8 @@ const requestSchema = z.object({
   message: z.string().trim().min(1).max(4_000),
   conversationId: z.string().uuid().optional(),
   isRetry: z.boolean().optional().default(false),
+  /** The Confirm or Cancel button on an approval card: a fixed value that needs no interpretation (R20.5). */
+  uiAction: z.enum(["confirm", "cancel"]).optional(),
 }).refine((value) => !value.isRetry || Boolean(value.conversationId), { message: "Retry requires an existing conversation" });
 
 /**
@@ -87,7 +89,7 @@ async function handle(request: Request, onProgress?: (agents: string[]) => void)
     try {
       execution = await Promise.race([
         withRequestContext(queryContext = { requestId, userId, conversationId, deadlineAt, signal: controller.signal, reservedModelCostUsd: 0, actualModelCostUsd: 0 }, async () => {
-          const result = await runOrchestrator(effectiveMessage, userId, context, conversationId, requestId);
+          const result = await runOrchestrator(effectiveMessage, userId, context, conversationId, requestId, parsed.data.uiAction);
           return { result, budget: queryBudgetSnapshot() };
         }),
         new Promise<never>((_, reject) => setTimeout(() => reject(new QueryDeadlineExceededError()), QUERY_TIMEOUT_MS)),

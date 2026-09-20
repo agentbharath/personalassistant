@@ -23,7 +23,7 @@ import type { OrchestratorResult } from "./run";
 
 export type DispatchContext = { requestId: string; input: string; userId: string; context: ContextMessage[]; conversationId?: string };
 
-const NOTHING_PENDING = "There's nothing waiting for your approval right now.";
+export const NOTHING_PENDING = "There's nothing waiting for your approval right now.";
 const FORGET_ALL_PROMPT = "Say “yes, forget everything” to confirm.";
 
 /** The model read what the user taught; this only maps it onto what is stored. */
@@ -41,7 +41,7 @@ function lessonToLearning(lesson: Lesson): Learning {
 }
 
 /** Approve or deny goes to whichever approval is waiting, in the same order as before. The model decided the user meant yes or no. */
-async function answerApproval(approve: boolean, userId: string, conversationId: string | undefined) {
+export async function answerApproval(approve: boolean, userId: string, conversationId: string | undefined) {
   if (!conversationId) return null;
   const word = approve ? "confirm" : "cancel";
   const resolvers: Array<[string, () => Promise<{ answer: string; status: "completed" | "waiting_for_user" } | null>]> = [

@@ -90,7 +90,7 @@ export function useChat({ conversationId: initialConversationId, initialMessages
         status = response.status;
         body = await response.json().catch(() => null);
       } else {
-        ({ status, body } = await streamChat({ message, conversationId, isRetry: retrying }, controller.signal, (agents) => setProgress(progressLabel(agents))));
+        ({ status, body } = await streamChat({ message, conversationId, isRetry: retrying, uiAction: action === "confirm" || action === "cancel" ? action : undefined }, controller.signal, (agents) => setProgress(progressLabel(agents))));
       }
       const failed = status >= 400 || !body || (typeof body.error === "string" && body.answer === undefined);
       const newConversationId = typeof body?.conversationId === "string" ? body.conversationId : undefined;
@@ -177,7 +177,7 @@ export function useChat({ conversationId: initialConversationId, initialMessages
 }
 
 /** Reads the NDJSON stream from /api/chat: progress lines while it works, then one result line. */
-async function streamChat(payload: { message: string; conversationId?: string; isRetry: boolean }, signal: AbortSignal, onProgress: (agents: string[]) => void) {
+async function streamChat(payload: { message: string; conversationId?: string; isRetry: boolean; uiAction?: "confirm" | "cancel" }, signal: AbortSignal, onProgress: (agents: string[]) => void) {
   const response = await fetch("/api/chat", { method: "POST", headers: { "content-type": "application/json", accept: "application/x-ndjson" }, body: JSON.stringify(payload), signal });
   if (!response.body || !response.headers.get("content-type")?.includes("ndjson")) {
     return { status: response.status, body: (await response.json().catch(() => null)) as Record<string, unknown> | null };

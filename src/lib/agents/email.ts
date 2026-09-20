@@ -1,3 +1,4 @@
+import { ONE_TIME_MAIL_NOTE, isOneTimeSecretMail, redactSecrets } from "./email-secrets";
 import { GoogleConnectionRequiredError } from "@/lib/auth/google-credential-broker";
 import { composeNoResultReply, extractTransactionFromEvidence, type NoResultFacts } from "@/lib/model/claude";
 import { saveEmailState, type EmailState } from "@/lib/conversations/email-state";
@@ -119,7 +120,7 @@ export async function searchEmail(rawInput: string, userId: string, options: Ema
     const rows = messages.slice(0, 5).map((message, index) => {
       const date = formatDate(message.date);
       const detail = [message.from, date].filter(Boolean).join(" · ");
-      return `${index + 1}. **${escapeMarkdown(message.subject)}**  \n   ${escapeMarkdown(detail)}${message.snippet ? `  \n   ${escapeMarkdown(message.snippet.slice(0, 180))}` : ""}`;
+      return `${index + 1}. **${escapeMarkdown(message.subject)}**  \n   ${escapeMarkdown(detail)}${message.snippet && !isOneTimeSecretMail(message.subject, message.snippet) ? `  \n   ${escapeMarkdown(redactSecrets(message.snippet.slice(0, 180)))}` : ""}`;
     });
     return outcome([`### Matching email\n\n${rows.join("\n")}`, footer, applied.defaultedWindow ? CORRECTION_HINT : ""].filter(Boolean).join("\n\n"), messages.slice(0, 5).map((message) => ({ id: message.id, subject: message.subject, from: message.from, date: message.date })));
   } catch (error) {
@@ -149,9 +150,12 @@ export async function invoiceFactsForMessage(userId: string, messageId: string, 
 /** R13.2: show one email. Deterministic and read-only. */
 export async function showEmailMessage(userId: string, messageId: string) {
   const email = await readGmailMessage(userId, messageId);
-  const body = email.text.replace(/\[link\]/g, " ").replace(/\s+/g, " ").trim().slice(0, 900);
   const date = formatDate(email.date);
-  return `### ${escapeMarkdown(email.subject)}\n\n**From:** ${escapeMarkdown(email.from)}${date ? `  \n**Date:** ${date}` : ""}\n\n${escapeMarkdown(body || email.snippet)}${email.text.length > 900 ? "…" : ""}`;
+  const heading = `### ${escapeMarkdown(email.subject)}\n\n**From:** ${escapeMarkdown(email.from)}${date ? `  \n**Date:** ${date}` : ""}`;
+  // R24: a one-time code or sign-in email is not shown at all, and anything secret-looking in another email is hidden.
+  if (isOneTimeSecretMail(email.subject, email.snippet || email.text)) return `${heading}\n\n${ONE_TIME_MAIL_NOTE}`;
+  const body = redactSecrets(email.text.replace(/\[link\]/g, " ").replace(/\s+/g, " ").trim()).slice(0, 900);
+  return `${heading}\n\n${escapeMarkdown(body || redactSecrets(email.snippet))}${email.text.length > 900 ? "…" : ""}`;
 }
 
 const ATTACHMENT_TYPES = ["application/pdf", "image/jpeg", "image/png", "image/webp"] as const;
