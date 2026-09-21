@@ -149,10 +149,11 @@ describe("the Gmail search for a bulk import (free)", () => {
   it("keeps the sender and window when they are named, with no subject keywords", () => {
     expect(bulkImportQuery("iHerb", 30)).toBe('{from:"iHerb" "iHerb"} -in:sent -in:chats -in:drafts -in:spam ({subject:confirmed subject:confirmation subject:receipt subject:ereceipt subject:invoice subject:ordered subject:order subject:payment subject:purchase subject:booking subject:reservation subject:paid subject:charged} OR category:purchases OR (-category:promotions -category:social -category:forums {order receipt payment paid total invoice booking reservation purchase charged confirmation confirmed subscription ticket trip ride renewal billed})) newer_than:30d');
   });
-  it("sweeps every sender when none is named, and leaves choosing purchases to the model", () => {
+  it("sweeps every sender when none is named, searches wide, and leaves choosing purchases to the model", () => {
     const query = bulkImportQuery(null, 7);
     expect(query).not.toContain("from:");
-    expect(query).not.toContain("subject:");
+    expect(query).toContain("category:purchases");
+    expect(query).toContain("-category:promotions");
     expect(query.endsWith("newer_than:7d")).toBe(true);
   });
 });
