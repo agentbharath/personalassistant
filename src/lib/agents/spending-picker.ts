@@ -9,8 +9,8 @@ import { reportFailure } from "@/lib/observability/report";
  * purchase is worse than an extra one: the next step reads the email and drops anything that is not a real transaction.
  */
 export const SPENDING_PICKER_VERSION = "spend-pick-v3";
-const BATCH_SIZE = 40;
-const PARALLEL_BATCHES = 3;
+const BATCH_SIZE = 50;
+const PARALLEL_BATCHES = 8;
 
 export type PickableEmail = { id: string; from: string; subject: string; snippet: string; date: string };
 export type PickerDeps = { complete: (params: Anthropic.MessageCreateParamsNonStreaming) => Promise<Anthropic.Message>; cache?: InterpretationCache | null };
@@ -69,11 +69,13 @@ async function pickBatch(batch: PickableEmail[], deps: PickerDeps): Promise<Set<
 export async function pickSpendingEmails(userId: string, emails: PickableEmail[], deps: PickerDeps): Promise<PickResult> {
   const picked = new Set<string>();
   const unknown: PickableEmail[] = [];
-  for (const email of emails) {
-    let remembered: string | undefined;
-    try { const value = await deps.cache?.get(cacheKey(userId, email.id)); remembered = value == null ? undefined : String(value); } catch { remembered = undefined; }
-    if (remembered === "1") picked.add(email.id);
-    else if (remembered !== "0") unknown.push(email);
+  // Remembered answers are looked up all at once: hundreds of one-at-a-time lookups would take longer than the model call.
+  const remembered = await Promise.all(emails.map(async (email) => {
+    try { const value = await deps.cache?.get(cacheKey(userId, email.id)); return value == null ? undefined : String(value); } catch { return undefined; }
+  }));
+  for (const [index, email] of emails.entries()) {
+    if (remembered[index] === "1") picked.add(email.id);
+    else if (remembered[index] !== "0") unknown.push(email);
   }
   const batches: PickableEmail[][] = [];
   for (let i = 0; i < unknown.length; i += BATCH_SIZE) batches.push(unknown.slice(i, i + BATCH_SIZE));
@@ -82,11 +84,11 @@ export async function pickSpendingEmails(userId: string, emails: PickableEmail[]
     const answers = await Promise.all(group.map((batch) => pickBatch(batch, deps)));
     for (const [index, answer] of answers.entries()) {
       if (!answer) return { ids: [], unavailable: true };
-      for (const email of group[index]) {
+      await Promise.all(group[index].map(async (email) => {
         const yes = answer.has(email.id);
         if (yes) picked.add(email.id);
         try { await deps.cache?.set(cacheKey(userId, email.id), yes ? "1" : "0"); } catch { /* optional */ }
-      }
+      }));
     }
   }
   return { ids: emails.filter((email) => picked.has(email.id)).map((email) => email.id), unavailable: false };

@@ -86,16 +86,25 @@ async function handle(request: Request, onProgress?: (agents: string[]) => void)
     const effectiveMessage = resolveRetryMessage(parsed.data.message, parsed.data.isRetry, context);
     const controller = new AbortController();
     const deadlineAt = Date.now() + QUERY_TIMEOUT_MS;
-    const timer = setTimeout(() => controller.abort(), QUERY_TIMEOUT_MS);
+    // One timer that follows the request's deadline, which a long job (an import sweep) may extend while it runs.
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const expiry = new Promise<never>((_, reject) => {
+      const check = () => {
+        const left = (queryContext?.deadlineAt ?? deadlineAt) - Date.now();
+        if (left <= 0) { controller.abort(); reject(new QueryDeadlineExceededError()); return; }
+        timer = setTimeout(check, left);
+      };
+      timer = setTimeout(check, QUERY_TIMEOUT_MS);
+    });
     let execution;
     const progressTimer = onProgress ? setInterval(() => onProgress(queryContext?.activeAgents ?? []), 150) : undefined;
     try {
       execution = await Promise.race([
-        withRequestContext(queryContext = { requestId, userId, conversationId, deadlineAt, signal: controller.signal, reservedModelCostUsd: 0, actualModelCostUsd: 0 }, async () => {
+        withRequestContext(queryContext = { requestId, userId, conversationId, startedAt: queryStartedAt, deadlineAt, signal: controller.signal, reservedModelCostUsd: 0, actualModelCostUsd: 0 }, async () => {
           const result = await runOrchestrator(effectiveMessage, userId, context, conversationId, requestId, parsed.data.uiAction);
           return { result, budget: queryBudgetSnapshot() };
         }),
-        new Promise<never>((_, reject) => setTimeout(() => reject(new QueryDeadlineExceededError()), QUERY_TIMEOUT_MS)),
+        expiry,
       ]);
     } finally {
       clearTimeout(timer);

@@ -10,6 +10,7 @@ import { applyMerchantLearnings, guessCategory } from "@/lib/learning/preference
 import { listBills } from "@/lib/tools/finance/bills";
 import { groundAmount } from "./amount-grounding";
 import { previewDuplicate, recordedEmailRefs } from "@/lib/tools/finance/transactions";
+import { extendRequestBudget } from "@/lib/runtime/request-context";
 import { pickSpendingEmailsForUser } from "./spending-picker-runtime";
 import { classifyDocument, extractDueDate, matchPayment, type Bill, type DocumentKind } from "./bills";
 import { loadLearnings } from "@/lib/learning/store";
@@ -302,11 +303,17 @@ export function resolveBulkCandidate(extracted: ExtractedTransaction, email: Bul
 export function bulkImportQuery(sender: string | null, days: number | null) {
   return [sender ? `{from:"${sender}" "${sender}"}` : "", "-in:sent -in:chats -in:drafts -in:spam ({subject:confirmed subject:confirmation subject:receipt subject:ereceipt subject:invoice subject:ordered subject:order subject:payment subject:purchase subject:booking subject:reservation subject:paid subject:charged} OR category:purchases OR (-category:promotions -category:social -category:forums {order receipt payment paid total invoice booking reservation purchase charged confirmation confirmed subscription ticket trip ride renewal billed}))", days ? `newer_than:${days}d` : ""].filter(Boolean).join(" ");
 }
-const SWEEP_MAIL_LIMIT = 500;
+const SWEEP_MAIL_LIMIT = 400;
+/** A sweep is the one request that legitimately takes longer and costs more, and it stops itself safely before the limit. */
+const SWEEP_TOTAL_MS = 50_000;
+const SWEEP_STOP_READING_AFTER_MS = 40_000;
+const SWEEP_COST_LIMIT_USD = 0.20;
 const READ_CHUNK = 6;
 const MAX_CHUNKS = 6;
 
 async function prepareBulkEmailImport(input: string, userId: string, conversationId: string) {
+  const startedAt = Date.now();
+  extendRequestBudget(SWEEP_TOTAL_MS, SWEEP_COST_LIMIT_USD);
   const parsed = parseEmailRequest(input);
   const learnings = await loadLearnings(userId).catch(() => NO_LEARNINGS);
   const applied = applyLearnings({ ...parsed, action: "import_all", topic: "receipt" }, learnings, { everything: mentionsAll(input) });
@@ -353,7 +360,7 @@ async function prepareBulkEmailImport(input: string, userId: string, conversatio
     // Read a few at a time until enough real purchases are found (emails that turn out not to be transactions do not use up the batch), or the time budget is spent.
     const retried: PromiseSettledResult<BulkOutcome>[] = [];
     let next = 0;
-    for (let chunk = 0; chunk < MAX_CHUNKS && next < eligible.length && retried.filter((result) => result.status === "fulfilled" && result.value.kind === "item").length < BULK_LIMIT; chunk += 1) {
+    for (let chunk = 0; chunk < MAX_CHUNKS && next < eligible.length && Date.now() - startedAt < SWEEP_STOP_READING_AFTER_MS && retried.filter((result) => result.status === "fulfilled" && result.value.kind === "item").length < BULK_LIMIT; chunk += 1) {
       const group = eligible.slice(next, next + READ_CHUNK);
       next += group.length;
       const settled = await Promise.allSettled(group.map(attemptOne));

@@ -66,7 +66,7 @@ export function queryBudgetSnapshot() {
     reservedCostUsd: spent,
     actualCostUsd: getRequestContext()?.actualModelCostUsd ?? 0,
     remainingCostUsd: Math.max(0, limit - spent),
-    remainingMs: remainingRequestMs(20_000),
+    remainingMs: remainingRequestMs(60_000),
   };
 }
 
@@ -90,6 +90,8 @@ function modelRatesPerMillion(model: string) {
 }
 
 function costLimitUsd() {
+  const override = getRequestContext()?.costLimitUsd;
+  if (override) return override;
   const parsed = Number(process.env.QUERY_MAX_COST_USD);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_COST_LIMIT_USD;
 }

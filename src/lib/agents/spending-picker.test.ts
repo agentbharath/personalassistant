@@ -15,17 +15,17 @@ describe("the spending picker (free)", () => {
     expect(result).toEqual({ ids: [], unavailable: true });
   });
 
-  it("sends 40 emails per call and remembers answers so a repeat costs nothing", async () => {
+  it("sends 50 emails per call and remembers answers so a repeat costs nothing", async () => {
     const store = new Map<string, string>();
     const cache = { get: async (key: string) => store.get(key) ?? null, set: async (key: string, value: string) => { store.set(key, value); } };
     let calls = 0;
     const complete = async () => { calls += 1; return reply([1]); };
-    const emails = Array.from({ length: 85 }, (_, index) => mail(String(index)));
+    const emails = Array.from({ length: 105 }, (_, index) => mail(String(index)));
     await pickSpendingEmails("u", emails, { complete, cache });
     expect(calls).toBe(3);
     const again = await pickSpendingEmails("u", emails, { complete, cache });
     expect(calls).toBe(3);
-    expect(again.ids).toEqual(["0", "40", "80"]);
+    expect(again.ids).toEqual(["0", "50", "100"]);
   });
 
   it("numbers emails from 1 and keeps the text short", () => {

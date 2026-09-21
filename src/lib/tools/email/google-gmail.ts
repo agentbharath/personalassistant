@@ -123,7 +123,7 @@ async function mapLimit<T, R>(items: T[], limit: number, task: (item: T) => Prom
 }
 
 type MessageRef = { id: string; threadId: string };
-const METADATA_CONCURRENCY = 6;
+const METADATA_CONCURRENCY = 10;
 
 async function listMessageRefs(accessToken: string, query: string, maxResults: number): Promise<MessageRef[]> {
   const refs: MessageRef[] = [];
