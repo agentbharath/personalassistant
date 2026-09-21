@@ -8,6 +8,7 @@ import { NO_LEARNINGS, applyLearnings, describeSearch } from "@/lib/learning/lea
 import { createInterpretationCache } from "./email-interpreter-runtime";
 import { applyMerchantLearnings, guessCategory } from "@/lib/learning/preferences";
 import { listBills } from "@/lib/tools/finance/bills";
+import { groundAmount } from "./amount-grounding";
 import { previewDuplicate } from "@/lib/tools/finance/transactions";
 import { classifyDocument, extractDueDate, matchPayment, type Bill, type DocumentKind } from "./bills";
 import { loadLearnings } from "@/lib/learning/store";
@@ -66,6 +67,8 @@ async function previewImportFromMessage(userId: string, conversationId: string, 
     data: attachment.data,
     mediaType: attachmentMetadata.mimeType as "application/pdf" | "image/jpeg" | "image/png" | "image/webp",
   } : undefined);
+  // Amounts read from an attached PDF or photo cannot be checked against the email text, so only email text is checked.
+  if (!attachment) extracted.amountMinor = groundAmount(extracted.amountMinor, `${email.subject} ${email.snippet} ${email.text}`, factAmountMinor(email)) ?? 0;
   const missing = [!extracted.amountMinor && "amount", !extracted.merchant && "merchant", !extracted.occurredOn && "date"].filter(Boolean);
   if (!extracted.isTransaction || missing.length) {
     return `I found **${email.subject}**, but I couldn’t reliably identify the ${joinWords(missing.length ? missing as string[] : ["transaction details"])}. Nothing was imported.`;
@@ -162,6 +165,11 @@ function formatMoney(amountMinor: number, currency: string) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency }).format(amountMinor / 100);
 }
 function joinWords(values: string[]) { return values.length < 2 ? values[0] : `${values.slice(0, -1).join(", ")} and ${values.at(-1)}`; }
+/** The total the plain rules find in the email, in cents, or null. */
+function factAmountMinor(email: Parameters<typeof extractInvoiceFacts>[0]) {
+  const facts = extractInvoiceFacts(email);
+  return facts.amount ? Math.round(Number.parseFloat(facts.amount.replace(/[$,]/g, "")) * 100) : null;
+}
 function isSupportedAttachment(mimeType: string) { return ["application/pdf", "image/jpeg", "image/png", "image/webp"].includes(mimeType); }
 
 type BulkOutcome =
@@ -253,7 +261,8 @@ export function orderPlacedOn(email: { subject: string; date: string }) {
 export function resolveBulkCandidate(extracted: ExtractedTransaction, email: BulkEmail): BulkCandidate | { reason: string } {
   const facts = extractInvoiceFacts(email);
   const factAmount = facts.amount ? Math.round(Number.parseFloat(facts.amount.replace(/[$,]/g, "")) * 100) : null;
-  const amountMinor = extracted.amountMinor || factAmount;
+  // The amount must be one the email itself shows as money. A model that took the year for the total is caught here, and the total the plain rules found is used.
+  const amountMinor = groundAmount(extracted.amountMinor, `${email.subject} ${email.snippet} ${email.text}`, factAmount);
   const confirmation = PLACED_SUBJECT.test(email.subject) || /receipt|invoice/i.test(email.subject);
   if (!extracted.isTransaction && !confirmation) return { reason: "not a purchase record" };
   if (!amountMinor) return { reason: `no total found: ${describeMissingTotal(email)}` };

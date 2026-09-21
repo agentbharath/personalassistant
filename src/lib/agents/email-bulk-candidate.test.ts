@@ -6,11 +6,13 @@ import { NO_LEARNINGS } from "@/lib/learning/learnings";
 import { buildEvidence, extractInvoiceFacts } from "./email-invoice";
 
 const email = { subject: "Order Confirmed #946406863", from: "iHerb <noreply@info.iherb.com>", date: "Mon, 3 Aug 2026 10:15:00 -0700", snippet: "Order #946406863", text: "" };
+/** The amount a model reads must be one the email shows as money, so fixtures that use a model amount include it in the text. */
+const withAmount = (base: typeof email, amount: string) => ({ ...base, text: `Order Total: ${amount}` });
 const none = { isTransaction: false, amountMinor: null, currency: null, direction: null, merchant: null, category: null, occurredOn: null, note: null, missingFields: [] } as never;
 
 describe("bulk import candidates (R8.6, R8.7)", () => {
   it("keeps a complete model extraction as is", () => {
-    const result = resolveBulkCandidate({ ...(none as object), isTransaction: true, amountMinor: 2606, currency: "USD", direction: "expense", merchant: "iHerb", category: "shopping", occurredOn: "2026-08-03", note: null } as never, email);
+    const result = resolveBulkCandidate({ ...(none as object), isTransaction: true, amountMinor: 2606, currency: "USD", direction: "expense", merchant: "iHerb", category: "shopping", occurredOn: "2026-08-03", note: null } as never, withAmount(email, "$26.06"));
     expect(result).toMatchObject({ candidate: { amountMinor: 2606, occurredOn: "2026-08-03" }, usedEmailDate: false });
   });
   it("falls back to a labeled body total, the sender name, and the email date", () => {
@@ -69,12 +71,12 @@ describe("an order confirmation is dated when it was placed (R8.7)", () => {
   const confirmation = { subject: "Order Confirmed #946705324", from: "iHerb <noreply@info.iherb.com>", date: "Fri, 14 Aug 2026 09:30:00 -0700", snippet: "", text: "" };
   it("uses the email's date, not an estimated ship date found in the body", () => {
     expect(orderPlacedOn(confirmation)).toBe("2026-08-14");
-    expect(resolveBulkCandidate(model, confirmation)).toMatchObject({ candidate: { occurredOn: "2026-08-14" } });
+    expect(resolveBulkCandidate(model, withAmount(confirmation, "$35.53"))).toMatchObject({ candidate: { occurredOn: "2026-08-14" } });
   });
   it("keeps the document's own date for invoices and statements", () => {
     const invoice = { ...confirmation, subject: "Your Adobe invoice" };
     expect(orderPlacedOn(invoice)).toBeNull();
-    expect(resolveBulkCandidate(model, invoice)).toMatchObject({ candidate: { occurredOn: "2026-08-15" } });
+    expect(resolveBulkCandidate(model, withAmount(invoice, "$35.53"))).toMatchObject({ candidate: { occurredOn: "2026-08-15" } });
   });
 });
 
