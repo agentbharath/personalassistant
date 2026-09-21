@@ -120,6 +120,8 @@ Set your **home location** in Settings first (e.g. Sunnyvale, CA) for the first 
 | F-FI-03b | (when one is already recorded) | It is **left out** of the list and the total, named as "Already recorded, so left out". | ☐ |
 | F-FI-03c | `import only the second one` | New preview with just that one. | ☐ |
 | F-FI-03d | Press **Confirm** | "Saved N of M" (duplicates skipped). Perch reflects it. | ☐ |
+| F-FI-03e | `import all my receipts from the last 30 days` (with a hotel or travel booking in the mailbox) | The booking's **real total** (for example $152.72), never a year such as $2,026.00. If no total can be read, it is skipped with "no total found". | ☐ |
+| F-FI-03f | `import my chase payments` / `import my card payments` (after paying a credit card bill) | The card payment appears marked **card payment, not counted as spending**; the total line says "card payments aren't spending". After Confirm: "Recorded … as a **card payment**". It does **not** change Perch spending. | ☐ |
 | F-FI-04 | Ask to import, then **Cancel** | "Leave your finances unchanged". Nothing saved. | ☐ |
 | F-FI-05 | `put anthropic under software` | Acknowledges it will remember; later records use software. Appears in Settings → What Daylark has learned. | ☐ |
 | F-FI-06 | `how much did I spend this week` | Total for the last 7 days with records counted; not counting unpaid bills. | ☐ |

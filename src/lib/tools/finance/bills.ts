@@ -54,7 +54,8 @@ export async function listBills(userId: string, status?: "outstanding" | "paid")
 }
 
 /** R17.4, R17.5: marking a bill paid creates exactly one expense, dated on the payment, and links it to the bill. */
-export async function settleBill(userId: string, billId: string, paidOn: string, source: TransactionSource = { type: "user_input" }) {
+/** `direction` is "transfer" when the bill is a credit card statement: paying it is not new spending. */
+export async function settleBill(userId: string, billId: string, paidOn: string, source: TransactionSource = { type: "user_input" }, direction: "expense" | "transfer" = "expense") {
   assertToolAllowed("finance", "finance.settle_bill");
   const admin = createAdminClient();
   const found = await admin.from("finance_bills").select(COLUMNS).eq("id", billId).eq("user_id", userId).single();
@@ -62,7 +63,7 @@ export async function settleBill(userId: string, billId: string, paidOn: string,
   const bill = decode(found.data as Row);
   if (bill.status === "paid") return { bill, duplicate: true, transactionId: null as string | null };
   const result = await createTransactionCandidate(userId, {
-    occurredOn: paidOn, amountMinor: bill.amountMinor, currency: bill.currency, direction: "expense", merchant: bill.merchant, category: bill.category, note: "Bill payment",
+    occurredOn: paidOn, amountMinor: bill.amountMinor, currency: bill.currency, direction, merchant: bill.merchant, category: bill.category, note: direction === "transfer" ? "Credit card payment" : "Bill payment",
   }, source);
   const updated = await admin.from("finance_bills").update({ status: "paid", paid_on: paidOn, paid_transaction_id: result.transaction.id, updated_at: new Date().toISOString() }).eq("id", billId).eq("user_id", userId).eq("status", "outstanding").select(COLUMNS).single();
   if (updated.error) throw updated.error;

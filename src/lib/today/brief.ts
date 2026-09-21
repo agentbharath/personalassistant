@@ -28,7 +28,7 @@ export function billsTotal(bills: Bill[]): { amountMinor: number; currency: stri
   return bills.every((bill) => bill.currency === currency) ? { amountMinor: bills.reduce((sum, bill) => sum + bill.amountMinor, 0), currency } : null;
 }
 
-export type SpendingRecord = { occurredOn: string; amountMinor: number; currency: string; direction: "expense" | "income"; merchant: string; category: string };
+export type SpendingRecord = { occurredOn: string; amountMinor: number; currency: string; direction: "expense" | "income" | "transfer"; merchant: string; category: string };
 
 export type WeeklySpending = {
   currency: string;

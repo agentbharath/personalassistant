@@ -10,3 +10,8 @@
 {"id": "order-confirmed", "rule": "R17.1", "subject": "Order Confirmed #947597212", "expect": "purchase"}
 {"id": "receipt", "rule": "R17.1", "subject": "Your receipt from Blue Bottle Coffee", "expect": "purchase"}
 {"id": "doordash", "rule": "R17.1", "subject": "Order Confirmation for Bharath Kumar from Brundavan", "expect": "purchase"}
+{"id": "card-thanks-payment", "rule": "R17.4", "subject": "Thank you for your payment", "expect": "payment"}
+{"id": "payment-posted", "rule": "R17.4", "subject": "Your payment has posted", "expect": "payment"}
+{"id": "card-payment-received", "rule": "R17.4", "subject": "We've received your credit card payment", "expect": "payment"}
+{"id": "payment-was-processed", "rule": "R17.4", "subject": "Your payment of $250.00 was processed", "expect": "payment"}
+{"id": "payment-due-still-bill", "rule": "R17.4", "subject": "Payment due: your card statement", "expect": "bill"}

@@ -37,3 +37,28 @@ describe("an amount must be shown as money in the email (free)", () => {
     expect(none).toMatchObject({ reason: expect.stringMatching(/no total found/) });
   });
 });
+
+import { isCardPayment, isLikelyRequestedDocument } from "./email-finance-import";
+
+describe("credit card bill payments are recorded as transfers (free)", () => {
+  const chase = { id: "c1", threadId: "t", subject: "Thank you for your payment", from: "Chase <no.reply.alerts@chase.com>", date: "Thu, 10 Sep 2026 09:00:00 -0700", receivedAt: Date.parse("2026-09-10T16:00:00Z"), snippet: "", text: "We received your payment of $250.00 on Sep 10, 2026. Thank you.", attachments: [] };
+
+  it("recognises a card issuer's payment notice, and nothing else", () => {
+    expect(isCardPayment(chase)).toBe(true);
+    expect(isCardPayment({ ...chase, subject: "Your statement is ready" })).toBe(false); // a statement is a bill
+    expect(isCardPayment({ ...chase, from: "Comcast <billing@comcast.com>" })).toBe(false); // an ordinary company's payment is an expense
+    expect(isCardPayment({ ...chase, subject: "Your Amazon order confirmation" })).toBe(false);
+  });
+
+  it("is a document worth importing, and is saved as a transfer with the amount shown in the email", () => {
+    expect(isLikelyRequestedDocument(chase, "import all receipts")).toBe(true);
+    const resolved = resolveBulkCandidate({ isTransaction: true, amountMinor: 25000, currency: "USD", direction: "expense", merchant: "Chase", category: "shopping", occurredOn: "2026-09-10", note: null, missingFields: [] } as never, chase as never);
+    expect("candidate" in resolved && resolved.candidate).toMatchObject({ direction: "transfer", amountMinor: 25000, category: "other", merchant: "Chase", note: "Credit card payment" });
+  });
+
+  it("leaves an ordinary company's payment as an expense", () => {
+    const comcast = { ...chase, from: "Comcast <billing@comcast.com>", subject: "We've received your payment", text: "We received your payment of $89.99." };
+    const resolved = resolveBulkCandidate({ isTransaction: true, amountMinor: 8999, currency: "USD", direction: "expense", merchant: "Comcast", category: "utilities", occurredOn: "2026-09-10", note: null, missingFields: [] } as never, comcast as never);
+    expect("candidate" in resolved && resolved.candidate.direction).toBe("expense");
+  });
+});

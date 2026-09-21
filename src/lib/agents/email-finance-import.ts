@@ -78,7 +78,7 @@ async function previewImportFromMessage(userId: string, conversationId: string, 
     occurredOn: orderPlacedOn(email) ?? extracted.occurredOn!,
     amountMinor: extracted.amountMinor!,
     currency: extracted.currency ?? "USD",
-    direction: extracted.direction ?? "expense" as const,
+    direction: isCardPayment(email) ? "transfer" as const : extracted.direction ?? "expense" as const,
     merchant: extracted.merchant!,
     category: extracted.category ?? "other",
     note: extracted.note,
@@ -117,8 +117,14 @@ function rankImportMessages<T extends { subject: string; snippet: string; receiv
   return [...messages].sort((left, right) => documentScore(right, input) - documentScore(left, input) || right.receivedAt - left.receivedAt);
 }
 
-// Paying a card bill is a transfer, not spending, so a card issuer's "we received your payment" is never imported as an expense.
+// Paying a card bill is a transfer, not spending (owner decision 2026-09-21): a card issuer's "we received your payment" is imported as a card payment that
+// settles the card bill and is left out of every spending total. A card issuer's statement is still not imported as spending.
 const CARD_ISSUER = /(?:chase|capitalone|americanexpress|amex|discover|citi|bankofamerica|wellsfargo|synchrony|barclays|usbank|applecard)/i;
+
+/** A credit card issuer's payment notice: the payment on a card bill. It is recorded as a transfer, never as spending. */
+export function isCardPayment(email: { from: string; subject: string }) {
+  return CARD_ISSUER.test(email.from.split("<").at(-1) ?? email.from) && classifyDocument(email.subject) === "payment";
+}
 
 export function documentScore(message: { subject: string; snippet: string; from?: string }, input: string) {
   const subject = message.subject.toLowerCase();
@@ -130,8 +136,10 @@ export function documentScore(message: { subject: string; snippet: string; from?
     if (/\b(statement|invoice)\b/.test(subject)) score += 4;
     if (/\bbill\b/.test(subject)) score += 2;
   }
-  if (/\b(receipts?|orders?|purchases?|invoices?)\b/i.test(input)) {
+  if (/\b(receipts?|orders?|purchases?|invoices?|payments?)\b/i.test(input)) {
     if (/\b(receipt|invoice|order confirmation|payment confirmation)\b/.test(subject) || STRONG_RECEIPT_SUBJECT.test(subject)) score += 10;
+    // A payment notice ("thank you for your payment", "your payment posted") is a payment record, including a credit card bill payment.
+    if (classifyDocument(message.subject) === "payment") score += 10;
     if (/order total|total paid|payment received|amount paid/.test(text)) score += 6;
     // Store mail often says only "Thank you for your <store> order 947597212": an order number is the evidence.
     if (score < 10 && /\border\b/.test(subject) && (/\b(?:order|#)\s*#?\s*(?=[a-z0-9-]*\d)[a-z0-9-]{5,}/.test(text) || /\b(?:thank you for your|your)\b[^.]*\border\b/.test(subject))) score += 8;
@@ -140,7 +148,7 @@ export function documentScore(message: { subject: string; snippet: string; from?
   }
   if (/\d+\s?% off|coupon|\bdeals?\b|\bsale\b|shop now|limited time/.test(subject)) score -= 15;
   // R17.4: a card issuer's statement or payment notice is a transfer or a liability, never spending. The purchases on it are the spending.
-  if (message.from && CARD_ISSUER.test(message.from.split("<").at(-1) ?? message.from) && classifyDocument(message.subject) !== "purchase") score -= 15;
+  if (message.from && CARD_ISSUER.test(message.from.split("<").at(-1) ?? message.from) && classifyDocument(message.subject) === "bill") score -= 15;
   if (/climate credit|bill relief|cap-and-invest|town hall|newsletter|safety|tips|program/.test(subject)) score -= 15;
   return score;
 }
@@ -153,6 +161,7 @@ export function isLikelyRequestedDocument(email: { subject: string; snippet: str
   const subject = email.subject.toLowerCase();
   const content = `${email.subject} ${email.snippet} ${email.text}`.toLowerCase();
   if (/climate credit|bill relief|cap-and-invest|town hall|newsletter|safety|tips|program/.test(subject)) return false;
+  if (classifyDocument(email.subject) === "payment" && !/\b(bills?|statements?)\b/i.test(input)) return true;
   if (/\b(bills?|statements?)\b/i.test(input)) {
     return /energy statement is ready|statement (?:is )?ready|amount due|payment due|total due|due date|billing period|statement date/.test(content);
   }
@@ -187,7 +196,7 @@ function describeFailure(reason: unknown) {
 }
 
 type BulkEmail = { subject: string; from: string; date: string; snippet: string; text: string };
-export type BulkCandidate = { candidate: { occurredOn: string; amountMinor: number; currency: string; direction: "expense" | "income"; merchant: string; category: string; note?: string | null }; usedEmailDate: boolean };
+export type BulkCandidate = { candidate: { occurredOn: string; amountMinor: number; currency: string; direction: "expense" | "income" | "transfer"; merchant: string; category: string; note?: string | null }; usedEmailDate: boolean };
 
 /** Completes a model extraction with deterministic fallbacks, or says exactly why the email can't be imported. */
 const GENERIC_TAIL = /\s+(?:orders?|receipts?|invoices?|billing|payments?|support|team|store|shop|notifications?|alerts?|customer (?:service|care)|no-?reply|do not reply|confirmations?|statements?)$/i;
@@ -274,7 +283,9 @@ export function resolveBulkCandidate(extracted: ExtractedTransaction, email: Bul
   const occurredOn = PLACED_SUBJECT.test(email.subject) && emailDate ? emailDate : extracted.occurredOn || emailDate;
   if (!occurredOn) return { reason: "no date found" };
   return {
-    candidate: { occurredOn, amountMinor, currency: extracted.currency ?? "USD", direction: extracted.direction ?? "expense", merchant, category: extracted.category ?? "other", note: extracted.note },
+    candidate: isCardPayment(email)
+      ? { occurredOn, amountMinor, currency: extracted.currency ?? "USD", direction: "transfer" as const, merchant, category: "other", note: "Credit card payment" }
+      : { occurredOn, amountMinor, currency: extracted.currency ?? "USD", direction: extracted.direction ?? "expense", merchant, category: extracted.category ?? "other", note: extracted.note },
     usedEmailDate: occurredOn === emailDate && (!extracted.occurredOn || occurredOn !== extracted.occurredOn),
   };
 }
@@ -283,7 +294,7 @@ export function resolveBulkCandidate(extracted: ExtractedTransaction, email: Bul
 /** "import all iherb receipts": one review card for several orders, each dedupe-checked again on Confirm. */
 /** The Gmail search for a bulk import: purchase-style subjects, from one sender when named, within the window. */
 export function bulkImportQuery(sender: string | null, days: number | null) {
-  return [sender ? `{from:"${sender}" "${sender}"}` : "", `{subject:confirmed subject:confirmation subject:receipt subject:invoice subject:ordered subject:order${sender ? "" : " subject:payment"}}`, days ? `newer_than:${days}d` : ""].filter(Boolean).join(" ");
+  return [sender ? `{from:"${sender}" "${sender}"}` : "", `{subject:confirmed subject:confirmation subject:receipt subject:invoice subject:ordered subject:order subject:payment}`, days ? `newer_than:${days}d` : ""].filter(Boolean).join(" ");
 }
 
 async function prepareBulkEmailImport(input: string, userId: string, conversationId: string) {
@@ -381,12 +392,12 @@ async function prepareBulkEmailImport(input: string, userId: string, conversatio
     });
     const total = items.reduce((sum, item) => sum + item.candidate.amountMinor, 0);
     const currencies = new Set(items.map((item) => item.candidate.currency));
-    const label = (item: (typeof items)[number]) => item.importKind === "bill" ? ` · **bill**, not counted until paid${item.dueOn ? ` (due ${item.dueOn})` : ""}` : item.importKind === "payment" && item.pays ? ` · pays your ${item.pays.merchant} bill` : "";
+    const label = (item: (typeof items)[number]) => item.importKind === "bill" ? ` · **bill**, not counted until paid${item.dueOn ? ` (due ${item.dueOn})` : ""}` : item.importKind === "payment" && item.pays ? ` · pays your ${item.pays.merchant} bill${item.candidate.direction === "transfer" ? ", not counted as spending" : ""}` : item.candidate.direction === "transfer" ? " · **card payment**, not counted as spending" : "";
     const rows = items.map((item, index) => `${index + 1}. **${item.candidate.merchant}** — ${formatMoney(item.candidate.amountMinor, item.candidate.currency)} · ${item.candidate.occurredOn}${item.usedEmailDate ? " (email date)" : ""} · ${item.candidate.category}${label(item)}  \n   ${escape(item.subject)}`);
     const dates = items.map((item) => item.candidate.occurredOn).sort();
     const searched = `_Searched: ${terms}${days ? "" : ", up to 50 recent matches"}. These orders span ${dates[0]} to ${dates.at(-1)}. Not what you meant? Say “last 90 days”, “I meant …”, or “always search 90 days”._`;
     const notes = [searched, recordedNote, eligible.length > BULK_LIMIT ? `Showing the ${BULK_LIMIT} most recent of ${eligible.length} orders; ask again after confirming to continue.` : ""].filter(Boolean);
-    return `### Review ${items.length} imports\n\n${rows.join("\n")}\n\n${currencies.size === 1 ? `**Counts as spending: ${formatMoney(items.filter((item) => item.importKind !== "bill").reduce((sum, item) => sum + item.candidate.amountMinor, 0), [...currencies][0])}**${items.some((item) => item.importKind === "bill") ? ` (bills aren’t included until paid)` : ""}\n\n` : ""}${notes.join(" ")}${skippedNote}\n\nChoose **Confirm** to import all of them or **Cancel** to leave your finances unchanged. To take just one, say “import only the second one”. Anything already recorded is skipped, and this preview expires in 30 minutes.`;
+    return `### Review ${items.length} imports\n\n${rows.join("\n")}\n\n${currencies.size === 1 ? `**Counts as spending: ${formatMoney(items.filter((item) => item.importKind !== "bill" && item.candidate.direction !== "transfer").reduce((sum, item) => sum + item.candidate.amountMinor, 0), [...currencies][0])}**${[items.some((item) => item.importKind === "bill") && "bills aren’t included until paid", items.some((item) => item.candidate.direction === "transfer") && "card payments aren’t spending"].filter(Boolean).length ? ` (${[items.some((item) => item.importKind === "bill") && "bills aren’t included until paid", items.some((item) => item.candidate.direction === "transfer") && "card payments aren’t spending"].filter(Boolean).join("; ")})` : ""}\n\n` : ""}${notes.join(" ")}${skippedNote}\n\nChoose **Confirm** to import all of them or **Cancel** to leave your finances unchanged. To take just one, say “import only the second one”. Anything already recorded is skipped, and this preview expires in 30 minutes.`;
   } catch (error) {
     if (error instanceof GoogleConnectionRequiredError) return "Gmail read access is not connected. Reconnect Google and approve read-only Gmail access.";
     if (error instanceof GoogleGmailAccessError) return "Gmail could not be read right now. Nothing was imported; please try again shortly.";

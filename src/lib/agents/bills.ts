@@ -14,7 +14,7 @@ export type Bill = {
 };
 
 // R17.1: by subject. Payment words win, because "payment received for your bill" is a payment.
-const PAYMENT_SUBJECT = /\b(?:payment (?:received|confirmation|successful|receipt|was (?:made|processed))|(?:we['’]ve|we have) received your payment|thank you for your payment|autopay (?:payment )?(?:processed|received|successful)|payment (?:made|processed))\b/i;
+const PAYMENT_SUBJECT = /\b(?:payment (?:received|confirmation|successful|receipt|was (?:made|processed))|(?:we['’]ve|we have) received your payment|thank you for your payment|autopay (?:payment )?(?:processed|received|successful)|payment (?:made|processed)|payment (?:has )?(?:posted|cleared)|your (?:credit card |card |bill )?payment (?:of \$?[\d,.]+ )?(?:was|has been) (?:received|posted|processed|successful)|thank you for (?:making )?your (?:credit card |card )?payment|received your (?:credit card |card )?payment)\b/i;
 const BILL_SUBJECT = /\b(?:(?:statement|bill)\s+(?:is\s+)?(?:now\s+)?(?:ready|available|here)|(?:your|new|latest|monthly)(?:\s+\w+){0,2}\s+(?:statement|bill)\b|amount due|payment due|energy statement)/i;
 
 export function classifyDocument(subject: string): DocumentKind {

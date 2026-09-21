@@ -14,7 +14,7 @@ type PendingImport = {
   dueOn?: string | null;
 };
 
-type Outcome = { kind: "expense" | "bill" | "paid"; duplicate: boolean; merchant: string; amountMinor: number; currency: string; date: string; dueOn?: string | null };
+type Outcome = { kind: "expense" | "bill" | "paid"; /** A card payment: recorded, but not spending. */ transfer?: boolean; duplicate: boolean; merchant: string; amountMinor: number; currency: string; date: string; dueOn?: string | null };
 
 async function applyItem(userId: string, item: PendingImport): Promise<Outcome> {
   const { candidate, source } = item;
@@ -24,11 +24,11 @@ async function applyItem(userId: string, item: PendingImport): Promise<Outcome> 
     return { ...base, kind: "bill", duplicate: result.duplicate, dueOn: result.bill.dueDate };
   }
   if (item.kind === "payment" && item.billId) {
-    const result = await settleBill(userId, item.billId, candidate.occurredOn, { type: source.type, externalRef: source.externalRef, payload: source.payload });
-    return { ...base, kind: "paid", duplicate: result.duplicate };
+    const result = await settleBill(userId, item.billId, candidate.occurredOn, { type: source.type, externalRef: source.externalRef, payload: source.payload }, candidate.direction === "transfer" ? "transfer" : "expense");
+    return { ...base, kind: "paid", transfer: candidate.direction === "transfer", duplicate: result.duplicate };
   }
   const result = await createTransactionCandidate(userId, candidate, { type: source.type, externalRef: source.externalRef, payload: source.payload });
-  return { ...base, kind: "expense", duplicate: result.duplicate };
+  return { ...base, kind: "expense", transfer: candidate.direction === "transfer", duplicate: result.duplicate };
 }
 
 const day = (iso: string) => new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }).format(new Date(`${iso}T12:00:00Z`));
@@ -37,6 +37,7 @@ function describeOutcome(outcome: Outcome) {
   const amount = `**${outcome.merchant} — ${formatMoney(outcome.amountMinor, outcome.currency)}**`;
   if (outcome.kind === "bill") return outcome.duplicate ? `${amount} was already recorded as a bill.` : `Recorded ${amount} as a bill${outcome.dueOn ? `, due ${day(outcome.dueOn)}` : ""}. It isn't counted as spending until it's paid.`;
   if (outcome.kind === "paid") return outcome.duplicate ? `${amount} was already marked paid.` : `Marked the ${outcome.merchant} bill paid: ${formatMoney(outcome.amountMinor, outcome.currency)} on ${day(outcome.date)}. It now counts as spending.`;
+  if (outcome.transfer) return outcome.duplicate ? `I didn’t add another copy. ${amount} is already recorded as a card payment.` : `Recorded ${amount} as a **card payment**. It isn't counted as spending, because the purchases on the card are.`;
   return outcome.duplicate ? `I didn’t add another copy. ${amount} is already recorded.` : `Imported ${amount} from the approved email.`;
 }
 

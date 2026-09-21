@@ -7,7 +7,8 @@ export type TransactionCandidate = {
   occurredOn: string;
   amountMinor: number;
   currency: string;
-  direction: "expense" | "income";
+  /** A transfer (a credit card bill payment) settles a card bill but is not spending: totals only count "expense". */
+  direction: "expense" | "income" | "transfer";
   merchant: string;
   category: string;
   note?: string | null;
@@ -148,7 +149,7 @@ function decode(row: Record<string, unknown>): StoredTransaction {
     occurredOn: row.occurred_on as string,
     amountMinor: Number(row.amount_minor),
     currency: row.currency as string,
-    direction: row.direction as "expense" | "income",
+    direction: row.direction as "expense" | "income" | "transfer",
     merchant: decryptText(row.merchant_ciphertext as string),
     category: row.category as string,
     note: row.note_ciphertext ? decryptText(row.note_ciphertext as string) : null,
