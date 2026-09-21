@@ -52,6 +52,9 @@ export function buildInterpreterCases(): InterpreterCase[] {
   for (const message of ["import all my receipts from the last week", "record everything I bought in the past 7 days"]) {
     cases.push({ label: `sweep: ${message}`, input: base(message), expect: { domain: "email", action: "import_all", topic: "receipt", sender: null, days: 7 } });
   }
+  for (const message of ["import all my spendings in the last 30 days", "pull in my purchases from the last 30 days"]) {
+    cases.push({ label: `sweep: ${message}`, input: base(message), expect: { domain: "email", action: "import_all", topic: "receipt", sender: null, days: 30 } });
+  }
   // R13: pointing at a numbered result is read by the model too (R20.5). An out-of-range number is not asked of the model.
   type OrdinalRow = { id: string; input: string; results: Array<{ date: string }>; expect: { action?: "show" | "facts" | "import"; index?: number; ask?: string; outOfRange?: number } | null };
   for (const row of load<OrdinalRow>("email-ordinals.jsonl")) {
