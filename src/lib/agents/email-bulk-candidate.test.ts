@@ -147,7 +147,7 @@ describe("category guess from the merchant (R14.4)", () => {
 
 describe("the Gmail search for a bulk import (free)", () => {
   it("keeps the sender and window when they are named", () => {
-    expect(bulkImportQuery("iHerb", 30)).toBe('{from:"iHerb" "iHerb"} {subject:confirmed subject:confirmation subject:receipt subject:invoice subject:ordered subject:order subject:payment} newer_than:30d');
+    expect(bulkImportQuery("iHerb", 30)).toBe('{from:"iHerb" "iHerb"} {subject:confirmed subject:confirmation subject:receipt subject:ereceipt subject:invoice subject:ordered subject:order subject:payment} newer_than:30d');
   });
   it("sweeps every sender when none is named, looking for purchase and payment subjects in the window", () => {
     const query = bulkImportQuery(null, 7);
