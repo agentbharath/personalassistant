@@ -81,6 +81,22 @@ async function findDuplicate(supabase: ReturnType<typeof createAdminClient>, use
   return probable ? { row: probable, kind: "probable" } : null;
 }
 
+/** Which of these emails already back a recorded transaction. One lookup, reads only, so a sweep can skip them before reading or judging them. */
+export async function recordedEmailRefs(userId: string, refs: string[]): Promise<Set<string>> {
+  if (!refs.length) return new Set();
+  assertToolAllowed("finance", "finance.create_candidate");
+  const byHash = new Map(refs.map((ref) => [piiHmac(ref), ref]));
+  const hashes = [...byHash.keys()];
+  const recorded = new Set<string>();
+  // The list goes in the request URL, so it is asked in small groups.
+  for (let i = 0; i < hashes.length; i += 80) {
+    const { data, error } = await createAdminClient().from("finance_transaction_sources").select("external_ref_hmac").eq("user_id", userId).eq("source_type", "email").in("external_ref_hmac", hashes.slice(i, i + 80));
+    if (error) throw error;
+    for (const row of data ?? []) { const ref = byHash.get(row.external_ref_hmac as string); if (ref) recorded.add(ref); }
+  }
+  return recorded;
+}
+
 /** For a preview: is this already recorded? Changes nothing, so a preview can leave out what confirming would only skip. */
 export async function previewDuplicate(userId: string, candidate: TransactionCandidate, source: TransactionSource = { type: "user_input" }) {
   const hit = await findDuplicate(createAdminClient(), userId, candidate, source);

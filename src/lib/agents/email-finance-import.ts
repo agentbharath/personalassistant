@@ -2,14 +2,15 @@ import { Temporal } from "@js-temporal/polyfill";
 import { GoogleConnectionRequiredError } from "@/lib/auth/google-credential-broker";
 import { extractTransactionFromEvidence, type ExtractedTransaction } from "@/lib/model/claude";
 import { buildEvidence, describeMissingTotal, extractInvoiceFacts } from "./email-invoice";
-import { confirmationRank, deduplicateOrders, senderMatches } from "./email";
+import { deduplicateOrders, senderMatches } from "./email";
 import { saveEmailState } from "@/lib/conversations/email-state";
 import { NO_LEARNINGS, applyLearnings, describeSearch } from "@/lib/learning/learnings";
 import { createInterpretationCache } from "./email-interpreter-runtime";
 import { applyMerchantLearnings, guessCategory } from "@/lib/learning/preferences";
 import { listBills } from "@/lib/tools/finance/bills";
 import { groundAmount } from "./amount-grounding";
-import { previewDuplicate } from "@/lib/tools/finance/transactions";
+import { previewDuplicate, recordedEmailRefs } from "@/lib/tools/finance/transactions";
+import { pickSpendingEmailsForUser } from "./spending-picker-runtime";
 import { classifyDocument, extractDueDate, matchPayment, type Bill, type DocumentKind } from "./bills";
 import { loadLearnings } from "@/lib/learning/store";
 import { mentionsAll, parseEmailRequest } from "./email-request";
@@ -187,7 +188,7 @@ type BulkOutcome =
   | { kind: "item"; candidate: BulkCandidate["candidate"]; source: { type: "email"; externalRef: string; payload: string }; subject: string; usedEmailDate: boolean; documentKind: DocumentKind; dueOn: string | null; importKind: ImportKind["kind"]; billId?: string; pays?: Bill }
   | { kind: "skipped"; subject: string; reason: string };
 
-const BULK_LIMIT = 12;
+const BULK_LIMIT = 15;
 
 function describeFailure(reason: unknown) {
   const name = reason instanceof Error ? reason.name : "";
@@ -294,10 +295,16 @@ export function resolveBulkCandidate(extracted: ExtractedTransaction, email: Bul
 
 
 /** "import all iherb receipts": one review card for several orders, each dedupe-checked again on Confirm. */
-/** The Gmail search for a bulk import: purchase-style subjects, from one sender when named, within the window. */
+/**
+ * The Gmail search for a bulk import: everything in the window, from one sender when named. Which of these mails record spending is decided by a
+ * model (spending-picker), not by subject words, so no store's wording can be missed by the search itself.
+ */
 export function bulkImportQuery(sender: string | null, days: number | null) {
-  return [sender ? `{from:"${sender}" "${sender}"}` : "", `{subject:confirmed subject:confirmation subject:receipt subject:ereceipt subject:invoice subject:ordered subject:order subject:payment}`, days ? `newer_than:${days}d` : ""].filter(Boolean).join(" ");
+  return [sender ? `{from:"${sender}" "${sender}"}` : "", "-in:sent -in:chats -in:drafts -in:spam ({subject:confirmed subject:confirmation subject:receipt subject:ereceipt subject:invoice subject:ordered subject:order subject:payment subject:purchase subject:booking subject:reservation subject:paid subject:charged} OR category:purchases OR (-category:promotions -category:social -category:forums {order receipt payment paid total invoice booking reservation purchase charged confirmation confirmed subscription ticket trip ride renewal billed}))", days ? `newer_than:${days}d` : ""].filter(Boolean).join(" ");
 }
+const SWEEP_MAIL_LIMIT = 500;
+const READ_CHUNK = 6;
+const MAX_CHUNKS = 6;
 
 async function prepareBulkEmailImport(input: string, userId: string, conversationId: string) {
   const parsed = parseEmailRequest(input);
@@ -314,19 +321,21 @@ async function prepareBulkEmailImport(input: string, userId: string, conversatio
   try {
     // Target confirmation-style subjects and look wider than the default 20 hits, so promo and shipping mail can't crowd out older orders.
     const safe = sender?.replaceAll('"', "") ?? "";
-    const found = await searchGmail(userId, bulkImportQuery(sender ? safe : null, days), sender ? 50 : 80);
-    const eligible = deduplicateOrders(found
-      .filter((message) => !sender || senderMatches(message.from, sender))
-      .filter((message) => (emailIntentRelevance(message, "receipt") >= minimumEmailRelevance("receipt") || isCardPayment(message)) && documentScore(message, input) >= minimumDocumentScore(input))
-      .sort((left, right) => confirmationRank(right) - confirmationRank(left) || right.receivedAt - left.receivedAt));
+    const found = await searchGmail(userId, bulkImportQuery(sender ? safe : null, days ?? 90), SWEEP_MAIL_LIMIT);
+    // Mail already recorded is dropped first (one lookup), so a follow-up run moves on to what is left instead of re-reading the same emails.
+    const recordedRefs = await recordedEmailRefs(userId, found.map((message) => message.id)).catch(() => new Set<string>());
+    const fresh = found.filter((message) => !recordedRefs.has(message.id) && (!sender || senderMatches(message.from, sender)));
+    const pick = await pickSpendingEmailsForUser(userId, fresh.map((message) => ({ id: message.id, from: message.from, subject: message.subject, snippet: message.snippet, date: message.date })));
+    if (pick.unavailable) return "I can't tell which of your emails are purchases right now (the AI model isn't available), so I haven't imported anything. Please try again in a bit.";
+    const chosen = new Set(pick.ids);
+    const eligible = deduplicateOrders(fresh.filter((message) => chosen.has(message.id)).sort((left, right) => right.receivedAt - left.receivedAt));
     if (!eligible.length) {
       return `No ${scope} receipts to import${days ? ` in the last ${days} days${applied.defaultedWindow ? " (that's my default window)" : ""}` : ""}. Nothing was imported.\n\nWant me to look further back? Try “last 90 days”, or “always search 90 days” and I’ll remember.\n\n_Searched: ${terms}._`;
     }
     const today = Temporal.Now.zonedDateTimeISO(TIME_ZONE).toPlainDate().toString();
-    const batch = eligible.slice(0, BULK_LIMIT);
+    const batch: typeof eligible = [];
     const attemptOne = async (message: (typeof batch)[number]): Promise<BulkOutcome> => {
       const email = await readGmailMessage(userId, message.id);
-      if (!isLikelyRequestedDocument(email, input)) return { kind: "skipped", subject: email.subject, reason: "not a purchase record" };
       const evidence = buildEvidence(email);
       const resolved = resolveBulkCandidate(await extractForEmail(userId, email, evidence, today), email);
       if ("reason" in resolved) return { kind: "skipped", subject: email.subject, reason: resolved.reason };
@@ -341,12 +350,20 @@ async function prepareBulkEmailImport(input: string, userId: string, conversatio
         importKind: "expense" as const,
       };
     };
-    const settled = await Promise.allSettled(batch.map(attemptOne));
-    // A failure is usually transient (the request's time or cost limit, a slow model call), so each failed email gets one more try, one at a time.
+    // Read a few at a time until enough real purchases are found (emails that turn out not to be transactions do not use up the batch), or the time budget is spent.
     const retried: PromiseSettledResult<BulkOutcome>[] = [];
-    for (const [index, result] of settled.entries()) {
-      retried.push(result.status === "fulfilled" ? result : (await Promise.allSettled([attemptOne(batch[index])]))[0]);
+    let next = 0;
+    for (let chunk = 0; chunk < MAX_CHUNKS && next < eligible.length && retried.filter((result) => result.status === "fulfilled" && result.value.kind === "item").length < BULK_LIMIT; chunk += 1) {
+      const group = eligible.slice(next, next + READ_CHUNK);
+      next += group.length;
+      const settled = await Promise.allSettled(group.map(attemptOne));
+      // A failure is usually transient (the request's time or cost limit, a slow model call), so each failed email gets one more try, one at a time.
+      for (const [index, result] of settled.entries()) {
+        batch.push(group[index]);
+        retried.push(result.status === "fulfilled" ? result : (await Promise.allSettled([attemptOne(group[index])]))[0]);
+      }
     }
+    const unread = eligible.length - next;
     const items = retried.flatMap((result) => result.status === "fulfilled" && result.value.kind === "item" ? [result.value] : []);
     const skipped = retried.flatMap((result, index) => result.status === "fulfilled" && result.value.kind === "skipped"
       ? [{ subject: result.value.subject, reason: result.value.reason }]
@@ -398,7 +415,7 @@ async function prepareBulkEmailImport(input: string, userId: string, conversatio
     const rows = items.map((item, index) => `${index + 1}. **${item.candidate.merchant}** — ${formatMoney(item.candidate.amountMinor, item.candidate.currency)} · ${item.candidate.occurredOn}${item.usedEmailDate ? " (email date)" : ""} · ${item.candidate.category}${label(item)}  \n   ${escape(item.subject)}`);
     const dates = items.map((item) => item.candidate.occurredOn).sort();
     const searched = `_Searched: ${terms}${days ? "" : ", up to 50 recent matches"}. These orders span ${dates[0]} to ${dates.at(-1)}. Not what you meant? Say “last 90 days”, “I meant …”, or “always search 90 days”._`;
-    const notes = [searched, recordedNote, eligible.length > BULK_LIMIT ? `Showing the ${BULK_LIMIT} most recent of ${eligible.length} orders; ask again after confirming to continue.` : ""].filter(Boolean);
+    const notes = [searched, recordedNote, unread > 0 ? `${unread} more email${unread === 1 ? "" : "s"} that look like purchases weren’t read yet; ask again after confirming to continue.` : ""].filter(Boolean);
     return `### Review ${items.length} imports\n\n${rows.join("\n")}\n\n${currencies.size === 1 ? `**Counts as spending: ${formatMoney(items.filter((item) => item.importKind !== "bill" && item.candidate.direction !== "transfer").reduce((sum, item) => sum + item.candidate.amountMinor, 0), [...currencies][0])}**${[items.some((item) => item.importKind === "bill") && "bills aren’t included until paid", items.some((item) => item.candidate.direction === "transfer") && "card payments aren’t spending"].filter(Boolean).length ? ` (${[items.some((item) => item.importKind === "bill") && "bills aren’t included until paid", items.some((item) => item.candidate.direction === "transfer") && "card payments aren’t spending"].filter(Boolean).join("; ")})` : ""}\n\n` : ""}${notes.join(" ")}${skippedNote}\n\nChoose **Confirm** to import all of them or **Cancel** to leave your finances unchanged. To take just one, say “import only the second one”. Anything already recorded is skipped, and this preview expires in 30 minutes.`;
   } catch (error) {
     if (error instanceof GoogleConnectionRequiredError) return "Gmail read access is not connected. Reconnect Google and approve read-only Gmail access.";

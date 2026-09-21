@@ -126,10 +126,16 @@ type MessageRef = { id: string; threadId: string };
 const METADATA_CONCURRENCY = 6;
 
 async function listMessageRefs(accessToken: string, query: string, maxResults: number): Promise<MessageRef[]> {
-  const listUrl = new URL("https://gmail.googleapis.com/gmail/v1/users/me/messages");
-  listUrl.search = new URLSearchParams({ q: query, maxResults: String(maxResults) }).toString();
-  const listResponse = await gmailFetch(listUrl, accessToken);
-  return ((await listResponse.json()) as { messages?: MessageRef[] }).messages ?? [];
+  const refs: MessageRef[] = [];
+  let pageToken: string | undefined;
+  do {
+    const listUrl = new URL("https://gmail.googleapis.com/gmail/v1/users/me/messages");
+    listUrl.search = new URLSearchParams({ q: query, maxResults: String(Math.min(500, maxResults - refs.length)), ...(pageToken ? { pageToken } : {}) }).toString();
+    const body = (await (await gmailFetch(listUrl, accessToken)).json()) as { messages?: MessageRef[]; nextPageToken?: string };
+    refs.push(...(body.messages ?? []));
+    pageToken = body.nextPageToken;
+  } while (pageToken && refs.length < maxResults);
+  return refs.slice(0, maxResults);
 }
 
 /** Fetches each message's headers, a few at a time. A message that fails is left out; only if every one fails is the whole search an error. */
