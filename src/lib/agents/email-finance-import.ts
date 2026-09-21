@@ -165,7 +165,7 @@ export function isLikelyRequestedDocument(email: { subject: string; snippet: str
   if (/\b(bills?|statements?)\b/i.test(input)) {
     return /energy statement is ready|statement (?:is )?ready|amount due|payment due|total due|due date|billing period|statement date/.test(content);
   }
-  if (/receipt|invoice|order total|order summary|grand total|total paid|payment received|amount paid|order confirmation/.test(content)) return true;
+  if (/receipt|invoice|order total|order summary|grand total|total paid|payment received|amount paid|order confirmation|booking confirm|reservation confirm|total price/.test(content)) return true;
   // A store order email with an order number and a dollar amount is a purchase record even without the word "receipt".
   return /\border\b/.test(content) && /\$\s?\d[\d,]*\.\d{2}/.test(content);
 }
@@ -185,7 +185,7 @@ type BulkOutcome =
   | { kind: "item"; candidate: BulkCandidate["candidate"]; source: { type: "email"; externalRef: string; payload: string }; subject: string; usedEmailDate: boolean; documentKind: DocumentKind; dueOn: string | null; importKind: ImportKind["kind"]; billId?: string; pays?: Bill }
   | { kind: "skipped"; subject: string; reason: string };
 
-const BULK_LIMIT = 5;
+const BULK_LIMIT = 8;
 
 function describeFailure(reason: unknown) {
   const name = reason instanceof Error ? reason.name : "";
@@ -315,7 +315,7 @@ async function prepareBulkEmailImport(input: string, userId: string, conversatio
     const found = await searchGmail(userId, bulkImportQuery(sender ? safe : null, days), sender ? 50 : 80);
     const eligible = deduplicateOrders(found
       .filter((message) => !sender || senderMatches(message.from, sender))
-      .filter((message) => emailIntentRelevance(message, "receipt") >= minimumEmailRelevance("receipt") && documentScore(message, input) >= minimumDocumentScore(input))
+      .filter((message) => (emailIntentRelevance(message, "receipt") >= minimumEmailRelevance("receipt") || isCardPayment(message)) && documentScore(message, input) >= minimumDocumentScore(input))
       .sort((left, right) => confirmationRank(right) - confirmationRank(left) || right.receivedAt - left.receivedAt));
     if (!eligible.length) {
       return `No ${scope} receipts to import${days ? ` in the last ${days} days${applied.defaultedWindow ? " (that's my default window)" : ""}` : ""}. Nothing was imported.\n\nWant me to look further back? Try “last 90 days”, or “always search 90 days” and I’ll remember.\n\n_Searched: ${terms}._`;

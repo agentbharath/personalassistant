@@ -15,3 +15,6 @@
 {"id": "card-payment-received", "rule": "R17.4", "subject": "We've received your credit card payment", "expect": "payment"}
 {"id": "payment-was-processed", "rule": "R17.4", "subject": "Your payment of $250.00 was processed", "expect": "payment"}
 {"id": "payment-due-still-bill", "rule": "R17.4", "subject": "Payment due: your card statement", "expect": "bill"}
+{"id": "issuer-name-payment-received", "rule": "R17.9", "subject": "Your Discover Card payment was received", "expect": "payment"}
+{"id": "capital-one-payment-received", "rule": "R17.9", "subject": "Your Capital One payment has been received", "expect": "payment"}
+{"id": "payment-confirmed", "rule": "R17.9", "subject": "Payment confirmed", "expect": "payment"}

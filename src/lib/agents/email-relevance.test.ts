@@ -32,4 +32,9 @@ describe("receipt relevance requires transaction evidence", () => {
     const receipt = { subject: "Your receipt from Adobe", from: "billing@adobe.com", snippet: "Payment received $54.99" };
     expect(emailIntentRelevance(receipt, "receipt")).toBeGreaterThanOrEqual(minimumEmailRelevance("receipt"));
   });
+  it("accepts a booking confirmation as a purchase record", () => {
+    for (const subject of ["Your booking in San Francisco is confirmed", "Booking.com: Your reservation is confirmed"]) {
+      expect(emailIntentRelevance({ subject, from: "Booking.com <noreply@mail.booking.com>", snippet: "Total price US$412.00" }, "receipt")).toBeGreaterThanOrEqual(minimumEmailRelevance("receipt"));
+    }
+  });
 });

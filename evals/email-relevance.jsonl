@@ -19,7 +19,7 @@
 {"id": "monthly-account-statement", "rule": "R4.1", "message": {"subject": "Your monthly account statement is here, Bharath Kumar", "from": "Experian <no-reply@e.experian.com>", "snippet": ""}, "accept": true}
 {"id": "card-payment-received-listed", "rule": "R4.1", "message": {"subject": "We've received your payment", "from": "Capital One <capitalone@notification.capitalone.com>", "snippet": ""}, "accept": true}
 {"id": "approval-confirmed-is-not-a-receipt", "rule": "R4.1", "message": {"subject": "Xfinity Approval Confirmed", "from": "Xfinity <no-reply@xfinity.com>", "snippet": ""}, "accept": false}
-{"id": "booking-confirmed-is-a-reservation", "rule": "R4.1", "message": {"subject": "Thanks! Your booking is confirmed at Hotel Aurora", "from": "Booking.com <noreply@booking.com>", "snippet": ""}, "accept": false}
+{"id": "booking-confirmed-is-a-purchase-record", "rule": "R4.1", "message": {"subject": "Thanks! Your booking is confirmed at Hotel Aurora", "from": "Booking.com <noreply@booking.com>", "snippet": ""}, "accept": true}
 {"id": "account-confirmation-instructions", "rule": "R4.1", "message": {"subject": "Confirmation instructions", "from": "AppSignal <support@appsignal.com>", "snippet": ""}, "accept": false}
 {"id": "bill-due-reminder", "rule": "R4.1", "message": {"subject": "Action recommended: Bharath Kumar, your bill is due", "from": "Credit Karma <notifications@creditkarma.com>", "snippet": ""}, "accept": false}
 {"id": "food-delivery-promo", "rule": "R4.3", "message": {"subject": "Snag 40% off your order", "from": "Grubhub <email@a.grubhub.com>", "snippet": ""}, "accept": false}
