@@ -231,7 +231,7 @@ export function deterministicOrderExtraction(email: { subject: string; from: str
 }
 
 const extractionCache = createInterpretationCache();
-const EXTRACTION_VERSION = "extract-v1";
+const EXTRACTION_VERSION = "extract-v2";
 
 /** Deterministic first; otherwise the model, cached per email so the same email is never read twice. */
 async function extractForEmail(userId: string, email: Parameters<typeof deterministicOrderExtraction>[0] & { id: string }, evidence: string, today: string, attachment?: Parameters<typeof extractTransactionFromEvidence>[2]) {
