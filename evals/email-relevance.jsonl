@@ -30,3 +30,4 @@
 {"id": "bill-available", "rule": "R4.1", "message": {"subject": "Your bill is available to view", "from": "Xfinity <no-reply@xfinity.com>", "snippet": ""}, "accept": true}
 {"id": "bill-due-is-a-reminder", "rule": "R4.1", "message": {"subject": "Action recommended: your bill is due", "from": "Credit Karma <notifications@creditkarma.com>", "snippet": ""}, "accept": false}
 {"id": "scheduled-payment-is-future", "rule": "R4.1", "message": {"subject": "Your AutoPay payment is scheduled for September 21", "from": "Capital One <capitalone@notification.capitalone.com>", "snippet": ""}, "accept": false}
+{"id": "rei-ereceipt", "rule": "R4.1", "message": {"subject": "Your REI eReceipt - store purchase", "from": "REI Co-op <rei@notices.rei.com>", "snippet": ""}, "accept": true}

@@ -24,7 +24,7 @@ export function detectEmailIntent(rawInput: string): EmailIntent {
 }
 
 /** Subjects that name a receipt-type document outright. Deliberately not "order", "ticket" or "confirmed" alone. */
-export const STRONG_RECEIPT_SUBJECT = /\b(?:(?:order|purchase|payment|booking) (?:receipt|confirmation)|receipt|invoice|(?:booking|reservation)\b[^.]{0,40}\bconfirmed|(?:booking|reservation) confirmation|payment (?:received|successful)|(?:we['’]ve|we have) received your payment|thank(?:s| you) for your (?:order|purchase|payment)|(?:your|new|latest|monthly)(?: \w+)? statement|statement (?:is )?(?:ready|available|here|now available)|(?:your |new )?bill (?:is )?(?:ready|available|now available)(?: to view)?)\b/i;
+export const STRONG_RECEIPT_SUBJECT = /\b(?:(?:order|purchase|payment|booking) (?:receipt|confirmation)|e-?receipt|receipt|invoice|(?:booking|reservation)\b[^.]{0,40}\bconfirmed|(?:booking|reservation) confirmation|payment (?:received|successful)|(?:we['’]ve|we have) received your payment|thank(?:s| you) for your (?:order|purchase|payment)|(?:your|new|latest|monthly)(?: \w+)? statement|statement (?:is )?(?:ready|available|here|now available)|(?:your |new )?bill (?:is )?(?:ready|available|now available)(?: to view)?)\b/i;
 
 export function emailIntentRelevance(message: { subject: string; from: string; snippet: string }, intent: EmailIntent) {
   if (intent === "recruiter") return recruiterRelevance(message);

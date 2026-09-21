@@ -140,6 +140,8 @@ export function documentScore(message: { subject: string; snippet: string; from?
     if (/\b(receipt|invoice|order confirmation|payment confirmation)\b/.test(subject) || STRONG_RECEIPT_SUBJECT.test(subject)) score += 10;
     // A payment notice ("thank you for your payment", "your payment posted") is a payment record, including a credit card bill payment.
     if (classifyDocument(message.subject) === "payment") score += 10;
+    // Amazon-style "Ordered: <item>" lifecycle subjects are the purchase record.
+    if (/^\W*ordered\b/.test(subject)) score += 8;
     if (/order total|total paid|payment received|amount paid/.test(text)) score += 6;
     // Store mail often says only "Thank you for your <store> order 947597212": an order number is the evidence.
     if (score < 10 && /\border\b/.test(subject) && (/\b(?:order|#)\s*#?\s*(?=[a-z0-9-]*\d)[a-z0-9-]{5,}/.test(text) || /\b(?:thank you for your|your)\b[^.]*\border\b/.test(subject))) score += 8;
@@ -185,7 +187,7 @@ type BulkOutcome =
   | { kind: "item"; candidate: BulkCandidate["candidate"]; source: { type: "email"; externalRef: string; payload: string }; subject: string; usedEmailDate: boolean; documentKind: DocumentKind; dueOn: string | null; importKind: ImportKind["kind"]; billId?: string; pays?: Bill }
   | { kind: "skipped"; subject: string; reason: string };
 
-const BULK_LIMIT = 8;
+const BULK_LIMIT = 12;
 
 function describeFailure(reason: unknown) {
   const name = reason instanceof Error ? reason.name : "";
@@ -294,7 +296,7 @@ export function resolveBulkCandidate(extracted: ExtractedTransaction, email: Bul
 /** "import all iherb receipts": one review card for several orders, each dedupe-checked again on Confirm. */
 /** The Gmail search for a bulk import: purchase-style subjects, from one sender when named, within the window. */
 export function bulkImportQuery(sender: string | null, days: number | null) {
-  return [sender ? `{from:"${sender}" "${sender}"}` : "", `{subject:confirmed subject:confirmation subject:receipt subject:invoice subject:ordered subject:order subject:payment}`, days ? `newer_than:${days}d` : ""].filter(Boolean).join(" ");
+  return [sender ? `{from:"${sender}" "${sender}"}` : "", `{subject:confirmed subject:confirmation subject:receipt subject:ereceipt subject:invoice subject:ordered subject:order subject:payment}`, days ? `newer_than:${days}d` : ""].filter(Boolean).join(" ");
 }
 
 async function prepareBulkEmailImport(input: string, userId: string, conversationId: string) {
