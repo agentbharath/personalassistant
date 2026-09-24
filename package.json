@@ -14,10 +14,10 @@
     "check:migrations": "node scripts/validate-migrations.mjs",
     "ci": "npm run check:secrets && npm run check:migrations && npm run eval && npm test && npm run typecheck && npm run build",
     "secrets:fill": "./scripts/fill-security-secrets.sh",
-    "eval:live": "LIVE_EVAL=run node --env-file=.env.local node_modules/vitest/vitest.mjs run --reporter=verbose src/lib/evals/interpreter-live.test.ts src/lib/evals/router-live.test.ts src/lib/evals/time-live.test.ts src/lib/evals/reply-live.test.ts src/lib/evals/draft-live.test.ts src/lib/evals/spending-pick-live.test.ts",
+    "eval:live": "LIVE_EVAL=run node --env-file=.env.local node_modules/vitest/vitest.mjs run --reporter=verbose src/lib/evals/interpreter-live.test.ts src/lib/evals/router-live.test.ts src/lib/evals/time-live.test.ts src/lib/evals/reply-live.test.ts src/lib/evals/draft-live.test.ts src/lib/evals/spending-pick-live.test.ts src/lib/evals/memory-live.test.ts",
     "feedback:export": "FEEDBACK_EXPORT=run node --env-file=.env.local node_modules/vitest/vitest.mjs run --reporter=verbose src/lib/evals/export-feedback.test.ts",
     "ui:check": "node scripts/ui-check.mjs",
-    "eval:cost": "LIVE_EVAL=plan node --env-file=.env.local node_modules/vitest/vitest.mjs run --reporter=verbose src/lib/evals/interpreter-live.test.ts src/lib/evals/router-live.test.ts src/lib/evals/time-live.test.ts src/lib/evals/reply-live.test.ts src/lib/evals/draft-live.test.ts src/lib/evals/spending-pick-live.test.ts"
+    "eval:cost": "LIVE_EVAL=plan node --env-file=.env.local node_modules/vitest/vitest.mjs run --reporter=verbose src/lib/evals/interpreter-live.test.ts src/lib/evals/router-live.test.ts src/lib/evals/time-live.test.ts src/lib/evals/reply-live.test.ts src/lib/evals/draft-live.test.ts src/lib/evals/spending-pick-live.test.ts src/lib/evals/memory-live.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.126.0",

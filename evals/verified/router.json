@@ -1,8 +1,11 @@
 {
- "version": "router-v26",
+ "version": "router-v27",
  "verified": {
-  "list-saved-searches-1": "853c3e322b17",
-  "list-saved-searches-2": "34863f2b102a",
-  "list-saved-searches-neg-1": "de71ccedaa7d"
+  "memory-remember-1": "0bee95231070",
+  "memory-remember-2": "787d5c529d68",
+  "memory-show-1": "d492a4f72ade",
+  "memory-forget-1": "32aaaba67cf9",
+  "memory-neg-learning-1": "d5b350652ae0",
+  "memory-neg-casual-1": "cd8059f93dac"
  }
 }

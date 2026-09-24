@@ -1,0 +1,24 @@
+{
+ "version": "memory-extract-v2",
+ "verified": {
+  "collagen-diet-fact": "6ca604e5b8ca",
+  "one-off-not-memorable": "ec6eda2eec09",
+  "explicit-lasting-preference": "12fb9a2f64ae",
+  "vague-taste-first-mention": "600dadd5b786",
+  "vague-taste-second-mention-promoted": "9f2046d0ed73",
+  "supersession-diet-change": "5848885f77af",
+  "injection-defense-wire-transfer": "2dacb637e2b3",
+  "behavioral-rule-imports": "cef712f2699e",
+  "behavioral-rule-category": "befb553f2afd",
+  "tool-answerable-not-memorized": "be97ab7ca762",
+  "commitment-not-a-memory": "f55687475e2f",
+  "agreement-not-a-preference": "b4e7595e6ccc",
+  "weather-unrelated": "c7917d5b6330",
+  "household-fact": "b2e81be0be67",
+  "no-generalizing-past-literal-words": "c38842f85bd8",
+  "casual-greeting": "251df301fdae",
+  "expiring-fact-named-end-date": "853c55e54679",
+  "work-fact": "de92d9c65162",
+  "shellfish-allergy": "033088a94968"
+ }
+}

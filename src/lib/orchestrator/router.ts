@@ -8,13 +8,13 @@ import { reportFailure } from "@/lib/observability/report";
 
 /** R19.7, R19.9: bump on any change to the prompt or schema, then pass `npm run eval:live`. */
 // v7: email drafts, redirect instead of refusing (R23), ask when in doubt with tap-to-answer choices (R22), codes and links left alone (R24).
-export const ROUTER_VERSION = "router-v26";
+export const ROUTER_VERSION = "router-v27";
 /** R22: when in doubt, ask. Below this the router's one question is asked and nothing runs. */
 export const ROUTER_CONFIDENCE_THRESHOLD = 0.8;
 
 export const OPERATIONS = [
   "email", "email_draft_history", "general_answer", "dismiss", "email_import_continue", "status_lookup", "finance_spending", "finance_record", "bills_list", "bills_paid", "bills_autopay",
-  "learning_show", "learning_forget", "learning_teach", "calendar_query", "calendar_create", "calendar_delete", "calendar_attendees",
+  "learning_show", "learning_forget", "learning_teach", "memory_show", "memory_forget", "memory_remember", "calendar_query", "calendar_create", "calendar_delete", "calendar_attendees",
   "schedule_feasibility", "daily_view", "web_search", "multi", "email_write_declined", "email_draft", "approve", "deny", "crisis", "unsafe", "casual", "redirect", "unsupported", "clarify",
 ] as const;
 export type Operation = (typeof OPERATIONS)[number];
@@ -68,6 +68,8 @@ export type RouterDecision = {
   redirect?: RedirectPlan | null;
   /** The web search to run, with typos fixed and the person's place in it when they meant "near me". */
   searchQuery?: string | null;
+  /** memory_remember only: the lasting fact, preference or behavioral rule to save, in the person's own words, lightly cleaned. */
+  memoryStatement?: string | null;
   /** general_answer only: the request wants every saved search result listed out ("list all the restaurants you've suggested"), not a
    * discussion of some of them. Code renders this directly from the saved records, so a long list can never be scanned incompletely. */
   listSavedSearches?: boolean;
@@ -101,6 +103,7 @@ const outputSchema = z.object({
   }).nullish(),
   searchQuery: z.string().nullish(),
   listSavedSearches: z.boolean().nullish(),
+  memoryStatement: z.string().nullish(),
   reading: z.string(),
 });
 type ModelOutput = z.infer<typeof outputSchema>;
@@ -110,7 +113,7 @@ const nullableNumber = { anyOf: [{ type: "number" }, { type: "null" }] };
 export const ROUTER_JSON_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["historyQuery", "resolvedInput", "operation", "agents", "sender", "matter", "merchant", "paidOn", "term", "lesson", "confidence", "clarification", "choices", "draft", "redirect", "searchQuery", "listSavedSearches", "reading"],
+  required: ["historyQuery", "resolvedInput", "operation", "agents", "sender", "matter", "merchant", "paidOn", "term", "lesson", "confidence", "clarification", "choices", "draft", "redirect", "searchQuery", "listSavedSearches", "memoryStatement", "reading"],
   properties: {
     historyQuery: { type: "string" },
     resolvedInput: { type: "string" },
@@ -136,6 +139,7 @@ export const ROUTER_JSON_SCHEMA = {
     choices: { type: "array", items: { type: "string" } },
     searchQuery: { type: "string" },
     listSavedSearches: { type: "boolean" },
+    memoryStatement: { type: "string" },
     draft: {
       type: "object",
       additionalProperties: false,
@@ -166,7 +170,7 @@ const NO_DRAFT = { action: "none", kind: "none", to: "", replyTo: "", instructio
 const NO_REDIRECT = { category: "none", reply: "", distress: false, pivot: "none", ask: "" } as const;
 const draftOf = (over: Partial<NonNullable<ModelOutput["draft"]>>): NonNullable<ModelOutput["draft"]> => ({ ...NO_DRAFT, ...over });
 const redirectOf = (over: Partial<NonNullable<ModelOutput["redirect"]>>): NonNullable<ModelOutput["redirect"]> => ({ ...NO_REDIRECT, ...over });
-const blank: Omit<ModelOutput, "operation" | "confidence" | "reading"> = { historyQuery: "", resolvedInput: "", agents: [], sender: null, matter: null, merchant: null, paidOn: null, term: null, lesson: null, clarification: null, choices: [], draft: NO_DRAFT, redirect: NO_REDIRECT, searchQuery: "", listSavedSearches: false };
+const blank: Omit<ModelOutput, "operation" | "confidence" | "reading"> = { historyQuery: "", resolvedInput: "", agents: [], sender: null, matter: null, merchant: null, paidOn: null, term: null, lesson: null, clarification: null, choices: [], draft: NO_DRAFT, redirect: NO_REDIRECT, searchQuery: "", listSavedSearches: false, memoryStatement: "" };
 const lesson = (kind: (typeof LESSON_KINDS)[number], over: Partial<NonNullable<ModelOutput["lesson"]>> = {}): NonNullable<ModelOutput["lesson"]> => ({ kind, topic: null, days: null, minutes: null, merchant: null, category: null, alias: null, canonical: null, ...over });
 const EXAMPLES: Array<[string, ModelOutput]> = [
   ['"all iherb recipts"', { ...blank, operation: "email", confidence: 0.97, reading: "Show iHerb receipts" }],
@@ -187,6 +191,12 @@ const EXAMPLES: Array<[string, ModelOutput]> = [
   ['"iherb is health"', { ...blank, operation: "learning_teach", lesson: lesson("merchant_category", { merchant: "iherb", category: "health" }), confidence: 0.93, reading: "Remember iHerb is health" }],
   ['"always search 90 days for receipts"', { ...blank, operation: "learning_teach", lesson: lesson("default_window", { topic: "receipt", days: 90 }), confidence: 0.95, reading: "Search receipts 90 days back by default" }],
   ['"my meetings are usually half an hour"', { ...blank, operation: "learning_teach", lesson: lesson("calendar_duration", { minutes: 30 }), confidence: 0.9, reading: "Meetings default to 30 minutes" }],
+  ['"remember that I don\'t eat meat except fish and chicken"', { ...blank, operation: "memory_remember", memoryStatement: "Doesn't eat meat except fish and chicken", confidence: 0.97, reading: "A lasting diet fact" }],
+  ['"I\'m allergic to shellfish"', { ...blank, operation: "memory_remember", memoryStatement: "Allergic to shellfish", confidence: 0.96, reading: "A lasting health fact, stated directly" }],
+  ['"always ask before importing transactions"', { ...blank, operation: "memory_remember", memoryStatement: "Always ask before importing transactions", confidence: 0.95, reading: "A behavioral rule for Daylark itself" }],
+  ['"what do you remember about me"', { ...blank, operation: "memory_show", confidence: 0.96, reading: "General recall of stated facts, preferences and rules" }],
+  ['"forget that I mentioned being vegetarian"', { ...blank, operation: "memory_forget", term: "vegetarian", confidence: 0.95, reading: "Remove the vegetarian memory" }],
+  ['"had pizza tonight, it was pretty good"', { ...blank, operation: "casual", confidence: 0.9, reading: "A one-off comment, not a lasting fact to remember" }],
   ['"what\'s on my calendar tomorrow"', { ...blank, operation: "calendar_query", confidence: 0.98, reading: "Tomorrow's events" }],
   ['"add a dentist appointment Friday at 3"', { ...blank, operation: "calendar_create", confidence: 0.96, reading: "Create a calendar event" }],
   ['"delete the concert from my calendar"', { ...blank, operation: "calendar_delete", confidence: 0.96, reading: "Delete a calendar event" }],
@@ -263,7 +273,8 @@ Operations:
 - status_lookup: the status, progress or latest news of a matter with a named company ("status of my chase dispute", "any update on my amazon refund"). Give sender (the company) and matter (dispute, claim, refund, return, case, ticket, complaint, application, request, chargeback).
 - finance_spending: READ requests for saved transactions, payments, income, refunds or transfers, as well as spending totals or breakdowns. "Show all transactions in August and September this year" is a complete read request: preserve both months and the year, include every transaction type, and never route it to finance_record. QUESTIONS about spending totals or breakdowns ("how much did I spend", "show my spending this month"). A request to import, pull in, get or add spending from the person's email is email, not finance_spending. A plain spending phrase ("spending on restaurants", "restaurant spending", "what I spent on groceries") is finance_spending; do not ask whether the user wants to record or search instead. finance_record: the user states a purchase to record.
 - bills_list: what bills are outstanding or unpaid, all my dues, credit-card or utility amounts due, or what the user owes. This shows saved dues plus how current email coverage is (the same background sync finance_spending uses); it never scans email itself. "Show my dues from saved bills and email" is bills_list. bills_paid: the user says they paid a bill: give merchant, and paidOn as an ISO date (YYYY-MM-DD) worked out from today when the user gives or implies a day ("yesterday", "last Sunday", "the 5th"), else null. bills_autopay: the user says a company's bill is on autopay (merchant).
-- learning_show: what Daylark has learned or remembers. learning_forget: any "forget <something>" or "unlearn <something>" (term), or forget everything; never ask what it refers to, the handler finds what matches. learning_teach: the user states a lasting preference or correction; fill lesson: default_window (days, and topic all/receipt/promotion/recruiter), receipts_show_amounts, sender_alias (alias is what they typed, canonical is what they meant), calendar_duration or calendar_buffer (minutes), merchant_category (merchant and one category), merchant_alias (alias, canonical: the user says a short or odd name means a company, like "amzn means Amazon"), autopay (merchant). sender_alias is only for a correction of a name the user just searched for in email ("I meant Adobe" after a search for adobee).
+- learning_show: Daylark's structured operational SETTINGS only (email search defaults, sender/merchant aliases, calendar duration/buffer, autopay, home location). learning_forget: any "forget <something>" or "unlearn <something>" (term) naming one of those settings, or forget everything; never ask what it refers to, the handler finds what matches. learning_teach: the user states one of those specific settings; fill lesson: default_window (days, and topic all/receipt/promotion/recruiter), receipts_show_amounts, sender_alias (alias is what they typed, canonical is what they meant), calendar_duration or calendar_buffer (minutes), merchant_category (merchant and one category), merchant_alias (alias, canonical: the user says a short or odd name means a company, like "amzn means Amazon"), autopay (merchant). sender_alias is only for a correction of a name the user just searched for in email ("I meant Adobe" after a search for adobee).
+- memory_remember: the user states a lasting FACT about their own life (diet, health, work, a relationship, a recurring cost), a general PREFERENCE, or a general behavioral RULE for Daylark itself that is not one of learning_teach's fixed settings above ("I don't eat meat except fish and chicken", "I'm allergic to shellfish", "always ask before importing transactions", "categorize Costco as groceries, not shopping" [a rule about Daylark's own behavior, not the fixed merchant_category lesson, when phrased as an instruction rather than a single correction]). Fill memoryStatement with the fact/preference/rule in the person's own words, cleaned to a short plain sentence, third person ("Doesn't eat meat except fish and chicken", not "I don't..."). memory_show: "what do you remember about me", "what have you remembered" — the general, open-ended version, distinct from learning_show's specific settings list. memory_forget: "forget that I mentioned being vegetarian", "forget the shellfish thing" — fill term with what to forget; never ask which, the handler finds what matches.
 - calendar_query: what is on the calendar or whether the user is free. A part of a day ("tomorrow afternoon", "Saturday morning", "tonight") is a complete time reference: choose calendar_query and do not ask what time. That is different from an hour with no am or pm ("at 3", "at 7"): that is still two readings, so ask "3 AM or 3 PM?" with those choices, for a question about the calendar as well as for creating an event. calendar_create. calendar_delete: deleting, cancelling or removing a calendar event. calendar_attendees: changing who is invited or on the guest list ("the event" means the most recent one; the handler works out which, so do not ask). schedule_feasibility: can the user fit an activity around calendar events, considering travel.
 - daily_view: an overview of the user's day or week across several of their own things at once: "what's my day look like", "give me my daily brief", "anything I need to know today", "my week ahead", "recap", "what's due and what's on this week". A question about only ONE of them is that operation instead: meetings alone is calendar_query, bills alone is bills_list, spending alone is finance_spending.
 - web_search: public facts, places, events, and recommendations (books, films, gifts, things to do) that need the web. Asking what to order, eat, try, see or buy at a named place or from a named business ("what should I order from King Wah", "best dish at Ginger Cafe", "what's good at that place") is a recommendation request, never a redirect: search for its popular dishes or highlights (searchQuery "King Wah Chinese Restaurant best dishes to order"), and when the place is one of lastSearch's places, use that name plus the area. Fill searchQuery with the search to run: the user's words with typos fixed and made clear ("indina cuisines near me" becomes "Indian restaurants"). When the request depends on where the person is ("near me", "nearby", "around here", "open now near me") and homeLocation is given, put that place in the query ("Indian restaurants in Sunnyvale, CA"); a place the person names always wins, and a named place is enough: never ask them to confirm it. "Near Santa Clara" or "in Oakland" names a place, so it is not "near me": search it as written. Only when it says near me, nearby or around here and homeLocation is null, do not guess a city: choose clarify and ask which city or ZIP code, with a couple of common answers as choices. Weather and other facts that merely happen somewhere ("will it rain tomorrow") stay web_search even with no place. Resolve the latest exchange first. A pending approval does not override a later question or offer. Conversation continuity: recent holds the last messages (summary holds anything earlier). When the last assistant message asked the person something ("What should the reply say?", "Who is it for?", "Which Sam do you mean?", "Which city?", "Is that 3 AM or 3 PM?"), the new message is the ANSWER to it and continues the same task: choose the same operation and combine the details from both messages ("Reply to Ayushman", then "What should the reply say?", then "I can't attend" is email_draft, create, reply, to Ayushman, instruction "say I can't attend"). "Write it", "do it", "go ahead" or "yes" after such an exchange means do the task now with what was said. Never ask whether an answer to Daylark's own question is about something else. A message that clearly starts a different task ("what's on my calendar tomorrow") is not an answer. Follow-ups: lastSearch is the list of places the person was just shown, in order. A follow-up requesting current facts about them is web_search (historical recall such as "what do you remember about them" is general_answer): "the second one", "tell me more about Ginger Cafe", "which is open now", "any with parking", "are they good for kids" ask about those places, so write searchQuery about the named place or places ("Ginger Cafe Sunnyvale hours"); "something cheaper", "more like these" or "any others" is a new search of the same kind of place near the same area, written from lastSearch.query with the change; a different kind of place ("how about Thai instead") keeps the area from lastSearch.query. For a follow-up clearly referring to lastSearch (use retrieved historical lists instead when the user refers to an older search): "the first one", "the last one", "the second" point at that list in order; "they", "them", "those", "do they take reservations", "what are their prices", "are any open late" ask about the whole list, so search for that kind of place in that area with the question; "show me more" and "any others" mean more of the same kind in the same area. Do not re-ask which restaurant when the list is clear; when multiple historical lists genuinely fit, ask one specific disambiguation. A city or state named earlier for a trip or visit ("a trip to Colorado", "visiting Austin") is a named place too and is carried into every later search in that conversation ("Help plan activities" after naming Colorado is searchQuery "Thanksgiving activities in Colorado"), even if a later message names no city within it: never leave searchQuery blank and never fall back to searching the bare request. Ask which city only when the person's own words are the ones creating the doubt (an ambiguous "near me" with no saved place). Always fill searchQuery for a web_search: it is never empty when the operation is web_search, whatever the doubt. A place name the person types ("Santa Clara", "Oakland") is never doubt: search it as written. searchQuery is "" for every other operation.
@@ -365,6 +376,12 @@ export function canonicalizeDecision(raw: ModelOutput): Omit<RouterDecision, "so
       const taught = raw.lesson ? toLesson(raw.lesson) : null;
       return taught ? { ...base, operation: "learning_teach", lesson: taught } : ask("What would you like me to remember?");
     }
+    case "memory_remember": {
+      const statement = trim(raw.memoryStatement ?? null, 500);
+      return statement ? { ...base, operation: "memory_remember", memoryStatement: statement } : ask("What would you like me to remember?");
+    }
+    case "memory_forget": return { ...base, operation: "memory_forget", term: trim(raw.term) };
+    case "memory_show": return { ...base, operation: "memory_show" };
     case "multi": {
       const agents = [...new Set(raw.agents)];
       return agents.length >= 2 ? { ...base, operation: "multi", agents } : ask("Which of those would you like first?");

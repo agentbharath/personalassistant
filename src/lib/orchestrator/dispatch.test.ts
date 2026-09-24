@@ -8,7 +8,13 @@ const mocks = vi.hoisted(() => ({
   answerGeneral: vi.fn(), draftHistory: vi.fn(), answerCasual: vi.fn(), prepareCalendarAttendeeUpdate: vi.fn(), prepareCalendarDelete: vi.fn(), handleEmailConversationTurn: vi.fn(), answerScheduleFeasibility: vi.fn(), answerDailyView: vi.fn(), saveSearchState: vi.fn(), loadRecentSearchStates: vi.fn(), renderSearchHistory: vi.fn(), prepareEmailDraft: vi.fn(), resolveEmailDraft: vi.fn(), ownerIdentity: vi.fn(), loadEmailState: vi.fn(),
   runLearningCommand: vi.fn(), executeReadOnlyAgentPlan: vi.fn(), saveLearning: vi.fn(),
   resolveDelete: vi.fn(), resolveAttendees: vi.fn(), resolveCreate: vi.fn(), resolveFinance: vi.fn(),
+  listMemories: vi.fn(), createMemory: vi.fn(), forgetMemory: vi.fn(), supersedeMemory: vi.fn(),
+  extractMemoriesForUser: vi.fn(), findMatchingMemories: vi.fn(), renderMemories: vi.fn(),
 }));
+vi.mock("@/lib/memory/store", () => ({ listMemories: mocks.listMemories, createMemory: mocks.createMemory, forgetMemory: mocks.forgetMemory, supersedeMemory: mocks.supersedeMemory }));
+vi.mock("@/lib/memory/context", () => ({ buildMemoryContext: () => "" }));
+vi.mock("@/lib/memory/commands", () => ({ findMatchingMemories: mocks.findMatchingMemories, renderMemories: mocks.renderMemories }));
+vi.mock("@/lib/memory/extractor-runtime", () => ({ extractMemoriesForUser: mocks.extractMemoriesForUser }));
 vi.mock("@/lib/agents/calendar", () => ({ answerCalendar: mocks.answerCalendar }));
 vi.mock("@/lib/agents/calendar-create", () => ({ prepareCalendarCreate: mocks.prepareCalendarCreate }));
 vi.mock("@/lib/agents/finance", () => ({ answerFinance: mocks.answerFinance }));
@@ -51,6 +57,7 @@ beforeEach(() => {
   mocks.saveLearning.mockResolvedValue(undefined);
   mocks.resolveEmailDraft.mockResolvedValue(null); mocks.ownerIdentity.mockResolvedValue({ name: "Bharath", email: "me@example.com" }); mocks.loadEmailState.mockResolvedValue(null);
   for (const resolver of [mocks.resolveDelete, mocks.resolveAttendees, mocks.resolveCreate, mocks.resolveFinance]) resolver.mockResolvedValue(null);
+  mocks.listMemories.mockResolvedValue([]); mocks.extractMemoriesForUser.mockResolvedValue([]); mocks.findMatchingMemories.mockReturnValue([]); mocks.renderMemories.mockReturnValue("memories");
 });
 
 vi.mock("@/lib/conversations/search-state", () => ({ saveSearchState: (...args: unknown[]) => mocks.saveSearchState(...args), loadRecentSearchStates: (...args: unknown[]) => mocks.loadRecentSearchStates(...args), renderSearchHistory: (...args: unknown[]) => mocks.renderSearchHistory(...args) }));
@@ -97,6 +104,41 @@ describe("listing every saved search is rendered in code, never left for a model
     const result = await dispatchDecision(decision({ operation: "general_answer" }), ctx);
     expect(mocks.renderSearchHistory).not.toHaveBeenCalled();
     expect(result?.answer).toBe("They're on Wolfe Road.");
+  });
+});
+
+describe("memory (phase 1: facts, preferences and rules)", () => {
+  it("memory_show lists active and pending memories", async () => {
+    mocks.listMemories.mockResolvedValueOnce([{ id: "m1" }]).mockResolvedValueOnce([{ id: "m2" }]);
+    mocks.renderMemories.mockReturnValue("### What I remember");
+    const result = await dispatchDecision(decision({ operation: "memory_show" }), ctx);
+    expect(mocks.listMemories).toHaveBeenCalledWith("u1", ["active"]);
+    expect(mocks.listMemories).toHaveBeenCalledWith("u1", ["pending"]);
+    expect(result?.answer).toBe("### What I remember");
+  });
+  it("memory_forget removes every match and says what it forgot", async () => {
+    mocks.findMatchingMemories.mockReturnValue([{ id: "m1", statement: "Doesn't eat meat except fish and chicken" }]);
+    const result = await dispatchDecision(decision({ operation: "memory_forget", term: "meat" } as never), ctx);
+    expect(mocks.forgetMemory).toHaveBeenCalledWith("u1", "m1");
+    expect(result?.answer).toContain("Doesn't eat meat except fish and chicken");
+  });
+  it("memory_forget says so plainly, and forgets nothing, when there's no match", async () => {
+    mocks.findMatchingMemories.mockReturnValue([]);
+    const result = await dispatchDecision(decision({ operation: "memory_forget", term: "sushi" } as never), ctx);
+    expect(mocks.forgetMemory).not.toHaveBeenCalled();
+    expect(result?.answer).toMatch(/don't have anything remembered/);
+  });
+  it("memory_remember saves synchronously (bypasses the pending gate) and confirms in the same turn", async () => {
+    mocks.extractMemoriesForUser.mockResolvedValue([{ action: "add", type: "fact", category: "diet", strength: "hard", statement: "Doesn't eat meat except fish and chicken", stated: false, validUntil: null, supersedes: null }]);
+    const result = await dispatchDecision(decision({ operation: "memory_remember", memoryStatement: "I don't eat meat except fish and chicken" } as never), ctx);
+    expect(mocks.createMemory).toHaveBeenCalledWith("u1", expect.objectContaining({ status: "active", statement: "Doesn't eat meat except fish and chicken" }));
+    expect(result?.answer).toContain("Doesn't eat meat except fish and chicken");
+  });
+  it("memory_remember says so when nothing specific could be extracted, rather than a silent no-op", async () => {
+    mocks.extractMemoriesForUser.mockResolvedValue([]);
+    const result = await dispatchDecision(decision({ operation: "memory_remember", memoryStatement: "remember stuff" } as never), ctx);
+    expect(mocks.createMemory).not.toHaveBeenCalled();
+    expect(result?.status).toBe("waiting_for_user");
   });
 });
 
@@ -261,7 +303,7 @@ it("passes translation and supportive follow-ups to the answerer with their cont
   mocks.answerGeneral.mockResolvedValue("నాకు ఇక జీవించాలని అనిపించడం లేదు.");
   const context=[{role:"user" as const,content:"Translate to Telugu: I don't feel like living anymore"}];
   const result=await dispatchDecision(decision({operation:"general_answer"}), {...ctx,input:"I need translation",context});
-  expect(mocks.answerGeneral).toHaveBeenCalledWith("I need translation",context);
+  expect(mocks.answerGeneral).toHaveBeenCalledWith("I need translation",context,"general","");
   expect(result?.answer).toContain("నాకు");
 });
 
@@ -282,7 +324,7 @@ it("answers requested financial guidance without recording a transaction or chan
   const context=[{role:"user" as const,content:"Help me make a savings plan."}];
   const result=await dispatchDecision(decision({operation:"general_answer"}),{...ctx,input:"What should I prioritize?",context});
   expect(result?.answer).toContain("emergency buffer");
-  expect(mocks.answerGeneral).toHaveBeenCalledWith("What should I prioritize?",context);
+  expect(mocks.answerGeneral).toHaveBeenCalledWith("What should I prioritize?",context,"general","");
   expect(mocks.answerFinance).not.toHaveBeenCalled();
   expect(mocks.runBillsCommand).not.toHaveBeenCalled();
   expect(mocks.resolveFinance).not.toHaveBeenCalled();

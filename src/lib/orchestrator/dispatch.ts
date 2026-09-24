@@ -18,6 +18,10 @@ import { resolvePendingFinanceImport } from "@/lib/workflows/finance-import";
 import { handleEmailConversationTurn } from "./email-turn";
 import { answerScheduleFeasibility } from "./feasibility";
 import { loadRecentSearchStates, renderSearchHistory, saveSearchState } from "@/lib/conversations/search-state";
+import { buildMemoryContext } from "@/lib/memory/context";
+import { findMatchingMemories, renderMemories } from "@/lib/memory/commands";
+import { extractMemoriesForUser } from "@/lib/memory/extractor-runtime";
+import { createMemory, forgetMemory, listMemories, supersedeMemory } from "@/lib/memory/store";
 import { answerDailyView } from "@/lib/today/answer";
 import { runLearningCommand } from "./learning-turn";
 import { composeMultiAgentAnswer, executeReadOnlyAgentPlan, planClauseInstructions } from "./multi-agent";
@@ -105,7 +109,8 @@ export async function dispatchDecision(decision: RouterDecision, ctx: DispatchCo
       // R29: "list everything you've suggested" is rendered from the saved records directly, never left to a model to scan and reproduce.
       if (decision.listSavedSearches) return done(renderSearchHistory(await loadRecentSearchStates(userId)), []);
       prepareAgentStage(["orchestrator"], "balanced");
-      return done(await answerGeneral(input, context), []);
+      const memoryContext = buildMemoryContext(await listMemories(userId).catch(() => []));
+      return done(await answerGeneral(input, context, "general", memoryContext), []);
     }
     case "email_import_continue":
       return done(await continueEmailFinanceImport(userId, conversationId), ["email", "finance"], "waiting_for_user");
@@ -155,6 +160,28 @@ export async function dispatchDecision(decision: RouterDecision, ctx: DispatchCo
       } catch {
         return done("I couldn't save that just now, so I won't remember it next time. Try again in a moment.", [], "waiting_for_user");
       }
+    }
+    case "memory_show": {
+      const [active, pending] = await Promise.all([listMemories(userId, ["active"]), listMemories(userId, ["pending"])]);
+      return done(renderMemories(active, pending), []);
+    }
+    case "memory_forget": {
+      if (!decision.term) return done("What should I forget?", [], "waiting_for_user");
+      const matches = findMatchingMemories(await listMemories(userId, ["active", "pending"]), decision.term);
+      if (!matches.length) return done(`I don't have anything remembered like "${decision.term}".`, []);
+      await Promise.all(matches.map((memory) => forgetMemory(userId, memory.id)));
+      return done(matches.length === 1 ? `Forgotten: "${matches[0].statement}".` : `Forgotten ${matches.length} things: ${matches.map((memory) => `"${memory.statement}"`).join(", ")}.`, []);
+    }
+    case "memory_remember": {
+      // R.memory: an explicit "remember that..." bypasses the background writer and takes effect in this turn.
+      const existing = await listMemories(userId, ["active", "pending"]).catch(() => []);
+      const candidates = await extractMemoriesForUser(userId, decision.memoryStatement!, existing);
+      if (!candidates.length) return done("I couldn't find anything specific to remember from that. Could you state it plainly, like \"I don't eat meat except fish and chicken\"?", [], "waiting_for_user");
+      for (const candidate of candidates) {
+        const id = await createMemory(userId, { type: candidate.type, category: candidate.category, strength: candidate.strength, statement: candidate.statement, status: "active", validUntil: candidate.validUntil, sourceExcerpt: decision.memoryStatement });
+        if (candidate.supersedes) await supersedeMemory(userId, candidate.supersedes, id);
+      }
+      return done(candidates.length === 1 ? `Got it: "${candidates[0].statement}".` : `Got it. Remembered ${candidates.length} things: ${candidates.map((c) => `"${c.statement}"`).join(", ")}.`, []);
     }
     case "calendar_query":
       prepareAgentStage(["calendar"], "fast");

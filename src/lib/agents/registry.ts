@@ -1,7 +1,7 @@
 import type { AgentName } from "./contracts";
 
 export const AGENT_TOOLS: Readonly<Record<AgentName, readonly string[]>> = {
-  general: ["web.search", "web.fetch", "source.compare", "event.verify", "memory.read"],
+  general: ["web.search", "web.fetch", "source.compare", "event.verify", "memory.read", "memory.write", "memory.forget"],
   calendar: [
     "calendar.list_events",
     "calendar.free_busy",

@@ -10,6 +10,8 @@ import { QueryBudgetUnavailableError, queryBudgetSnapshot } from "@/lib/runtime/
 import { ModelBudgetExceededError } from "@/lib/runtime/model-runtime";
 import { recordQueryTelemetry } from "@/lib/observability/query-telemetry";
 import { resolveRetryMessage } from "@/lib/conversations/retry";
+import { after } from "next/server";
+import { writeMemoriesFromMessage } from "@/lib/memory/extractor-runtime";
 
 /** Normal queries stop at 20 seconds; bulk imports may extend to 270 seconds, leaving time to save the answer. */
 export const maxDuration = 300;
@@ -93,6 +95,9 @@ async function handle(request: Request, onProgress?: (agents: string[], scan?: R
 
   try {
     const effectiveMessage = resolveRetryMessage(parsed.data.message, parsed.data.isRetry, context);
+    // R.memory: the background writer only ever sees the person's own typed words, on a real message (never a button click or an
+    // automatic scan ping), and runs after the response is already on its way, so it adds no latency and a failure never surfaces here.
+    if (!parsed.data.uiAction && !parsed.data.automaticContinuation) after(() => writeMemoriesFromMessage(userId, effectiveMessage));
     const controller = new AbortController();
     const deadlineAt = Date.now() + QUERY_TIMEOUT_MS;
     // One timer that follows the request's deadline, which a long job (an import sweep) may extend while it runs.

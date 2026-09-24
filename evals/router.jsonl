@@ -287,3 +287,9 @@
 {"id": "list-saved-searches-1", "rule": "R29", "input": "actually list all the restaurants you've suggested, just their names and cuisine tyoe", "expect": {"operation": "general_answer", "listSavedSearches": true}}
 {"id": "list-saved-searches-2", "rule": "R29", "input": "what places have you found me so far", "expect": {"operation": "general_answer", "listSavedSearches": true}}
 {"id": "list-saved-searches-neg-1", "rule": "R29", "input": "do you remember what you said about Ginger Cafe", "expect": {"operation": "general_answer", "listSavedSearches": false}}
+{"id": "memory-remember-1", "rule": "R.memory", "input": "remember that I don't eat meat except fish and chicken", "expect": {"operation": "memory_remember"}}
+{"id": "memory-remember-2", "rule": "R.memory", "input": "always ask before importing transactions", "expect": {"operation": "memory_remember"}}
+{"id": "memory-show-1", "rule": "R.memory", "input": "what do you remember about me", "expect": {"operation": "memory_show"}}
+{"id": "memory-forget-1", "rule": "R.memory", "input": "forget that I mentioned being vegetarian", "expect": {"operation": "memory_forget"}}
+{"id": "memory-neg-learning-1", "rule": "R.memory", "input": "iherb is health", "expect": {"operation": "learning_teach"}}
+{"id": "memory-neg-casual-1", "rule": "R.memory", "input": "had pizza tonight, it was pretty good", "expect": {"operation": "casual"}}
