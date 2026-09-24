@@ -8,7 +8,7 @@ import { reportFailure } from "@/lib/observability/report";
 
 /** R19.7, R19.9: bump on any change to the prompt or schema, then pass `npm run eval:live`. */
 // v7: email drafts, redirect instead of refusing (R23), ask when in doubt with tap-to-answer choices (R22), codes and links left alone (R24).
-export const ROUTER_VERSION = "router-v27";
+export const ROUTER_VERSION = "router-v28";
 /** R22: when in doubt, ask. Below this the router's one question is asked and nothing runs. */
 export const ROUTER_CONFIDENCE_THRESHOLD = 0.8;
 
@@ -70,6 +70,9 @@ export type RouterDecision = {
   searchQuery?: string | null;
   /** memory_remember only: the lasting fact, preference or behavioral rule to save, in the person's own words, lightly cleaned. */
   memoryStatement?: string | null;
+  /** web_search only: two or three genuinely separate topics in one request ("protein bars and collagen"), each searched and answered
+   * on its own instead of blended into one shallow answer. Null or one entry means an ordinary single-topic search (use searchQuery). */
+  searchQueries?: string[] | null;
   /** general_answer only: the request wants every saved search result listed out ("list all the restaurants you've suggested"), not a
    * discussion of some of them. Code renders this directly from the saved records, so a long list can never be scanned incompletely. */
   listSavedSearches?: boolean;
@@ -102,6 +105,7 @@ const outputSchema = z.object({
     pivot: z.enum(["none", ...PIVOT_CAPABILITIES]), ask: z.string(),
   }).nullish(),
   searchQuery: z.string().nullish(),
+  searchQueries: z.array(z.string()).max(3).nullish(),
   listSavedSearches: z.boolean().nullish(),
   memoryStatement: z.string().nullish(),
   reading: z.string(),
@@ -113,7 +117,7 @@ const nullableNumber = { anyOf: [{ type: "number" }, { type: "null" }] };
 export const ROUTER_JSON_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["historyQuery", "resolvedInput", "operation", "agents", "sender", "matter", "merchant", "paidOn", "term", "lesson", "confidence", "clarification", "choices", "draft", "redirect", "searchQuery", "listSavedSearches", "memoryStatement", "reading"],
+  required: ["historyQuery", "resolvedInput", "operation", "agents", "sender", "matter", "merchant", "paidOn", "term", "lesson", "confidence", "clarification", "choices", "draft", "redirect", "searchQuery", "searchQueries", "listSavedSearches", "memoryStatement", "reading"],
   properties: {
     historyQuery: { type: "string" },
     resolvedInput: { type: "string" },
@@ -138,6 +142,7 @@ export const ROUTER_JSON_SCHEMA = {
     clarification: nullableString,
     choices: { type: "array", items: { type: "string" } },
     searchQuery: { type: "string" },
+    searchQueries: { type: "array", items: { type: "string" } }, // no minItems/maxItems: the API rejects them; z.array(...).max(3) enforces the bound after parsing
     listSavedSearches: { type: "boolean" },
     memoryStatement: { type: "string" },
     draft: {
@@ -170,7 +175,7 @@ const NO_DRAFT = { action: "none", kind: "none", to: "", replyTo: "", instructio
 const NO_REDIRECT = { category: "none", reply: "", distress: false, pivot: "none", ask: "" } as const;
 const draftOf = (over: Partial<NonNullable<ModelOutput["draft"]>>): NonNullable<ModelOutput["draft"]> => ({ ...NO_DRAFT, ...over });
 const redirectOf = (over: Partial<NonNullable<ModelOutput["redirect"]>>): NonNullable<ModelOutput["redirect"]> => ({ ...NO_REDIRECT, ...over });
-const blank: Omit<ModelOutput, "operation" | "confidence" | "reading"> = { historyQuery: "", resolvedInput: "", agents: [], sender: null, matter: null, merchant: null, paidOn: null, term: null, lesson: null, clarification: null, choices: [], draft: NO_DRAFT, redirect: NO_REDIRECT, searchQuery: "", listSavedSearches: false, memoryStatement: "" };
+const blank: Omit<ModelOutput, "operation" | "confidence" | "reading"> = { historyQuery: "", resolvedInput: "", agents: [], sender: null, matter: null, merchant: null, paidOn: null, term: null, lesson: null, clarification: null, choices: [], draft: NO_DRAFT, redirect: NO_REDIRECT, searchQuery: "", searchQueries: [], listSavedSearches: false, memoryStatement: "" };
 const lesson = (kind: (typeof LESSON_KINDS)[number], over: Partial<NonNullable<ModelOutput["lesson"]>> = {}): NonNullable<ModelOutput["lesson"]> => ({ kind, topic: null, days: null, minutes: null, merchant: null, category: null, alias: null, canonical: null, ...over });
 const EXAMPLES: Array<[string, ModelOutput]> = [
   ['"all iherb recipts"', { ...blank, operation: "email", confidence: 0.97, reading: "Show iHerb receipts" }],
@@ -203,6 +208,8 @@ const EXAMPLES: Array<[string, ModelOutput]> = [
   ['"remove old@example.com from the guest list"', { ...blank, operation: "calendar_attendees", confidence: 0.96, reading: "Change who is invited" }],
   ['"can I watch a movie at 3 and be back for my 6pm meeting"', { ...blank, operation: "schedule_feasibility", confidence: 0.9, reading: "Check the schedule against the meeting" }],
   ['"best ramen near Santa Clara"', { ...blank, operation: "web_search", searchQuery: "best ramen in Santa Clara, CA", confidence: 0.95, reading: "Search the web" }],
+  ['"can you suggest some best protein bars and collagen"', { ...blank, operation: "web_search", searchQuery: "best protein bars", searchQueries: ["best protein bars", "best collagen supplements"], confidence: 0.95, reading: "Two separate subjects, each answered on its own" }],
+  ['"best laptop and a case for it"', { ...blank, operation: "web_search", searchQuery: "best laptop 2026", confidence: 0.9, reading: "The case depends on the laptop chosen, so this is one search, not two" }],
   ['"try that again", after the user asked "what bills are outstanding"', { ...blank, operation: "bills_list", confidence: 0.95, reading: "Run the last request again" }],
   ['"Sunnyvale", after the user asked "find me a good thai restaurant nearby" and Daylark asked "Which city or ZIP code should I look near?"', { ...blank, operation: "web_search", searchQuery: "good Thai restaurants in Sunnyvale, CA", confidence: 0.95, reading: "The city answers Daylark\'s question" }],
   ['"my landlord", after the user asked "write an email asking about the lease" and Daylark asked "Who is it for?"', { ...blank, operation: "email_draft", draft: draftOf({ action: "create", kind: "new", to: "landlord", instruction: "ask about the lease" }), confidence: 0.95, reading: "Who the email is for, answering Daylark\'s question" }],
@@ -278,6 +285,7 @@ Operations:
 - calendar_query: what is on the calendar or whether the user is free. A part of a day ("tomorrow afternoon", "Saturday morning", "tonight") is a complete time reference: choose calendar_query and do not ask what time. That is different from an hour with no am or pm ("at 3", "at 7"): that is still two readings, so ask "3 AM or 3 PM?" with those choices, for a question about the calendar as well as for creating an event. calendar_create. calendar_delete: deleting, cancelling or removing a calendar event. calendar_attendees: changing who is invited or on the guest list ("the event" means the most recent one; the handler works out which, so do not ask). schedule_feasibility: can the user fit an activity around calendar events, considering travel.
 - daily_view: an overview of the user's day or week across several of their own things at once: "what's my day look like", "give me my daily brief", "anything I need to know today", "my week ahead", "recap", "what's due and what's on this week". A question about only ONE of them is that operation instead: meetings alone is calendar_query, bills alone is bills_list, spending alone is finance_spending.
 - web_search: public facts, places, events, and recommendations (books, films, gifts, things to do) that need the web. Asking what to order, eat, try, see or buy at a named place or from a named business ("what should I order from King Wah", "best dish at Ginger Cafe", "what's good at that place") is a recommendation request, never a redirect: search for its popular dishes or highlights (searchQuery "King Wah Chinese Restaurant best dishes to order"), and when the place is one of lastSearch's places, use that name plus the area. Fill searchQuery with the search to run: the user's words with typos fixed and made clear ("indina cuisines near me" becomes "Indian restaurants"). When the request depends on where the person is ("near me", "nearby", "around here", "open now near me") and homeLocation is given, put that place in the query ("Indian restaurants in Sunnyvale, CA"); a place the person names always wins, and a named place is enough: never ask them to confirm it. "Near Santa Clara" or "in Oakland" names a place, so it is not "near me": search it as written. Only when it says near me, nearby or around here and homeLocation is null, do not guess a city: choose clarify and ask which city or ZIP code, with a couple of common answers as choices. Weather and other facts that merely happen somewhere ("will it rain tomorrow") stay web_search even with no place. Resolve the latest exchange first. A pending approval does not override a later question or offer. Conversation continuity: recent holds the last messages (summary holds anything earlier). When the last assistant message asked the person something ("What should the reply say?", "Who is it for?", "Which Sam do you mean?", "Which city?", "Is that 3 AM or 3 PM?"), the new message is the ANSWER to it and continues the same task: choose the same operation and combine the details from both messages ("Reply to Ayushman", then "What should the reply say?", then "I can't attend" is email_draft, create, reply, to Ayushman, instruction "say I can't attend"). "Write it", "do it", "go ahead" or "yes" after such an exchange means do the task now with what was said. Never ask whether an answer to Daylark's own question is about something else. A message that clearly starts a different task ("what's on my calendar tomorrow") is not an answer. Follow-ups: lastSearch is the list of places the person was just shown, in order. A follow-up requesting current facts about them is web_search (historical recall such as "what do you remember about them" is general_answer): "the second one", "tell me more about Ginger Cafe", "which is open now", "any with parking", "are they good for kids" ask about those places, so write searchQuery about the named place or places ("Ginger Cafe Sunnyvale hours"); "something cheaper", "more like these" or "any others" is a new search of the same kind of place near the same area, written from lastSearch.query with the change; a different kind of place ("how about Thai instead") keeps the area from lastSearch.query. For a follow-up clearly referring to lastSearch (use retrieved historical lists instead when the user refers to an older search): "the first one", "the last one", "the second" point at that list in order; "they", "them", "those", "do they take reservations", "what are their prices", "are any open late" ask about the whole list, so search for that kind of place in that area with the question; "show me more" and "any others" mean more of the same kind in the same area. Do not re-ask which restaurant when the list is clear; when multiple historical lists genuinely fit, ask one specific disambiguation. A city or state named earlier for a trip or visit ("a trip to Colorado", "visiting Austin") is a named place too and is carried into every later search in that conversation ("Help plan activities" after naming Colorado is searchQuery "Thanksgiving activities in Colorado"), even if a later message names no city within it: never leave searchQuery blank and never fall back to searching the bare request. Ask which city only when the person's own words are the ones creating the doubt (an ambiguous "near me" with no saved place). Always fill searchQuery for a web_search: it is never empty when the operation is web_search, whatever the doubt. A place name the person types ("Santa Clara", "Oakland") is never doubt: search it as written. searchQuery is "" for every other operation.
+Two or three genuinely separate subjects in one request ("suggest some protein bars and collagen", "best laptop and a case for it", "weather in Denver and flight prices from SJC") get their own answer each, not one blended search: fill searchQueries with one query per subject (each as complete as searchQuery would be on its own) so neither gets shortchanged; still fill searchQuery too, with just the first. Two phrasings of the very same thing ("cheap flights to Denver or Boulder"), or one item that only makes sense together with the other (a place and "what to order there"), are one subject: searchQueries stays empty and searchQuery alone carries it.
 - multi: one message with several separate asks across agents; list the agents involved in agents.
 - email_draft: the user wants Daylark to WRITE an email for them to send: reply to an email, write a new email, or change, shorten, redo, discard or go back on a draft Daylark already wrote. Fill draft: action (create, edit, discard or revert), kind (reply or new, for create; else none), to (who it is for, as said; empty if not said), replyTo (which email: its number in digits when the person pointed at a numbered result of the saved email search ("the second one" is "2"); otherwise the sender or subject as said; empty if not said), instruction (what it should say, or how to change it), version (for revert only: "first" for the first or original version, "previous" for "undo that" or "the last version", or the version number in digits; else empty). Daylark only saves drafts in Gmail and never sends; whether drafting is switched on is decided elsewhere, so choose email_draft whenever that is what was asked. "Drafts" means email drafts. When the last assistant message showed or saved an email draft, follow-ups such as "make it shorter", "add that I'm free after 3", "change …", "cc …", "undo that", "go back to the first one" and "delete it" are about that draft. But "reply to <a person>" or "write to <a person>" always starts a NEW reply or email, even right after a draft was saved: only "it", "that", "make it…" and "change…" mean the earlier draft. This holds even while a draft preview is waiting for Confirm or Cancel: a request to change the wording is email_draft edit, not an approval; only a plain yes, no, confirm, cancel or go ahead answers the preview.
 - email_write_declined: the user asks to SEND, forward, delete, archive, label, unsubscribe from or otherwise change email, including "send it" about a draft. "Send it", "send that" and "just send it now" are always email_write_declined, whatever came before: never ask what to send. Never for writing or drafting an email (that is email_draft). "Unsend" or "recall" an email that was already sent is not_available under redirect: Daylark never sends, and Gmail's own Undo send works only for a few seconds. Changes to calendar events or guest lists are not this.
@@ -401,7 +409,10 @@ export function canonicalizeDecision(raw: ModelOutput): Omit<RouterDecision, "so
       const pivot = plan && plan.pivot !== "none" && !distress ? { capability: plan.pivot, ask: trim(plan.ask, 200) } : null;
       return { ...base, operation: "redirect", redirect: { category: plan && plan.category !== "none" ? plan.category : "unrelated", reply, pivot, distress } };
     }
-    case "web_search": return { ...base, operation: "web_search", searchQuery: trim(raw.searchQuery ?? null, 300) };
+    case "web_search": {
+      const many = (raw.searchQueries ?? []).map((q) => trim(q, 300)).filter((q): q is string => Boolean(q));
+      return { ...base, operation: "web_search", searchQuery: trim(raw.searchQuery ?? null, 300), searchQueries: many.length >= 2 ? many.slice(0, 3) : null };
+    }
     case "general_answer": return { ...base, operation: "general_answer", listSavedSearches: Boolean(raw.listSavedSearches) };
     default: return { ...base, operation: raw.operation };
   }

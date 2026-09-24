@@ -5,7 +5,7 @@ import { cancelEmailScan } from "@/lib/workflows/email-scan";
 import { answerCalendar } from "@/lib/agents/calendar";
 import { prepareCalendarCreate } from "@/lib/agents/calendar-create";
 import { answerFinance } from "@/lib/agents/finance";
-import { answerPublicSearch } from "@/lib/agents/general";
+import { answerPublicSearch, type RememberSearch } from "@/lib/agents/general";
 import { runBillsCommand } from "@/lib/agents/bills-agent";
 import { answerStatusLookup } from "@/lib/agents/status-lookup";
 import { acknowledgeLearning } from "@/lib/learning/commands";
@@ -209,9 +209,16 @@ export async function dispatchDecision(decision: RouterDecision, ctx: DispatchCo
       // useful. Missing here means the router itself was unsure, so ask rather than guess.
       if (!decision.searchQuery?.trim()) return done("What place should I search? Say a city, neighborhood, or ZIP code.", [], "waiting_for_user");
       prepareAgentStage(["general"], "balanced");
-      // Remember what was shown, so "the second one" or "which is open now?" can be read next turn.
       const searchMemory = buildMemoryContext(await listMemories(userId).catch(() => []));
-      return done(await answerPublicSearch(decision.searchQuery, conversationId ? (state) => saveSearchState(userId, conversationId, state) : undefined, searchMemory), ["general"]);
+      const remember = conversationId ? (state: Parameters<RememberSearch>[0]) => saveSearchState(userId, conversationId, state) : undefined;
+      // Two or three genuinely separate subjects each get their own search and their own real answer, instead of one being shortchanged
+      // by a single blended query ("protein bars and collagen" is two answers, not a compromise between them).
+      if (decision.searchQueries && decision.searchQueries.length >= 2) {
+        const answers = await Promise.all(decision.searchQueries.map((query, index) => answerPublicSearch(query, index === 0 ? remember : undefined, searchMemory)));
+        return done(answers.join("\n\n---\n\n"), ["general"]);
+      }
+      // Remember what was shown, so "the second one" or "which is open now?" can be read next turn.
+      return done(await answerPublicSearch(decision.searchQuery, remember, searchMemory), ["general"]);
     }
     case "multi": {
       const plan = planClauseInstructions(input, decision.agents);

@@ -82,6 +82,15 @@ describe("a web search uses the search the router wrote (free)", () => {
     await dispatchDecision(decision({ operation: "web_search", searchQuery: "Indian restaurants in Sunnyvale, CA" } as never), ctx);
     expect(mocks.answerPublicSearch).toHaveBeenCalledWith("Indian restaurants in Sunnyvale, CA", expect.any(Function), "");
   });
+  it("runs two genuinely separate subjects as two searches and joins both real answers, instead of shortchanging one (R29)", async () => {
+    mocks.answerPublicSearch.mockResolvedValueOnce("Protein bars: go with RXBAR.").mockResolvedValueOnce("Collagen: go with marine collagen.");
+    const result = await dispatchDecision(decision({ operation: "web_search", searchQuery: "best protein bars", searchQueries: ["best protein bars", "best collagen supplements"] } as never), ctx);
+    expect(mocks.answerPublicSearch).toHaveBeenCalledTimes(2);
+    expect(mocks.answerPublicSearch).toHaveBeenNthCalledWith(1, "best protein bars", expect.any(Function), "");
+    expect(mocks.answerPublicSearch).toHaveBeenNthCalledWith(2, "best collagen supplements", undefined, "");
+    expect(result?.answer).toContain("Protein bars: go with RXBAR.");
+    expect(result?.answer).toContain("Collagen: go with marine collagen.");
+  });
   it("asks rather than searching the raw message when the router wrote no query (R19.5: a web_search always names its own search)", async () => {
     const result = await dispatchDecision(decision({ operation: "web_search" }), ctx);
     expect(mocks.answerPublicSearch).not.toHaveBeenCalled();

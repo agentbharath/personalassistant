@@ -17,6 +17,8 @@ export type RouterExpect = {
   searchQueryExcludes?: string;
   /** general_answer only: whether the request wants every saved search result enumerated (R29). */
   listSavedSearches?: boolean;
+  /** web_search only: whether two or more separate subjects should each get their own search, instead of being blended into one. */
+  splitsIntoSeparateSearches?: boolean;
 };
 
 const lower = (value: unknown) => (typeof value === "string" ? value.toLowerCase() : value);
@@ -51,6 +53,10 @@ export function checkDecision(decision: RouterDecision | null, want: RouterExpec
   if (want.searchQueryIncludes && !(decision.searchQuery ?? "").toLowerCase().includes(want.searchQueryIncludes.toLowerCase())) problems.push(`searchQuery: wanted it to include ${want.searchQueryIncludes}, got ${JSON.stringify(decision.searchQuery ?? "")}`);
   if (want.searchQueryExcludes && (decision.searchQuery ?? "").toLowerCase().includes(want.searchQueryExcludes.toLowerCase())) problems.push(`searchQuery: should not include ${want.searchQueryExcludes}, got ${JSON.stringify(decision.searchQuery)}`);
   if (want.listSavedSearches !== undefined && Boolean(decision.listSavedSearches) !== want.listSavedSearches) problems.push(`listSavedSearches: wanted ${want.listSavedSearches}, got ${Boolean(decision.listSavedSearches)}`);
+  if (want.splitsIntoSeparateSearches !== undefined) {
+    const split = (decision.searchQueries?.length ?? 0) >= 2;
+    if (split !== want.splitsIntoSeparateSearches) problems.push(`splitsIntoSeparateSearches: wanted ${want.splitsIntoSeparateSearches}, got ${split} (searchQueries: ${JSON.stringify(decision.searchQueries)})`);
+  }
 
   // Every redirect, whatever else is expected of it (R23): a real message, not a bare refusal.
   if (decision.operation === "redirect") {

@@ -1,11 +1,8 @@
 {
- "version": "router-v27",
+ "version": "router-v28",
  "verified": {
-  "memory-remember-1": "0bee95231070",
-  "memory-remember-2": "787d5c529d68",
-  "memory-show-1": "d492a4f72ade",
-  "memory-forget-1": "32aaaba67cf9",
-  "memory-neg-learning-1": "d5b350652ae0",
-  "memory-neg-casual-1": "cd8059f93dac"
+  "compound-search-split-1": "92d2361c5fc8",
+  "compound-search-split-2": "8e7609f3a168",
+  "compound-search-split-3": "71d5c136a6aa"
  }
 }
