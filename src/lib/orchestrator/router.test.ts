@@ -166,7 +166,7 @@ describe("router v14: drafts, redirects and choices (R22, R23, R25)", () => {
   });
 
   it("is version 14, asks when in doubt, and teaches drafting, redirecting and choices", () => {
-    expect(ROUTER_VERSION).toBe("router-v28");
+    expect(ROUTER_VERSION).toBe("router-v29");
     expect(ROUTER_SYSTEM).toMatch(/When in doubt, ask/);
     expect(ROUTER_SYSTEM).toMatch(/email_draft/);
     expect(ROUTER_SYSTEM).toMatch(/Never just "I can't answer that"/);
