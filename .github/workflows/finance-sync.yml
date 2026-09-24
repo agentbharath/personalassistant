@@ -1,0 +1,25 @@
+name: Resume finance email scans
+on:
+  schedule:
+    - cron: '3-58/5 * * * *'
+  workflow_dispatch:
+permissions: {}
+concurrency:
+  group: finance-sync-worker
+  cancel-in-progress: false
+jobs:
+  resume:
+    if: vars.FINANCE_SYNC_SCHEDULE_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - name: Advance queued scans
+        env:
+          SYNC_APP_ORIGIN: ${{ vars.APP_ORIGIN }}
+          SYNC_CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          test -n "$SYNC_APP_ORIGIN"
+          test -n "$SYNC_CRON_SECRET"
+          curl --proto '=https' --fail --silent --show-error --max-time 290 \
+            --header "Authorization: Bearer $SYNC_CRON_SECRET" \
+            "${SYNC_APP_ORIGIN%/}/api/ops/finance-sync"
