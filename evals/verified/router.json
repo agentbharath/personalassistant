@@ -1,21 +1,10 @@
 {
- "version": "router-v18",
+ "version": "router-v24",
  "verified": {
-  "context-fix-drafts": "8e3c9e23fa9d",
-  "context-fix-draft-choice": "6b55243b7bcb",
-  "context-fix-draft-correction": "68c57554cd8b",
-  "context-fix-leave": "ab8c6e7064dd",
-  "context-fix-search-yes": "1d44e326a0cc",
-  "context-fix-search-followup": "7fa8875eb17d",
-  "context-fix-search-direct": "15f2bb93fbaf",
-  "context-fix-telugu": "fdb16280e8bd",
-  "context-fix-daily": "2652808de679",
-  "context-fix-translation": "4c46a894c5d9",
-  "context-fix-translation-clarified": "de88f884f9f6",
-  "context-fix-translation-again": "cb583adc935b",
-  "context-fix-joking": "d10dbbe98425",
-  "context-fix-real-risk": "a31a72831a2c",
-  "context-fix-resume": "c1747146eb8a",
-  "context-fix-code": "e089811c201e"
+  "bills-list-0": "0391a381c2b9",
+  "bills-list-1": "86e7a296d404",
+  "bills-list-2": "9d3d2f75645d",
+  "bills-list-3": "c8e2c3ff5f95",
+  "bills-list-4": "4d7f3ea46830"
  }
 }

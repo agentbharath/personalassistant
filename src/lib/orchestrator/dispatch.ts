@@ -2,7 +2,6 @@ import { financeFreshness } from "@/lib/finance-sync/review";
 import { answerDraftHistory } from "@/lib/agents/draft-history";
 import { continueEmailFinanceImport } from "@/lib/agents/email-finance-import";
 import { cancelEmailScan } from "@/lib/workflows/email-scan";
-import { recencyDays } from "@/lib/agents/email-query";
 import { answerCalendar } from "@/lib/agents/calendar";
 import { prepareCalendarCreate } from "@/lib/agents/calendar-create";
 import { answerFinance } from "@/lib/agents/finance";
@@ -124,10 +123,8 @@ export async function dispatchDecision(decision: RouterDecision, ctx: DispatchCo
     case "finance_record":
       prepareAgentStage(["finance"], "fast");
       return done(await answerFinance(input, userId, "record", context), ["finance"]);
-    case "bills_list": {
-      const answer = await runBillsCommand({ type: "list" }, userId, { conversationId, emailWindowDays: recencyDays(input) ?? 90 });
-      return done(answer, ["finance", "email"], typeof answer === "string" && answer.includes("Choose **Confirm**") ? "waiting_for_user" : "completed");
-    }
+    case "bills_list":
+      return done(await runBillsCommand({ type: "list" }, userId, { conversationId }), ["finance", "email"]);
     case "bills_paid":
       return done(await runBillsCommand({ type: "paid", merchant: decision.merchant!, paidOn: decision.paidOn }, userId), ["finance"]);
     case "bills_autopay":
