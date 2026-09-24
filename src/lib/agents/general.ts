@@ -9,19 +9,21 @@ export type RememberSearch = (state: { query: string; places: SearchPlaces }) =>
 
 type Loaded = { text: string; places: SearchPlaces };
 
-export async function answerPublicSearch(query: string, remember?: RememberSearch) {
+/** R31: memoryContext personalizes a recommendation-style search ("suggest a collagen supplement") with the person's own stated facts. It
+ * also folds into the cache key, so a personalized answer is never served back for a different (or since-changed) fact set. */
+export async function answerPublicSearch(query: string, remember?: RememberSearch, memoryContext = "") {
   // The saved value is the finished answer and the places in it, so a cached answer can still be followed up.
-  const raw = await withPublicQueryCache(query, async () => JSON.stringify(await loadAnswer(query)));
+  const raw = await withPublicQueryCache(query, async () => JSON.stringify(await loadAnswer(query, memoryContext)), memoryContext);
   const { text, places } = parseLoaded(raw);
   if (places.length && remember) await remember({ query, places }).catch(() => undefined);
   return text;
 }
 
-async function loadAnswer(query: string): Promise<Loaded> {
+async function loadAnswer(query: string, memoryContext: string): Promise<Loaded> {
   const research = await searchPublicWeb(query);
   // The same numbered evidence goes to the model and to the reader, so a [3] in the answer is source 3 in the list below it.
   const evidence = research.sources.slice(0, 5);
-  const structured = evidence.length ? await synthesizeSearchResults(query, evidence) : null;
+  const structured = evidence.length ? await synthesizeSearchResults(query, evidence, memoryContext) : null;
   const answer = structured ? renderSearchAnswer(structured, query, evidence.length) : cleanModelText(research.answer ?? "");
   const text = [answer, sourceList(answer, evidence)].filter(Boolean).join("\n\n") || "I couldn’t find reliable current results for that query.";
   const places = structured?.kind === "places" ? structured.items.slice(0, 5).map((item) => ({ name: plain(item.name, 80), address: plain(item.address, 120), note: plain(item.note, 140) })).filter((place) => place.name) : [];

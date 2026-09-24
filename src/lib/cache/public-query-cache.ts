@@ -22,12 +22,18 @@ export function normalizePublicQuery(query: string) {
   return query.normalize("NFKC").trim().toLowerCase().replace(/\s+/g, " ");
 }
 
-export async function withPublicQueryCache(query: string, load: () => Promise<string>) {
+/**
+ * `extra` folds anything besides the query text into the cache key — right now, the person's active hard facts and rules (R31), so a
+ * personalized answer ("since you don't eat beef...") is never served to a different fact set, and a fact learned after the answer was
+ * cached produces a fresh one instead of the stale unpersonalized one. Empty when nothing personal applies, so an ordinary public query is
+ * cached exactly as before.
+ */
+export async function withPublicQueryCache(query: string, load: () => Promise<string>, extra = "") {
   if (!isPublicCacheEligible(query)) {
     recordCache(false);
     return load();
   }
-  const key = `public-search:v7:${createHash("sha256").update(normalizePublicQuery(query)).digest("hex")}`;
+  const key = `public-search:v7:${createHash("sha256").update(`${normalizePublicQuery(query)}||${extra}`).digest("hex")}`;
   try {
     const cached = await getRedis()?.get<unknown>(key);
     if (cached) {

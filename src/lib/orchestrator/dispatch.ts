@@ -210,7 +210,8 @@ export async function dispatchDecision(decision: RouterDecision, ctx: DispatchCo
       if (!decision.searchQuery?.trim()) return done("What place should I search? Say a city, neighborhood, or ZIP code.", [], "waiting_for_user");
       prepareAgentStage(["general"], "balanced");
       // Remember what was shown, so "the second one" or "which is open now?" can be read next turn.
-      return done(await answerPublicSearch(decision.searchQuery, conversationId ? (state) => saveSearchState(userId, conversationId, state) : undefined), ["general"]);
+      const searchMemory = buildMemoryContext(await listMemories(userId).catch(() => []));
+      return done(await answerPublicSearch(decision.searchQuery, conversationId ? (state) => saveSearchState(userId, conversationId, state) : undefined, searchMemory), ["general"]);
     }
     case "multi": {
       const plan = planClauseInstructions(input, decision.agents);

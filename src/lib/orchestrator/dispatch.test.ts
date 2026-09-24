@@ -80,7 +80,7 @@ describe("a web search uses the search the router wrote (free)", () => {
   });
   it("passes the router's query, so the saved home place is in it", async () => {
     await dispatchDecision(decision({ operation: "web_search", searchQuery: "Indian restaurants in Sunnyvale, CA" } as never), ctx);
-    expect(mocks.answerPublicSearch).toHaveBeenCalledWith("Indian restaurants in Sunnyvale, CA", expect.any(Function));
+    expect(mocks.answerPublicSearch).toHaveBeenCalledWith("Indian restaurants in Sunnyvale, CA", expect.any(Function), "");
   });
   it("asks rather than searching the raw message when the router wrote no query (R19.5: a web_search always names its own search)", async () => {
     const result = await dispatchDecision(decision({ operation: "web_search" }), ctx);

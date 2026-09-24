@@ -3,8 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ search: vi.fn(), synthesize: vi.fn() }));
 vi.mock("@/lib/tools/general/tavily-search", () => ({ searchPublicWeb: mocks.search }));
 vi.mock("@/lib/model/claude", () => ({ synthesizeSearchResults: mocks.synthesize }));
-const cacheState = vi.hoisted(() => ({ hit: null as unknown }));
-vi.mock("@/lib/cache/public-query-cache", () => ({ withPublicQueryCache: (_query: string, load: () => Promise<string>) => (cacheState.hit !== null ? Promise.resolve(cacheState.hit) : load()) }));
+const cacheState = vi.hoisted(() => ({ hit: null as unknown, extras: [] as string[] }));
+vi.mock("@/lib/cache/public-query-cache", () => ({ withPublicQueryCache: (_query: string, load: () => Promise<string>, extra = "") => { cacheState.extras.push(extra); return cacheState.hit !== null ? Promise.resolve(cacheState.hit) : load(); } }));
 
 import { answerPublicSearch, sourceList } from "./general";
 
@@ -15,7 +15,7 @@ const places = (over: object = {}) => ({ kind: "places", intro: "Chinese restaur
 ], ...over });
 
 beforeEach(() => {
-  cacheState.hit = null;
+  cacheState.hit = null; cacheState.extras = [];
   mocks.search.mockReset().mockResolvedValue({ answer: "", sources: [1, 2, 3, 4, 5, 6].map(source) });
   mocks.synthesize.mockReset();
 });
@@ -70,6 +70,13 @@ describe("a web search answer (free)", () => {
     expect(sourceList("No citations here.", [source(1), source(2), source(3), source(4)])).toContain("- **3** ·");
     expect(sourceList("Only [9] here.", [source(1), source(2)])).toContain("- **1** ·");
     expect(sourceList("x", [])).toBe("");
+  });
+
+  it("passes the memory context to synthesis and folds it into the cache key, so a personalized answer is never served for a different fact set (R31)", async () => {
+    mocks.synthesize.mockResolvedValue({ kind: "answer", intro: "", items: [], answer: "Marine collagen.", caveat: "" });
+    await answerPublicSearch("suggest a collagen supplement", undefined, "Hard fact: doesn't eat meat except fish and chicken");
+    expect(mocks.synthesize.mock.calls[0][2]).toBe("Hard fact: doesn't eat meat except fish and chicken");
+    expect(cacheState.extras).toEqual(["Hard fact: doesn't eat meat except fish and chicken"]);
   });
 
   it("reads a saved answer whether the cache gave back text, an object or an old plain string, and still remembers its places", async () => {
