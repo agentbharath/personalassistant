@@ -2,7 +2,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 const mocks=vi.hoisted(()=>({model:vi.fn(),list:vi.fn(),write:vi.fn()}));
 vi.mock("@/lib/runtime/model-runtime",()=>({callClaude:mocks.model}));
 vi.mock("@/lib/tools/finance/transactions",()=>({listTransactions:mocks.list,createTransactionCandidate:mocks.write}));
-import { answerFinanceQuery } from "./finance-query";
+import { FINANCE_QUERY_JSON_SCHEMA, answerFinanceQuery } from "./finance-query";
 import { answerFinance } from "./finance";
 const plan={mode:"transactions",ranges:[{from:"2026-08-01",to:"2026-09-30"}],merchant:null,category:null,clarification:null};
 const row=(id:string,date:string,direction:string="expense",currency="USD")=>({id,occurredOn:date,direction,currency,amountMinor:100,merchant:id,category:"other"});
@@ -34,4 +34,13 @@ it("validates dates and never switches to recording when interpretation fails",a
 it("passes previous periods and the current reply to the query interpreter",async()=>{
  await answerFinanceQuery("include September too","u",[{role:"user",content:"List August 2025 transactions"}]);
  expect(mocks.model.mock.calls[0][1].messages[0].content).toContain("August 2025");
+});
+
+it("its JSON schema never uses minItems/maxItems on an array (Anthropic's structured output rejects that keyword, which silently broke every finance question until this was caught live)", () => {
+  const walk = (node: unknown): string[] => {
+    if (!node || typeof node !== "object") return [];
+    const bad = Object.keys(node).filter((key) => key === "minItems" || key === "maxItems");
+    return [...bad, ...Object.values(node as Record<string, unknown>).flatMap(walk)];
+  };
+  expect(walk(FINANCE_QUERY_JSON_SCHEMA)).toEqual([]);
 });

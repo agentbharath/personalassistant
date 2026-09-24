@@ -10,8 +10,9 @@ export const financeQuerySchema = z.object({
  mode:z.enum(["transactions","spending"]), ranges:z.array(z.object({from:date,to:date}).refine(r=>r.from<=r.to)).min(1).max(24),
  merchant:z.string().nullable(), category:z.string().nullable(), clarification:z.string().nullable(),
 });
-const jsonSchema = {type:"object",additionalProperties:false,required:["mode","ranges","merchant","category","clarification"],properties:{
- mode:{type:"string",enum:["transactions","spending"]},ranges:{type:"array",minItems:1,maxItems:24,items:{type:"object",additionalProperties:false,required:["from","to"],properties:{from:{type:"string"},to:{type:"string"}}}},
+// The Anthropic structured-output schema rejects "minItems"/"maxItems" on an array; the real 1-24 bound is enforced by financeQuerySchema below.
+export const FINANCE_QUERY_JSON_SCHEMA = {type:"object",additionalProperties:false,required:["mode","ranges","merchant","category","clarification"],properties:{
+ mode:{type:"string",enum:["transactions","spending"]},ranges:{type:"array",items:{type:"object",additionalProperties:false,required:["from","to"],properties:{from:{type:"string"},to:{type:"string"}}}},
  merchant:{type:["string","null"]},category:{type:["string","null"]},clarification:{type:["string","null"]},
 }};
 export const FINANCE_QUERY_SYSTEM = `${FOLLOWUP_RULES}
@@ -26,7 +27,7 @@ export async function answerFinanceQuery(input:string,userId:string,context:Cont
  try {
   const response=await callClaude("finance_query",{model:"claude-haiku-4-5-20251001",temperature:0,max_tokens:800,system:FINANCE_QUERY_SYSTEM,
    messages:[{role:"user",content:JSON.stringify({today,message:input,recent:recentContext(context),followupExchange:followupContext(context,input)})}],
-   output_config:{format:{type:"json_schema",schema:jsonSchema}}},{userId});
+   output_config:{format:{type:"json_schema",schema:FINANCE_QUERY_JSON_SCHEMA}}},{userId});
   const block=response.content.find(item=>item.type==="text");
   if(!block || block.type!=="text") throw new Error("MISSING_FINANCE_QUERY");
   plan=financeQuerySchema.parse(JSON.parse(block.text));
