@@ -1,33 +1,45 @@
 import { beforeEach, expect, it, vi } from "vitest";
-const db = vi.hoisted(() => ({
-  conversations: [] as { user_id: string; search_state_ciphertext: string }[],
-  references: [] as { user_id: string; kind: string; payload_ciphertext: string }[],
-}));
+const db = vi.hoisted(() => ({ rows: [] as { id: string; user_id: string; conversation_id: string; kind: string; payload_ciphertext: string; created_at: string }[], conversations: [] as string[] }));
 vi.mock("@/lib/security/encryption", () => ({ decryptText: (s: string) => s, encryptText: (s: string) => s }));
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
     from: (table: "conversations" | "conversation_references") => {
-      let user = "";
-      let kind: string | undefined;
-      const rows = () => (table === "conversations" ? db.conversations : db.references).filter((row) => row.user_id === user && (!kind || (row as { kind?: string }).kind === kind));
+      let user = ""; let conversation = ""; let kind = "";
+      if (table === "conversations") {
+        let convId = "";
+        const query = { select: () => query, eq: (key: string, v: string) => { if (key === "id") convId = v; return query; }, maybeSingle: async () => ({ data: db.conversations.includes(convId) ? { id: convId } : null }) };
+        return query;
+      }
+      // Newest first, matching the real query's `order("created_at", { ascending: false })`.
+      const rows = () => [...db.rows].reverse().filter((row) => row.user_id === user && (!conversation || row.conversation_id === conversation) && (!kind || row.kind === kind));
+      // limit() is a terminal step in the real client too, but it's also chainable with .maybeSingle(): support both by returning a
+      // thenable (so a bare `await` resolves the list) that also exposes .maybeSingle().
+      const limited = (n: number) => ({
+        then: (resolve: (value: { data: unknown[]; error: null }) => void) => resolve({ data: rows().slice(0, n), error: null }),
+        maybeSingle: async () => ({ data: rows().slice(0, n)[0] ?? null, error: null }),
+      });
       const query = {
         select: () => query,
-        eq: (key: string, value: string) => { if (key === "user_id") user = value; if (key === "kind") kind = value; return query; },
-        not: () => query,
+        eq: (key: string, value: string) => { if (key === "user_id") user = value; if (key === "conversation_id") conversation = value; if (key === "kind") kind = value; return query; },
         order: () => query,
-        limit: async () => ({ data: rows() }),
-        maybeSingle: async () => ({ data: rows()[0] }),
+        limit: (n: number) => limited(n),
+        insert: (row: { user_id: string; conversation_id: string; kind: string; payload_ciphertext: string }) => ({
+          select: () => ({ single: async () => { const saved = { id: `ref${db.rows.length}`, created_at: new Date().toISOString(), ...row }; db.rows.push(saved); return { data: { id: saved.id }, error: null }; } }),
+        }),
       };
       return query;
     },
   }),
 }));
-import { loadRecentSearchStates, loadSearchState, searchRecallContext } from "./search-state";
-beforeEach(() => { db.conversations = []; db.references = []; });
+import { loadRecentSearchStates, loadSearchState, saveSearchState, searchRecallContext } from "./search-state";
+beforeEach(() => { db.rows = []; db.conversations = ["c", "c2"]; });
 
 it("recalls yesterday's restaurants across conversations without exposing another user's records", async () => {
   const state = { query: "Chinese restaurants Sunnyvale", updatedAt: Date.now() - 86400000, places: [{ name: "Ginger Cafe", address: "Sunnyvale", note: "Previously suggested" }] };
-  db.conversations = [{ user_id: "u", search_state_ciphertext: JSON.stringify(state) }, { user_id: "other", search_state_ciphertext: JSON.stringify({ ...state, query: "Private other user" }) }];
+  db.rows = [
+    { id: "r1", user_id: "u", conversation_id: "c", kind: "place_results", payload_ciphertext: JSON.stringify(state), created_at: "" },
+    { id: "r2", user_id: "other", conversation_id: "c", kind: "place_results", payload_ciphertext: JSON.stringify({ ...state, query: "Private other user" }), created_at: "" },
+  ];
   expect((await loadSearchState("u", "c"))?.places[0].name).toBe("Ginger Cafe");
   const records = await loadRecentSearchStates("u");
   expect(records).toEqual([state]);
@@ -36,33 +48,29 @@ it("recalls yesterday's restaurants across conversations without exposing anothe
 });
 
 it("ignores corrupt or expired records without inventing memories", async () => {
-  db.conversations = [{ user_id: "u", search_state_ciphertext: "broken" }, { user_id: "u", search_state_ciphertext: JSON.stringify({ updatedAt: Date.now() - 31 * 86400000, places: [{ name: "Old" }] }) }];
+  db.rows = [
+    { id: "r1", user_id: "u", conversation_id: "c", kind: "place_results", payload_ciphertext: "broken", created_at: "" },
+    { id: "r2", user_id: "u", conversation_id: "c", kind: "place_results", payload_ciphertext: JSON.stringify({ updatedAt: Date.now() - 31 * 86400000, places: [{ name: "Old" }] }), created_at: "" },
+  ];
   expect(await loadRecentSearchStates("u")).toEqual([]);
 });
 
 it("retains this conversation's place list after months, independently of cross-chat recall", async () => {
- const state = { query: "Chinese restaurants", updatedAt: Date.now() - 180 * 86400000, places: [{name: "Ginger Cafe"}] };
- db.conversations = [{user_id: "u", search_state_ciphertext: JSON.stringify(state)}];
- expect(await loadSearchState("u", "c")).toEqual(state);
- expect(await loadRecentSearchStates("u")).toEqual([]);
+  const state = { query: "Chinese restaurants", updatedAt: Date.now() - 180 * 86400000, places: [{ name: "Ginger Cafe" }] };
+  db.rows = [{ id: "r1", user_id: "u", conversation_id: "c", kind: "place_results", payload_ciphertext: JSON.stringify(state), created_at: "" }];
+  expect(await loadSearchState("u", "c")).toEqual(state);
+  expect(await loadRecentSearchStates("u")).toEqual([]);
 });
 
-it("a second search in the same conversation overwrites the visible state, but recall still finds the first one from its archive", async () => {
-  // Vietnamese, then Thai, asked in one chat: only Thai remains the conversation's current state, but Vietnamese was archived when it was superseded.
-  const vietnamese = { referenceId: "r1", query: "Vietnamese restaurants Sunnyvale", updatedAt: Date.now() - 60000, places: [{ name: "Pho Nam" }] };
-  const thai = { referenceId: "r2", query: "Thai restaurants Sunnyvale", updatedAt: Date.now(), places: [{ name: "Thai Spoons" }] };
-  db.conversations = [{ user_id: "u", search_state_ciphertext: JSON.stringify(thai) }];
-  db.references = [
-    { user_id: "u", kind: "place_results", payload_ciphertext: JSON.stringify(vietnamese) },
-    { user_id: "u", kind: "place_results", payload_ciphertext: JSON.stringify(thai) },
-  ];
+it("a second search in the same conversation never pushes the first out of cross-chat recall (each search is its own row)", async () => {
+  await saveSearchState("u", "c", { query: "Vietnamese restaurants Sunnyvale", places: [{ name: "Pho Nam", address: "", note: "" }] });
+  await saveSearchState("u", "c", { query: "Thai restaurants Sunnyvale", places: [{ name: "Thai Spoons", address: "", note: "" }] });
+  expect((await loadSearchState("u", "c"))?.query).toBe("Thai restaurants Sunnyvale");
   const records = await loadRecentSearchStates("u");
   expect(records.map((r) => r.query)).toEqual(["Thai restaurants Sunnyvale", "Vietnamese restaurants Sunnyvale"]);
 });
 
-it("never lists the same search twice when it is both the current state and its own archived copy", async () => {
-  const state = { referenceId: "r1", query: "Chinese restaurants Sunnyvale", updatedAt: Date.now(), places: [{ name: "Ginger Cafe" }] };
-  db.conversations = [{ user_id: "u", search_state_ciphertext: JSON.stringify(state) }];
-  db.references = [{ user_id: "u", kind: "place_results", payload_ciphertext: JSON.stringify(state) }];
-  expect(await loadRecentSearchStates("u")).toHaveLength(1);
+it("saves nothing for an empty result, so a failed search cannot look like a real, empty suggestion", async () => {
+  await saveSearchState("u", "c", { query: "Nonexistent cuisine", places: [] });
+  expect(await loadSearchState("u", "c")).toBeNull();
 });
