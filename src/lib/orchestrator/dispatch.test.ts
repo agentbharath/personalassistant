@@ -58,7 +58,7 @@ vi.mock("@/lib/conversations/search-state", () => ({ saveSearchState: (...args: 
 describe("an answer is always text (free)", () => {
   it("replaces anything that is not text with a plain message, instead of showing [object Object]", async () => {
     mocks.answerPublicSearch.mockResolvedValueOnce({ text: "an object" } as never);
-    const result = await dispatchDecision(decision({ operation: "web_search" }), ctx);
+    const result = await dispatchDecision(decision({ operation: "web_search", searchQuery: "q" } as never), ctx);
     expect(result?.answer).toMatch(/trouble putting that answer together/);
     expect(result?.answer).not.toContain("[object Object]");
   });
@@ -75,9 +75,11 @@ describe("a web search uses the search the router wrote (free)", () => {
     await dispatchDecision(decision({ operation: "web_search", searchQuery: "Indian restaurants in Sunnyvale, CA" } as never), ctx);
     expect(mocks.answerPublicSearch).toHaveBeenCalledWith("Indian restaurants in Sunnyvale, CA", expect.any(Function));
   });
-  it("falls back to the person's own words when the router wrote none", async () => {
-    await dispatchDecision(decision({ operation: "web_search" }), ctx);
-    expect(mocks.answerPublicSearch).toHaveBeenCalledWith("the message", expect.any(Function));
+  it("asks rather than searching the raw message when the router wrote no query (R19.5: a web_search always names its own search)", async () => {
+    const result = await dispatchDecision(decision({ operation: "web_search" }), ctx);
+    expect(mocks.answerPublicSearch).not.toHaveBeenCalled();
+    expect(result?.answer).toMatch(/what place should i search/i);
+    expect(result?.status).toBe("waiting_for_user");
   });
 });
 
@@ -88,7 +90,7 @@ describe("each operation calls its own handler (R19.4)", () => {
     [decision({ operation: "bills_list" }), () => mocks.runBillsCommand, "BILLS"],
     [decision({ operation: "daily_view" }), () => mocks.answerDailyView, "DAILY"],
     [decision({ operation: "calendar_query" }), () => mocks.answerCalendar, "CALENDAR"],
-    [decision({ operation: "web_search" }), () => mocks.answerPublicSearch, "WEB"],
+    [decision({ operation: "web_search", searchQuery: "q" } as never), () => mocks.answerPublicSearch, "WEB"],
     [decision({ operation: "unsupported" }), () => mocks.answerCasual, "CASUAL"],
   ])("%#", async (d, handler, answer) => {
     const result = await dispatchDecision(d, ctx);

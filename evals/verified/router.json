@@ -1,10 +1,7 @@
 {
- "version": "router-v24",
+ "version": "router-v25",
  "verified": {
-  "bills-list-0": "0391a381c2b9",
-  "bills-list-1": "86e7a296d404",
-  "bills-list-2": "9d3d2f75645d",
-  "bills-list-3": "c8e2c3ff5f95",
-  "bills-list-4": "4d7f3ea46830"
+  "trip-place-carries-1": "6766d3f906aa",
+  "trip-place-carries-2": "8be846b1f761"
  }
 }

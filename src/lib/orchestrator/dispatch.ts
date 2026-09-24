@@ -173,11 +173,15 @@ export async function dispatchDecision(decision: RouterDecision, ctx: DispatchCo
     case "daily_view":
       prepareAgentStage(["calendar", "finance"], "fast");
       return done(await answerDailyView(userId), ["calendar", "finance"]);
-    case "web_search":
+    case "web_search": {
+      // R19.5: structure only. A web_search decision always names its own search (the router's own rule); the raw message is never a
+      // substitute; it has no location or context that made this a search in the first place, and searching it verbatim searches nothing
+      // useful. Missing here means the router itself was unsure, so ask rather than guess.
+      if (!decision.searchQuery?.trim()) return done("What place should I search? Say a city, neighborhood, or ZIP code.", [], "waiting_for_user");
       prepareAgentStage(["general"], "balanced");
-      // R20.5: the router wrote the search (typos fixed, the saved home place added for "near me"); the raw message is the fallback.
       // Remember what was shown, so "the second one" or "which is open now?" can be read next turn.
-      return done(await answerPublicSearch(decision.searchQuery || input, conversationId ? (state) => saveSearchState(userId, conversationId, state) : undefined), ["general"]);
+      return done(await answerPublicSearch(decision.searchQuery, conversationId ? (state) => saveSearchState(userId, conversationId, state) : undefined), ["general"]);
+    }
     case "multi": {
       const plan = planClauseInstructions(input, decision.agents);
       const outcomes = await executeReadOnlyAgentPlan(plan.tasks, input, userId, context);
