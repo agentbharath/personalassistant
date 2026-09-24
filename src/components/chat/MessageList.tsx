@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/Button";
 import { windowMessages } from "@/lib/ui/grouping";
 import { AssistantMessage, PendingMessage, UserMessage } from "./Message";
 import styles from "./MessageList.module.css";
-import { answerChoices, followUps, hasApprovalActions, type Message } from "./types";
+import { answerChoices, followUps, hasApprovalActions, hasScanActions, type Message } from "./types";
 
 const VISIBLE = 120;
 const STEP = 120;
@@ -17,19 +17,20 @@ type Props = {
   takingLonger: boolean;
   hasEarlierMessages: boolean;
   loadingEarlier: boolean;
+  earlierError?: boolean;
   ratings: Record<string, 1 | -1>;
   /** Indexes of messages matching the find bar, and which one is current. */
   matches: number[];
   activeMatch: number | null;
   onLoadEarlier: () => void;
-  onAction: (action: "confirm" | "cancel" | "retry") => void;
+  onAction: (action: "confirm" | "cancel" | "retry" | "continue_scan") => void;
   onFollowUp: (text: string) => void;
   onRate: (message: Message, rating: 1 | -1) => void;
   onNote: (message: Message, note: string) => Promise<boolean>;
   endRef: RefObject<HTMLDivElement | null>;
 };
 
-export function MessageList({ messages, pending, progress, takingLonger, hasEarlierMessages, loadingEarlier, ratings, matches, activeMatch, onLoadEarlier, onAction, onFollowUp, onRate, onNote, endRef }: Props) {
+export function MessageList({ messages, pending, progress, takingLonger, hasEarlierMessages, loadingEarlier, earlierError, ratings, matches, activeMatch, onLoadEarlier, onAction, onFollowUp, onRate, onNote, endRef }: Props) {
   const [visible, setVisible] = useState(VISIBLE);
   const { shown, hidden, offset } = windowMessages(messages, visible);
   const lastIndex = messages.length - 1;
@@ -47,7 +48,7 @@ export function MessageList({ messages, pending, progress, takingLonger, hasEarl
 
   return <div className={styles.list} aria-live="polite" aria-relevant="additions">
     {hidden > 0 && <Button className={styles.earlier} size="sm" onClick={() => setVisible((current) => current + STEP)}>Show {Math.min(hidden, STEP)} earlier messages</Button>}
-    {hidden === 0 && hasEarlierMessages && <Button className={styles.earlier} size="sm" disabled={loadingEarlier} onClick={onLoadEarlier}>{loadingEarlier ? "Loading…" : "Load earlier messages"}</Button>}
+    {hidden === 0 && hasEarlierMessages && <Button className={styles.earlier} size="sm" disabled={loadingEarlier} onClick={onLoadEarlier}>{loadingEarlier ? "Loading…" : earlierError ? "Couldn’t load earlier messages · Try again" : "Load earlier messages"}</Button>}
     {shown.map((message, index) => {
       const absolute = offset + index;
       const highlight = activeMatch === absolute ? "active" : matches.includes(absolute) ? "match" : undefined;
@@ -60,6 +61,7 @@ export function MessageList({ messages, pending, progress, takingLonger, hasEarl
         highlight={highlight}
         notice={message.notice}
         approval={latest && hasApprovalActions(message.content)}
+        resumable={latest && hasScanActions(message.content)}
         retryable={latest && message.retryable}
         busy={pending}
         canRate={Boolean(message.sequence)}
@@ -67,6 +69,7 @@ export function MessageList({ messages, pending, progress, takingLonger, hasEarl
         onRate={(rating) => onRate(message, rating)}
         onNote={(note) => onNote(message, note)}
         onConfirm={() => onAction("confirm")}
+        onContinue={() => onAction("continue_scan")}
         onCancel={() => onAction("cancel")}
         onRetry={() => onAction("retry")}
       >{message.content}</AssistantMessage>;

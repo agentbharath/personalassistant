@@ -138,7 +138,7 @@ describe("code checks structure and never judges the message (R19.5)", () => {
 
 import { ROUTER_JSON_SCHEMA } from "./router";
 
-describe("router v13: drafts, redirects and choices (R22, R23, R25)", () => {
+describe("router v14: drafts, redirects and choices (R22, R23, R25)", () => {
   // The model returns flat objects with "none" and empty strings, not nulls (the API limits how many union-typed fields a schema may have).
   const draft = (over: Record<string, unknown> = {}) => ({ action: "create", kind: "reply", to: "sarah", replyTo: "sarah's email", instruction: "say I'll be there", version: "", ...over });
   const redirect = (over: Record<string, unknown> = {}) => ({ category: "speculation", reply: "I can't tell you how they came by theirs, but I can help you find vintage shops near you.", distress: false, pivot: "web", ask: "", ...over });
@@ -165,8 +165,8 @@ describe("router v13: drafts, redirects and choices (R22, R23, R25)", () => {
     for (const key of ["choices", "draft", "redirect"]) expect(required).toContain(key);
   });
 
-  it("is version 13, asks when in doubt, and teaches drafting, redirecting and choices", () => {
-    expect(ROUTER_VERSION).toBe("router-v13");
+  it("is version 14, asks when in doubt, and teaches drafting, redirecting and choices", () => {
+    expect(ROUTER_VERSION).toBe("router-v23");
     expect(ROUTER_SYSTEM).toMatch(/When in doubt, ask/);
     expect(ROUTER_SYSTEM).toMatch(/email_draft/);
     expect(ROUTER_SYSTEM).toMatch(/Never just "I can't answer that"/);
@@ -235,13 +235,13 @@ describe("the saved home location (free)", () => {
 describe("how much of the conversation the router sees (free)", () => {
   const input = (context: RouterInput["context"]): RouterInput => ({ userId: "u1", message: "I can't attend", context, emailState: null, today: "2026-09-21", pendingApproval: false });
 
-  it("keeps the last eight messages, with room for a whole list or draft in Daylark's own answers", () => {
+  it("keeps the last twelve messages, with room for a whole list or draft in Daylark's own answers", () => {
     const context = Array.from({ length: 12 }, (_, index) => ({ role: (index % 2 ? "assistant" : "user") as "user" | "assistant", content: `${index}:` + "x".repeat(1000) }));
     const recent = JSON.parse(buildRouterMessage(input(context))).recent as Array<{ role: string; text: string }>;
-    expect(recent).toHaveLength(8);
-    expect(recent[0].text.startsWith("4:")).toBe(true);
-    expect(recent.filter((item) => item.role === "assistant").every((item) => item.text.length === 700)).toBe(true);
-    expect(recent.filter((item) => item.role === "user").every((item) => item.text.length === 300)).toBe(true);
+    expect(recent).toHaveLength(12);
+    expect(recent[0].text.startsWith("0:")).toBe(true);
+    expect(recent.filter((item) => item.role === "assistant").every((item) => item.text.length > 900)).toBe(true);
+    expect(recent.filter((item) => item.role === "user").every((item) => item.text.length > 900)).toBe(true);
   });
 
   it("passes the summary of earlier conversation separately, so it never uses up a recent slot", () => {
@@ -253,5 +253,50 @@ describe("how much of the conversation the router sees (free)", () => {
   it("tells the model that an answer to its own question continues the same task, and that reply-to-a-person starts a new reply", () => {
     expect(ROUTER_SYSTEM).toMatch(/is the ANSWER to it and continues the same task/);
     expect(ROUTER_SYSTEM).toMatch(/always starts a NEW reply or email, even right after a draft was saved/);
+  });
+});
+
+
+describe("context repair for an answered clarification",()=>{
+  it("reviews a repeated question once, then executes the clarified operation",async()=>{
+    const complete=vi.fn().mockResolvedValueOnce(reply(out({operation:"clarify",confidence:0.4,clarification:"Daylark drafts or Gmail drafts?"})))
+      .mockResolvedValueOnce(reply(out({operation:"email_draft_history"})));
+    const result=await routeMessage(input("Daylark's saved drafts",{context:[{role:"user",content:"What emails have we drafted?"},{role:"assistant",content:"Daylark drafts or Gmail drafts?"}]}),{complete});
+    expect(result?.operation).toBe("email_draft_history");
+    expect(complete).toHaveBeenCalledTimes(2);
+  });
+  it("does not loop indefinitely if a genuine clarification remains necessary",async()=>{
+    const complete=vi.fn().mockResolvedValue(reply(out({operation:"clarify",confidence:0.4,clarification:"3 AM or 3 PM?"})));
+    expect((await routeMessage(input("three",{context:[{role:"assistant",content:"When should we meet?"}]}),{complete}))?.operation).toBe("clarify");
+    expect(complete).toHaveBeenCalledTimes(2);
+  });
+  it("preserves an offer at the end of a long answer and includes it in the cache key",()=>{
+    const question="Want me to search for JavaScript sudoku solver code?";
+    const context=[{role:"assistant" as const,content:"Background. ".repeat(500)+question}];
+    const message=JSON.parse(buildRouterMessage(input("Yes",{context})));
+    expect(message.lastAssistantTurn).toContain(question);
+    expect(message.recent[0].text).toContain(question);
+    expect(routerCacheMaterial(input("Yes",{context}))).not.toBe(routerCacheMaterial(input("Yes",{context:[{role:"assistant",content:"Background. ".repeat(500)+"Want resume templates?"}]})));
+  });
+});
+
+describe("follow-up loop protection", () => {
+  it("blocks a repeated answered choice after one repair without caching the failure", async () => {
+    const question = "Daylark drafts or Gmail drafts?";
+    const complete = vi.fn().mockResolvedValue(reply(out({operation:"clarify", confidence:0.4, clarification:question})));
+    const cache = cacheOf();
+    const result = await routeMessage(input("Daylark drafts", {context:[{role:"assistant", content:question, choices:["Daylark drafts", "Gmail drafts"]}]}), {complete, cache});
+    expect(result).toMatchObject({continuityBlocked:true, choices:[]});
+    expect(result?.clarification).not.toContain(question);
+    expect(complete).toHaveBeenCalledTimes(2);
+    expect(cache.store.size).toBe(0);
+  });
+  it("reviews an accepted offer even when the offer ends in a period", async () => {
+    const complete = vi.fn().mockResolvedValueOnce(reply(out({operation:"clarify", confidence:0.4, clarification:"Search for what?"}))).mockResolvedValueOnce(reply(out({operation:"web_search", searchQuery:"JavaScript sudoku solver"})));
+    const result = await routeMessage(input("Yes", {pendingApproval:true, context:[{role:"assistant", content:"I can search for JavaScript sudoku solver code."}]}), {complete});
+    expect(result?.operation).toBe("web_search");
+    const sent = JSON.parse(complete.mock.calls[0][0].messages[0].content);
+    expect(sent.followupExchange.assistantReply).toContain("sudoku");
+    expect(ROUTER_SYSTEM).not.toContain("trust the flag over what recent contains");
   });
 });

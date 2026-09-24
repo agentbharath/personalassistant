@@ -71,7 +71,7 @@ export function describeSearch(request: EmailRequest, defaulted: boolean) {
   const window = request.days ? `last ${request.days} days${defaulted ? " (default)" : ""}` : request.calendar ?? "";
   const facts = request.action === "facts" ? "latest invoice, amount and date" : request.action === "amounts" ? "receipts with amounts" : "";
   return [
-    facts || TOPIC_LABEL[request.topic],
+    request.intent || (request.searchTerms?.length ? request.searchTerms.join(" / ") : facts || TOPIC_LABEL[request.topic]),
     request.sender ? `from ${request.sender}` : "",
     window,
     request.unread ? "unread only" : "",

@@ -16,7 +16,7 @@ const MOCK: DailyView = {
     { id: "e2", summary: "Dentist", start: "2026-09-21T21:00:00Z", end: "2026-09-21T22:00:00Z", allDay: false, location: "Bay Dental" },
   ] },
   meetingsAhead: { state: "ok", value: [{ id: "e3", summary: "Dinner with Sam", start: "2026-09-23T01:00:00Z", end: "2026-09-23T03:00:00Z", allDay: false }] },
-  bills: { state: "ok", value: { overdue: [bill("b1", "Comcast", 8999, "2026-09-15")], dueToday: [bill("b2", "PG&E", 15000, "2026-09-21")], dueThisWeek: [bill("b3", "Rent", 240000, "2026-09-28")], noDueDate: [] } },
+  bills: { state: "ok", value: { overdue: [bill("b1", "Comcast", 8999, "2026-09-15")], dueToday: [bill("b2", "PG&E", 15000, "2026-09-21")], dueThisWeek: [bill("b3", "Rent", 240000, "2026-09-28")], dueLater: [], noDueDate: [] } },
   spending: { state: "ok", value: { currency: "USD", from: "2026-09-15", to: "2026-09-21", total: 41250, count: 4, previousTotal: 33000, changePercent: 25, dailyAverage: 5893, categories: [
     { category: "groceries", amountMinor: 18000, sharePercent: 44, entries: [{ merchant: "Costco", amountMinor: 11000, occurredOn: "2026-09-16" }, { merchant: "Trader Joe's", amountMinor: 7000, occurredOn: "2026-09-20" }] },
     { category: "restaurants", amountMinor: 12250, sharePercent: 30, entries: [{ merchant: "Curry Point", amountMinor: 12250, occurredOn: "2026-09-18" }] },
@@ -38,7 +38,7 @@ export default async function DesignPerchPage({ searchParams }: { searchParams: 
   // ?state=connect shows the not-connected and empty states.
   const connect = (await searchParams).state === "connect";
   const view: DailyView = connect
-    ? { ...MOCK, meetingsToday: { state: "needs_connection" }, meetingsAhead: { state: "needs_connection" }, bills: { state: "ok", value: { overdue: [], dueToday: [], dueThisWeek: [], noDueDate: [] } }, spending: { state: "ok", value: null } }
+    ? { ...MOCK, meetingsToday: { state: "needs_connection" }, meetingsAhead: { state: "needs_connection" }, bills: { state: "ok", value: { overdue: [], dueToday: [], dueThisWeek: [], dueLater: [], noDueDate: [] } }, spending: { state: "ok", value: null } }
     : MOCK;
   return <AppShell title="Perch" email="you@example.com" signOutAction={signOut} recent={MOCK_RECENT} activeView="perch"><TodayView view={view} replies={<WaitingCard result={connect ? { state: "setup", prefs: { saved: false, perchEnabled: true, remindersEnabled: true, kinds: ["person", "business", "recruiter"] } } : MOCK_WAITING} now={NOW} />} /></AppShell>;
 }

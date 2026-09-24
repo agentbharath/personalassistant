@@ -13,12 +13,12 @@ import type { Message } from "./types";
 import { useChat } from "./useChat";
 import { useVoiceInput } from "./useVoiceInput";
 
-type Props = { title?: string; conversationId?: string; initialMessages?: Message[]; initialHasMore?: boolean; initialOldestSequence?: string };
+type Props = { initialInput?: string; title?: string; conversationId?: string; initialMessages?: Message[]; initialHasMore?: boolean; initialOldestSequence?: string };
 
 const typing = (target: EventTarget | null) => target instanceof HTMLElement && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
 
-export function Chat({ title, conversationId, initialMessages = [], initialHasMore = false, initialOldestSequence }: Props) {
-  const chat = useChat({ conversationId, initialMessages, initialHasMore, initialOldestSequence });
+export function Chat({ title, conversationId, initialMessages = [], initialHasMore = false, initialOldestSequence, initialInput }: Props) {
+  const chat = useChat({ conversationId, initialMessages, initialHasMore, initialOldestSequence, initialInput });
   const voice = useVoiceInput(() => chat.input, chat.setInput);
   chat.beforeSend.current = () => { voice.stop(); voice.clearMessage(); };
   const fieldRef = useRef<HTMLTextAreaElement>(null);
@@ -65,7 +65,7 @@ export function Chat({ title, conversationId, initialMessages = [], initialHasMo
     <div style={{ flex: 1 }}>
       {empty
         ? <div style={{ maxWidth: "var(--measure)", margin: "0 auto", padding: "0 var(--s-4)" }}><EmptyState onPick={(prompt) => { chat.setInput(prompt); fieldRef.current?.focus(); }} /></div>
-        : <MessageList messages={chat.messages} pending={chat.pending} progress={chat.progress} takingLonger={chat.takingLonger} hasEarlierMessages={chat.hasEarlierMessages} loadingEarlier={chat.loadingEarlier} ratings={chat.ratings} matches={matches} activeMatch={activeMatch}
+        : <MessageList messages={chat.messages} pending={chat.pending} progress={chat.progress} takingLonger={chat.takingLonger} hasEarlierMessages={chat.hasEarlierMessages} loadingEarlier={chat.loadingEarlier} earlierError={chat.earlierError} ratings={chat.ratings} matches={matches} activeMatch={activeMatch}
           onLoadEarlier={chat.loadEarlier} onAction={(action) => void chat.sendMessage(action)} onFollowUp={(text) => void chat.sendMessage(undefined, text)} onRate={(message, rating) => void chat.rate(message, rating)} onNote={chat.saveNote} endRef={chat.endRef} />}
     </div>
     {away && !empty && <button type="button" className={styles.toLatest} onClick={() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "smooth" })}><ArrowDownIcon width={16} height={16} />Latest</button>}

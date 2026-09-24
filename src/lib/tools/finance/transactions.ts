@@ -15,29 +15,34 @@ export type TransactionCandidate = {
 };
 
 export type StoredTransaction = TransactionCandidate & { id: string };
-export type TransactionSource = { type: "user_input" | "receipt" | "email"; externalRef?: string; payload?: string };
+export type TransactionSource = { type: "user_input" | "receipt" | "email"; externalRef?: string; payload?: string; orderId?: string };
 
 function normalizeMerchant(value: string) {
   return value.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, " ").trim();
 }
 
-function fingerprint(candidate: TransactionCandidate) {
+function orderHash(candidate: TransactionCandidate, orderId: string) {
+  return piiHmac(`${normalizeMerchant(candidate.merchant)}|${candidate.currency.toUpperCase()}|${candidate.direction}|${orderId.trim().toLowerCase()}`);
+}
+
+function fingerprint(candidate: TransactionCandidate, orderId?: string) {
   return piiHmac([
     candidate.occurredOn,
     candidate.amountMinor,
     candidate.currency.toUpperCase(),
     candidate.direction,
     normalizeMerchant(candidate.merchant),
+    ...(orderId ? [orderId.trim().toLowerCase()] : []),
   ].join("|"));
 }
 
 function nearbyDates(date: string) {
   const center = new Date(`${date}T12:00:00Z`);
   const shift = (days: number) => new Date(center.getTime() + days * 86_400_000).toISOString().slice(0, 10);
-  return { from: shift(-3), to: shift(3) };
+  return { from: shift(-2), to: shift(2) };
 }
 
-type DuplicateHit = { row: Record<string, unknown>; kind: "source" | "exact" | "probable" };
+type DuplicateHit = { row: Record<string, unknown>; kind: "source" | "order" | "exact" | "probable" };
 const COLUMNS = "id, occurred_on, amount_minor, currency, direction, merchant_ciphertext, category, note_ciphertext";
 
 /** Does this transaction already exist? Looks by the email it came from, by an identical record, then by the same merchant and amount on nearby dates. Reads only. */
@@ -58,8 +63,18 @@ async function findDuplicate(supabase: ReturnType<typeof createAdminClient>, use
       return { row: linkedTransaction, kind: "source" };
     }
   }
+  if (source.orderId) {
+    const { data: orderSources, error: orderError } = await supabase.from("finance_transaction_sources").select("transaction_id").eq("user_id", userId).eq("order_ref_hmac", orderHash(candidate, source.orderId)).limit(100);
+    if (orderError) throw orderError;
+    const orderIds = [...new Set((orderSources ?? []).map(row => row.transaction_id))];
+    if (orderIds.length === 1) {
+      const {data: order, error} = await supabase.from("finance_transactions").select(COLUMNS).eq("user_id", userId).eq("id", orderIds[0]).single();
+      if (error) throw error;
+      if (order.amount_minor === candidate.amountMinor && order.currency === candidate.currency.toUpperCase() && order.direction === candidate.direction) return {row: order, kind: "order"};
+    }
+  }
   const currency = candidate.currency.toUpperCase();
-  const { data: exact, error: exactError } = await supabase.from("finance_transactions").select(COLUMNS).eq("user_id", userId).eq("dedupe_fingerprint", fingerprint({ ...candidate, currency })).maybeSingle();
+  const { data: exact, error: exactError } = await supabase.from("finance_transactions").select(COLUMNS).eq("user_id", userId).eq("dedupe_fingerprint", fingerprint({ ...candidate, currency }, source.orderId)).maybeSingle();
   if (exactError) throw exactError;
   if (exact) return { row: exact, kind: "exact" };
 
@@ -77,8 +92,15 @@ async function findDuplicate(supabase: ReturnType<typeof createAdminClient>, use
     .limit(20);
   if (nearbyError) throw nearbyError;
   const merchant = normalizeMerchant(candidate.merchant);
-  const probable = (nearby ?? []).find((row) => normalizeMerchant(decryptText(row.merchant_ciphertext as string)) === merchant);
-  return probable ? { row: probable, kind: "probable" } : null;
+  let matches = (nearby ?? []).filter((row) => normalizeMerchant(decryptText(row.merchant_ciphertext as string)) === merchant);
+  if (source.orderId && matches.length) {
+    const {data: evidence, error} = await supabase.from("finance_transaction_sources").select("transaction_id,order_ref_hmac").eq("user_id", userId).in("transaction_id", matches.map(row => row.id)).not("order_ref_hmac", "is", null);
+    if (error) throw error;
+    const expected = orderHash(candidate, source.orderId);
+    // Different explicit orders are separate purchases, even at the same merchant/amount/date.
+    matches = matches.filter(row => !(evidence ?? []).some(ref => ref.transaction_id === row.id && ref.order_ref_hmac !== expected));
+  }
+  return matches.length === 1 ? { row: matches[0], kind: "probable" } : null;
 }
 
 /** Which of these emails already back a recorded transaction. One lookup, reads only, so a sweep can skip them before reading or judging them. */
@@ -108,55 +130,49 @@ export async function createTransactionCandidate(userId: string, candidate: Tran
   const hit = await findDuplicate(supabase, userId, candidate, source);
   if (hit) {
     // The same purchase seen through a new email is linked to the record that already exists, so it is recognised next time.
-    if (hit.kind !== "source") await linkExternalSource(supabase, userId, hit.row.id as string, source);
+    if (hit.kind !== "source") await linkExternalSource(supabase, userId, hit.row.id as string, source, candidate);
     return { transaction: decode(hit.row), duplicate: true, duplicateKind: hit.kind };
   }
   const currency = candidate.currency.toUpperCase();
-  const dedupeFingerprint = fingerprint({ ...candidate, currency });
+  const dedupeFingerprint = fingerprint({ ...candidate, currency }, source.orderId);
   const merchant = normalizeMerchant(candidate.merchant);
-  const { data: inserted, error: insertError } = await supabase.from("finance_transactions").insert({
-    user_id: userId,
-    occurred_on: candidate.occurredOn,
-    amount_minor: candidate.amountMinor,
-    currency,
-    direction: candidate.direction,
-    merchant_ciphertext: encryptText(candidate.merchant),
-    merchant_hash: piiHmac(merchant),
-    category: candidate.category.trim().toLowerCase(),
-    note_ciphertext: candidate.note ? encryptText(candidate.note) : null,
-    dedupe_fingerprint: dedupeFingerprint,
-  }).select("id, occurred_on, amount_minor, currency, direction, merchant_ciphertext, category, note_ciphertext").single();
-  if (insertError) {
-    if (insertError.code === "23505") {
-      return createTransactionCandidate(userId, candidate, source);
-    }
-    throw insertError;
-  }
-
   assertToolAllowed("finance", "finance.link_sources");
-  const { error: sourceError } = await supabase.from("finance_transaction_sources").insert({
-    user_id: userId,
-    transaction_id: inserted.id,
-    source_type: source.type,
-    external_ref_hmac: source.externalRef ? piiHmac(source.externalRef) : null,
-    payload_ciphertext: source.payload ? encryptText(source.payload) : null,
+  const {data, error} = await supabase.rpc("insert_finance_transaction_with_source", {
+    p_user_id: userId,
+    p_transaction: {
+      occurred_on: candidate.occurredOn, amount_minor: candidate.amountMinor, currency, direction: candidate.direction,
+      merchant_ciphertext: encryptText(candidate.merchant), merchant_hash: piiHmac(merchant), category: candidate.category.trim().toLowerCase(),
+      note_ciphertext: candidate.note ? encryptText(candidate.note) : null, dedupe_fingerprint: dedupeFingerprint,
+    },
+    p_source: {source_type: source.type, external_ref_hmac: source.externalRef ? piiHmac(source.externalRef) : null,
+      payload_ciphertext: source.payload ? encryptText(source.payload) : null, order_ref_hmac: source.orderId ? orderHash(candidate, source.orderId) : null},
   });
-  if (sourceError) throw sourceError;
-  return { transaction: decode(inserted), duplicate: false, duplicateKind: null };
+  if (error) {
+    if (error.code === "23505") {
+      // A concurrent approval won the source uniqueness race. Its whole transaction committed atomically.
+      const winner = await findDuplicate(supabase, userId, candidate, source);
+      if (winner) return {transaction: decode(winner.row), duplicate: true, duplicateKind: winner.kind};
+    }
+    throw error;
+  }
+  return {transaction: decode(data.transaction), duplicate: Boolean(data.duplicate), duplicateKind: data.duplicate ? "exact" as const : null};
 }
 
 export async function listTransactions(userId: string, from: string, to: string) {
   assertToolAllowed("finance", "finance.aggregate");
-  const { data, error } = await createAdminClient()
-    .from("finance_transactions")
-    .select("id, occurred_on, amount_minor, currency, direction, merchant_ciphertext, category, note_ciphertext")
-    .eq("user_id", userId)
-    .gte("occurred_on", from)
-    .lte("occurred_on", to)
-    .order("occurred_on", { ascending: false })
-    .limit(1000);
-  if (error) throw error;
-  return (data ?? []).map(decode);
+  const rows: StoredTransaction[] = [];
+  const pageSize = 1000;
+  for (let offset = 0; ; offset += pageSize) {
+    const { data, error } = await createAdminClient()
+      .from("finance_transactions")
+      .select("id, occurred_on, amount_minor, currency, direction, merchant_ciphertext, category, note_ciphertext")
+      .eq("user_id", userId).gte("occurred_on", from).lte("occurred_on", to)
+      .order("occurred_on", { ascending: false }).order("id", { ascending: false })
+      .range(offset, offset + pageSize - 1);
+    if (error) throw error;
+    rows.push(...(data ?? []).map(decode));
+    if (!data || data.length < pageSize) return rows;
+  }
 }
 
 function decode(row: Record<string, unknown>): StoredTransaction {
@@ -172,7 +188,7 @@ function decode(row: Record<string, unknown>): StoredTransaction {
   };
 }
 
-async function linkExternalSource(supabase: ReturnType<typeof createAdminClient>, userId: string, transactionId: string, source: TransactionSource) {
+async function linkExternalSource(supabase: ReturnType<typeof createAdminClient>, userId: string, transactionId: string, source: TransactionSource, candidate: TransactionCandidate) {
   if (!source.externalRef) return;
   const { error } = await supabase.from("finance_transaction_sources").insert({
     user_id: userId,
@@ -180,6 +196,7 @@ async function linkExternalSource(supabase: ReturnType<typeof createAdminClient>
     source_type: source.type,
     external_ref_hmac: piiHmac(source.externalRef),
     payload_ciphertext: source.payload ? encryptText(source.payload) : null,
+    ...(source.orderId ? {order_ref_hmac: orderHash(candidate, source.orderId)} : {}),
   });
   if (error && error.code !== "23505") throw error;
 }

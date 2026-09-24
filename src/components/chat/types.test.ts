@@ -11,9 +11,9 @@ describe("progress and follow-ups", () => {
     expect(progressLabel(["unknown"])).toBe("Understanding your request…");
   });
 
-  it("suggests next steps only after a completed answer from a known agent", () => {
-    expect(followUps(answer({}))).toContain("Show the amounts");
-    expect(followUps(answer({ agents: ["finance"] }))).toContain("Break it down by category");
+  it("does not attach generic suggestions to unrelated completed answers", () => {
+    expect(followUps(answer({content:"Work Order Pending Review"}))).toEqual([]);
+    expect(followUps(answer({ agents: ["finance"] }))).toEqual([]);
     expect(followUps(answer({ status: "waiting_for_user" }))).toEqual([]);
     expect(followUps(answer({ notice: true }))).toEqual([]);
     expect(followUps(answer({ agents: [] }))).toEqual([]);
@@ -39,4 +39,8 @@ describe("tap-to-answer choices", () => {
     expect(answerChoices(question({ choices: ["", "a", " ", "b"] }))).toEqual(["a", "b"]);
     expect(answerChoices(question({ choices: Array.from({ length: 12 }, (_, index) => String(index)) }))).toHaveLength(8);
   });
+});
+
+it("shows saved answer choices after reopening a chat without transient response status", () => {
+  expect(answerChoices({role:"assistant",content:"Which drafts?",choices:["Daylark drafts","Gmail drafts"]})).toEqual(["Daylark drafts","Gmail drafts"]);
 });

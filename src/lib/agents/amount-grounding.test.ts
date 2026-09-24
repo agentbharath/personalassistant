@@ -18,6 +18,10 @@ describe("an amount must be shown as money in the email (free)", () => {
     expect(moneyAmountsIn("Sep 6, 2026 · Order #2026 · Call 800-555-2026 · Booking.com 2026 · 12/06/2026").size).toBe(0);
   });
 
+  it("grounds whole-rupee payments reported by banks and UPI providers", () => {
+    expect(moneyAmountsIn("Paid INR 500; payment Rs. 250; charged ₹75")).toEqual(new Set([50000, 25000, 7500]));
+  });
+
   it("uses the model's amount when the email shows it, and otherwise the amount the plain rules found", () => {
     expect(groundAmount(15272, booking.text, 15272)).toBe(15272);
     expect(groundAmount(202600, booking.text, 15272)).toBe(15272); // the year read as $2,026.00
@@ -48,6 +52,8 @@ describe("credit card bill payments are recorded as transfers (free)", () => {
     expect(isCardPayment({ ...chase, subject: "Your statement is ready" })).toBe(false); // a statement is a bill
     expect(isCardPayment({ ...chase, from: "Comcast <billing@comcast.com>" })).toBe(false); // an ordinary company's payment is an expense
     expect(isCardPayment({ ...chase, subject: "Your Amazon order confirmation" })).toBe(false);
+    expect(isCardPayment({ ...chase, from: "Shop <receipts@purchase.example>" })).toBe(false);
+    expect(isCardPayment({ ...chase, from: "Shop <receipts@shop.example>", text: "Credit card payment: $25.00 for groceries" })).toBe(false);
   });
 
   it("is a document worth importing, and is saved as a transfer with the amount shown in the email", () => {

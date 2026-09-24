@@ -1,3 +1,7 @@
+import { remainingRequestMs } from "@/lib/runtime/request-context";
+import { compileEmailSearch } from "./email-search-plan";
+import { selectEmailResults, EmailSelectionUnavailable } from "./email-result-selection";
+import { interpretEmailForUser } from "./email-interpreter-runtime";
 import { ONE_TIME_MAIL_NOTE, isOneTimeSecretMail, redactSecrets } from "./email-secrets";
 import { GoogleConnectionRequiredError } from "@/lib/auth/google-credential-broker";
 import { composeNoResultReply, extractTransactionFromEvidence, type NoResultFacts } from "@/lib/model/claude";
@@ -7,37 +11,22 @@ import { loadLearnings } from "@/lib/learning/store";
 import { GoogleGmailAccessError, readGmailAttachment, readGmailMessage, searchGmail } from "@/lib/tools/email/google-gmail";
 import { Temporal } from "@js-temporal/polyfill";
 import { asksForInvoiceFacts, extractInvoiceFacts } from "./email-invoice";
-import { exclusionTerms, extractRequestedSender, fixDomainTypos, isCloseSpelling, stripExclusions, toGmailQuery } from "./email-query";
-import { HUMANS_ONLY, mentionsAll, parseEmailRequest, type EmailRequest } from "./email-request";
-import { detectEmailIntent, emailIntentRelevance, minimumEmailRelevance } from "./email-relevance";
-
-const AUTOMATED_SENDER = /^(?:no-?reply|do-?not-?reply|donotreply|notifications?|alerts?|mailer-daemon|newsletter|news|info|support|team|hello|mail|updates?)\b/;
+import { isCloseSpelling } from "./email-query";
+import { type EmailRequest } from "./email-request";
 
 export type EmailSearchOutcome = { answer: string; request: EmailRequest; results: EmailState["results"] };
-type EmailOptions = { conversationId?: string; learnings?: Learnings };
+type EmailOptions = { request?: EmailRequest; conversationId?: string; learnings?: Learnings };
 
 export async function answerEmail(rawInput: string, userId: string, options: EmailOptions = {}) {
   return (await searchEmail(rawInput, userId, options)).answer;
 }
 
-function escapeRegExp(value: string) { return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
-
-/** Puts a default window before any trailing exclusion clause, so the clause still parses as an exclusion. */
-function withWindow(text: string, days: number) {
-  const { core, clause } = stripExclusions(text);
-  return clause ? `${core} last ${days} days, ${clause}` : `${text.replace(/[?.!]+$/, "")} last ${days} days`;
-}
-
-const CORRECTION_HINT = "_Not what you meant? Say “I meant …” or “search 90 days”, or “always search 90 days” and I’ll remember._";
-
 export async function searchEmail(rawInput: string, userId: string, options: EmailOptions = {}): Promise<EmailSearchOutcome> {
-  const fixed = fixDomainTypos(rawInput);
-  const parsed = parseEmailRequest(fixed);
+  const interpretation = options.request ? null : await interpretEmailForUser({ userId, message: rawInput, state: null, context: [] });
+  const parsed = options.request ?? interpretation!.request;
+  if (interpretation && (interpretation.source === "unavailable" || interpretation.domain !== "email" || interpretation.clarification)) return { answer: interpretation.clarification ?? "I couldn’t interpret that email request right now. Please try again.", request: parsed, results: [] };
   const learnings = options.learnings ?? await loadLearnings(userId).catch(() => NO_LEARNINGS);
-  const applied = applyLearnings(parsed, learnings, { everything: mentionsAll(fixed) });
-  let learnedInput = fixed;
-  if (applied.aliasedFrom && applied.request.sender) learnedInput = learnedInput.replace(new RegExp(escapeRegExp(applied.aliasedFrom), "i"), applied.request.sender);
-  if (parsed.days === null && parsed.calendar === null && applied.request.days) learnedInput = withWindow(learnedInput, applied.request.days);
+  const applied = applyLearnings(parsed, learnings);
   const terms = describeSearch(applied.request, applied.defaultedWindow);
   const footer = `_Searched: ${escapeMarkdown(terms)}._`;
   const outcome = async (answer: string, results: EmailState["results"] = []): Promise<EmailSearchOutcome> => {
@@ -47,35 +36,39 @@ export async function searchEmail(rawInput: string, userId: string, options: Ema
     return { answer, request, results };
   };
   try {
-    const input = learnedInput;
-    const query = toGmailQuery(input);
-    const requestedSender = extractRequestedSender(input);
-    const intent = detectEmailIntent(input);
+    const contentTerms = applied.request.searchTerms ?? [];
+    const query = compileEmailSearch(applied.request);
+    const requestedSender = applied.request.sender;
+    const intent = applied.request.topic;
     const timeZone = process.env.DEFAULT_USER_TIMEZONE ?? "America/Los_Angeles";
-    const excluded = exclusionTerms(input, requestedSender);
-    const humansOnly = HUMANS_ONLY.test(input);
-    // "related" = right sender and window but rejected as the wrong kind of mail (e.g. promos when asked for invoices).
-    let related: Awaited<ReturnType<typeof searchGmail>> = [];
-    const refine = (candidates: Awaited<ReturnType<typeof searchGmail>>, ignoreDate = false) => {
-      const scoped = candidates
-        .filter((message) => !requestedSender || senderMatches(message.from, requestedSender))
-        .filter((message) => !humansOnly || !AUTOMATED_SENDER.test(senderAddress(message.from)))
-        .filter((message) => !excluded.some((term) => `${message.subject} ${message.snippet}`.toLowerCase().includes(term)))
-        .filter((message) => ignoreDate || matchesRequestedDate(message.receivedAt, input, timeZone));
-      const scored = scoped.map((message) => ({ message, relevance: emailIntentRelevance(message, intent) }));
-      if (requestedSender) related = deduplicateThreads(scoped.filter((message) => !scored.some((item) => item.message === message && item.relevance >= minimumEmailRelevance(intent))));
-      const ranked = deduplicateThreads(scored
-        .filter(({ relevance }) => relevance >= minimumEmailRelevance(intent))
-        .sort((left, right) => right.relevance - left.relevance || confirmationRank(right.message) - confirmationRank(left.message) || right.message.receivedAt - left.message.receivedAt)
-        .map(({ message }) => message));
-      return intent === "receipt" ? deduplicateOrders(ranked) : ranked;
+    const refine = async (candidates: Awaited<ReturnType<typeof searchGmail>>, _ignoreDate = false) => {
+      // Gmail enforces the compiled date/query constraints. Model selection handles semantic relevance.
+      const ranked = await selectEmailResults(userId, _ignoreDate ? { ...applied.request, days: null, calendar: null } : applied.request, candidates);
+      return intent === "receipt" ? deduplicateOrders(deduplicateThreads(ranked)) : deduplicateThreads(ranked);
     };
     // R4.6: receipt searches look at up to 50 candidates instead of Gmail's default 20 newest.
-    const candidates = intent === "receipt" ? 50 : 20;
-    let messages = refine(await searchGmail(userId, query, candidates));
-    // Gmail can't match a misspelled sender ("adobee"), so retry broadly and match the sender fuzzily.
+    const offset = applied.request.offset ?? 0;
+    const candidates = Math.min(200, Math.max(50, offset + 25));
+    const fetchCandidates = async (gmailQuery: string) => {
+      const found = await searchGmail(userId, gmailQuery, candidates);
+      if (!contentTerms.length) return found;
+      // Gmail may match the body rather than its short snippet. Verify those hits before displaying them.
+      for (let offset = 0; offset < found.length && remainingRequestMs(20_000) > 6000; offset += 6) {
+        await Promise.all(found.slice(offset, offset + 6).map(async message => {
+          if (contentTerms.some(term => `${message.subject} ${message.snippet}`.toLowerCase().includes(term.toLowerCase()))) return;
+          try {
+            const email = await readGmailMessage(userId, message.id);
+            const index = Math.min(...contentTerms.map(term => email.text.toLowerCase().indexOf(term.toLowerCase())).filter(index => index >= 0));
+            message.snippet = Number.isFinite(index) ? email.text.slice(Math.max(0, index - 100), index + 1100) : email.text.slice(0, 1200);
+          } catch { /* Relevance review uses only the evidence available. */ }
+        }));
+      }
+      return found;
+    };
+    let messages = await refine(await fetchCandidates(query));
+    // Broaden retrieval for an unmatched sender; the model still checks the requested sender.
     if (!messages.length && requestedSender && requestedSender.length >= 4) {
-      messages = refine(await searchGmail(userId, toGmailQuery(input, timeZone, { ignoreSender: true }), candidates));
+      messages = await refine(await fetchCandidates(compileEmailSearch(applied.request, { ignoreSender: true, timeZone })));
     }
     const isFacts = applied.request.action === "facts";
     const windowLabel = applied.request.days ? `the last ${applied.request.days} days` : applied.request.calendar;
@@ -83,16 +76,16 @@ export async function searchEmail(rawInput: string, userId: string, options: Ema
     let outside: typeof messages = [];
     if (!messages.length && windowLabel) {
       // R6.1, R11.3: nothing in the window, so look back up to a year.
-      outside = refine(await searchGmail(userId, toGmailQuery(input, timeZone, { ignoreDate: true }), candidates), true);
+      outside = await refine(await fetchCandidates(compileEmailSearch(applied.request, { ignoreDate: true, timeZone })), true);
       if (outside.length && isFacts) {
         messages = outside;
         widenedNote = `Nothing in ${windowLabel}, so I went further back. `;
       }
     }
     if (!messages.length) {
-      const nearMiss = outside[0] ?? related[0] ?? null;
+      const nearMiss = outside[0] ?? null;
       const facts: NoResultFacts = {
-        kind: outside.length ? "outside_window" : related.length ? "wrong_kind" : "nothing",
+        kind: outside.length ? "outside_window" : "nothing",
         terms,
         sender: applied.request.sender,
         window: windowLabel,
@@ -100,31 +93,34 @@ export async function searchEmail(rawInput: string, userId: string, options: Ema
         nearMiss: nearMiss ? { subject: nearMiss.subject, from: nearMiss.from, date: formatDate(nearMiss.date) } : null,
       };
       const voice = await composeNoResultReply(facts).then((text) => (text && text.length <= 600 && !/connected gmail account|claude|anthropic/i.test(text) ? text : fallbackNoResult(facts))).catch(() => fallbackNoResult(facts));
-      return outcome([voice, nearMiss ? describeMessage(nearMiss) : "", footer, CORRECTION_HINT].filter(Boolean).join("\n\n"));
+      return outcome([voice, nearMiss ? describeMessage(nearMiss) : "", footer].filter(Boolean).join("\n\n"));
     }
+    if (offset >= messages.length) return outcome(`No more matching emails in the ${candidates} candidates checked.\n\n${footer}`);
+    const pageNote = messages.length > 5 ? `Showing ${offset + 1}–${Math.min(offset + 5, messages.length)} of ${messages.length} matching emails in this search.` : "";
     // R13.7: a plural receipt request that asks for amounts lists each receipt with its amount and date.
     if (applied.request.action === "amounts") {
-      const shown = messages.slice(0, 5);
+      const shown = messages.slice(offset, offset + 5);
       const emails = await Promise.all(shown.map((message) => readGmailMessage(userId, message.id)));
       const read = emails.map((email) => ({ email, facts: extractInvoiceFacts(email) }));
       const rows = read.map(({ email, facts }, index) => `${index + 1}. **${escapeMarkdown(email.subject)}**  \n   ${facts.amount ?? "amount not in the email text"} · ${facts.billingDate ?? formatDate(email.date)}`);
       const cents = read.map(({ facts }) => (facts.amount ? Math.round(Number.parseFloat(facts.amount.replace(/[$,]/g, "")) * 100) : null));
       const total = cents.length > 1 && cents.every((value) => value !== null) ? `\n\n**Total: $${((cents as number[]).reduce((sum, value) => sum + value, 0) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}**` : "";
-      return outcome([`### Receipt amounts\n\n${rows.join("\n")}${total}`, footer, applied.defaultedWindow ? CORRECTION_HINT : ""].filter(Boolean).join("\n\n"), shown.map((message) => ({ id: message.id, subject: message.subject, from: message.from, date: message.date })));
+      return outcome([`### Receipt amounts\n\n${rows.join("\n")}${total}`, pageNote, footer].filter(Boolean).join("\n\n"), shown.map((message) => ({ id: message.id, subject: message.subject, from: message.from, date: message.date })));
     }
     if (isFacts) {
       const { text, found } = await invoiceFactsForMessage(userId, messages[0].id, timeZone, widenedNote);
       return outcome([text, footer].join("\n\n"), found);
     }
     // R13.1: results are numbered so "the second one" has something to point at.
-    const rows = messages.slice(0, 5).map((message, index) => {
+    const rows = messages.slice(offset, offset + 5).map((message, index) => {
       const date = formatDate(message.date);
       const detail = [message.from, date].filter(Boolean).join(" · ");
       return `${index + 1}. **${escapeMarkdown(message.subject)}**  \n   ${escapeMarkdown(detail)}${message.snippet && !isOneTimeSecretMail(message.subject, message.snippet) ? `  \n   ${escapeMarkdown(redactSecrets(message.snippet.slice(0, 180)))}` : ""}`;
     });
-    return outcome([`### Matching email\n\n${rows.join("\n")}`, footer, applied.defaultedWindow ? CORRECTION_HINT : ""].filter(Boolean).join("\n\n"), messages.slice(0, 5).map((message) => ({ id: message.id, subject: message.subject, from: message.from, date: message.date })));
+    return outcome([`### Matching email\n\n${rows.join("\n")}`, pageNote, footer].filter(Boolean).join("\n\n"), messages.slice(offset, offset + 5).map((message) => ({ id: message.id, subject: message.subject, from: message.from, date: message.date })));
   } catch (error) {
     const fail = (answer: string): EmailSearchOutcome => ({ answer, request: applied.request, results: [] });
+    if (error instanceof EmailSelectionUnavailable) return fail("I found email candidates but couldn’t verify which match your request right now. Please try again.");
     if (error instanceof GoogleConnectionRequiredError) return fail("Gmail read access is not connected yet. Sign out and continue with Google again, then approve the read-only Gmail permission.");
     if (error instanceof GoogleGmailAccessError) {
       if (error.reason === "api_disabled") return fail("The Gmail API is not enabled for this Google Cloud project. Enable Gmail API, wait a few minutes, and try again.");

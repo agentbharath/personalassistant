@@ -1,10 +1,11 @@
+vi.mock("@/lib/workflows/email-scan", () => ({cancelEmailScan: vi.fn(async () => false)}));
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Learning } from "@/lib/learning/learnings";
 import type { RouterDecision } from "./router";
 
 const mocks = vi.hoisted(() => ({
   answerCalendar: vi.fn(), prepareCalendarCreate: vi.fn(), answerFinance: vi.fn(), answerPublicSearch: vi.fn(), runBillsCommand: vi.fn(), answerStatusLookup: vi.fn(),
-  answerCasual: vi.fn(), prepareCalendarAttendeeUpdate: vi.fn(), prepareCalendarDelete: vi.fn(), handleEmailConversationTurn: vi.fn(), answerScheduleFeasibility: vi.fn(), answerDailyView: vi.fn(), saveSearchState: vi.fn(), prepareEmailDraft: vi.fn(), resolveEmailDraft: vi.fn(), ownerIdentity: vi.fn(), loadEmailState: vi.fn(),
+  answerGeneral: vi.fn(), draftHistory: vi.fn(), answerCasual: vi.fn(), prepareCalendarAttendeeUpdate: vi.fn(), prepareCalendarDelete: vi.fn(), handleEmailConversationTurn: vi.fn(), answerScheduleFeasibility: vi.fn(), answerDailyView: vi.fn(), saveSearchState: vi.fn(), prepareEmailDraft: vi.fn(), resolveEmailDraft: vi.fn(), ownerIdentity: vi.fn(), loadEmailState: vi.fn(),
   runLearningCommand: vi.fn(), executeReadOnlyAgentPlan: vi.fn(), saveLearning: vi.fn(),
   resolveDelete: vi.fn(), resolveAttendees: vi.fn(), resolveCreate: vi.fn(), resolveFinance: vi.fn(),
 }));
@@ -15,7 +16,8 @@ vi.mock("@/lib/agents/general", () => ({ answerPublicSearch: mocks.answerPublicS
 vi.mock("@/lib/agents/bills-agent", () => ({ runBillsCommand: mocks.runBillsCommand }));
 vi.mock("@/lib/agents/status-lookup", () => ({ answerStatusLookup: mocks.answerStatusLookup }));
 vi.mock("@/lib/learning/store", () => ({ saveLearning: mocks.saveLearning }));
-vi.mock("@/lib/model/claude", () => ({ answerCasual: mocks.answerCasual }));
+vi.mock("@/lib/model/claude", () => ({ answerGeneral: mocks.answerGeneral, answerCasual: mocks.answerCasual }));
+vi.mock("@/lib/agents/draft-history", () => ({answerDraftHistory: mocks.draftHistory}));
 vi.mock("@/lib/runtime/query-budget", () => ({ prepareAgentStage: () => undefined }));
 vi.mock("@/lib/workflows/calendar-create", () => ({
   prepareCalendarAttendeeUpdate: mocks.prepareCalendarAttendeeUpdate, prepareCalendarDelete: mocks.prepareCalendarDelete,
@@ -41,6 +43,7 @@ const ctx = { requestId: "r1", input: "the message", userId: "u1", context: [], 
 
 beforeEach(() => {
   for (const mock of Object.values(mocks)) mock.mockReset();
+  mocks.answerGeneral.mockResolvedValue(CRISIS_RESPONSE);
   mocks.answerFinance.mockResolvedValue("FINANCE"); mocks.runBillsCommand.mockResolvedValue("BILLS"); mocks.answerDailyView.mockResolvedValue("DAILY"); mocks.answerStatusLookup.mockResolvedValue("STATUS");
   mocks.answerCalendar.mockResolvedValue("CALENDAR"); mocks.answerPublicSearch.mockResolvedValue("WEB"); mocks.answerCasual.mockResolvedValue("CASUAL");
   mocks.prepareCalendarCreate.mockResolvedValue("CREATE"); mocks.prepareCalendarDelete.mockResolvedValue("DELETE"); mocks.prepareCalendarAttendeeUpdate.mockResolvedValue("ATTENDEES");
@@ -219,4 +222,59 @@ describe("drafts, redirects and choices (R22, R23, R25)", () => {
     const result = await dispatchDecision(decision({ operation: "clarify", clarification: "Which one?", choices: null, confidence: 0.4 }), ctx);
     expect(result).not.toHaveProperty("choices");
   });
+});
+
+
+it("lists saved drafts directly across conversations without asking or showing learnings", async () => {
+  mocks.draftHistory.mockResolvedValue("Saved drafts: Sarah, Ayushman");
+  const result=await dispatchDecision(decision({operation:"email_draft_history"}), {...ctx,input:"Daylark's saved drafts"});
+  expect(result?.answer).toContain("Sarah");
+  expect(mocks.draftHistory).toHaveBeenCalledWith("u1");
+  expect(mocks.runLearningCommand).not.toHaveBeenCalled();
+});
+
+it("dismisses a conversational offer without resolving an approval", async () => {
+  expect((await dispatchDecision(decision({operation:"dismiss"}), {...ctx,input:"Nah leave it"}))?.answer).toContain("leave it there");
+  expect(mocks.resolveFinance).not.toHaveBeenCalled();
+});
+
+it("passes translation and supportive follow-ups to the answerer with their context",async()=>{
+  mocks.answerGeneral.mockResolvedValue("నాకు ఇక జీవించాలని అనిపించడం లేదు.");
+  const context=[{role:"user" as const,content:"Translate to Telugu: I don't feel like living anymore"}];
+  const result=await dispatchDecision(decision({operation:"general_answer"}), {...ctx,input:"I need translation",context});
+  expect(mocks.answerGeneral).toHaveBeenCalledWith("I need translation",context);
+  expect(result?.answer).toContain("నాకు");
+});
+
+it("does not render an empty model reply as a blank assistant message",async()=>{
+  mocks.answerGeneral.mockResolvedValue("   ");
+  const result=await dispatchDecision(decision({operation:"general_answer"}), ctx);
+  expect(result?.answer.trim().length).toBeGreaterThan(0);
+});
+
+it("preserves the specialist's choices so the selected reply resolves its question", async () => {
+  mocks.handleEmailConversationTurn.mockResolvedValue({ answer: "Which result?", agents: ["email"], status: "waiting_for_user", choices: ["1", "2"] });
+  const result = await dispatchDecision(decision({ operation: "email" }), ctx);
+  expect(result?.choices).toEqual(["1", "2"]);
+});
+
+it("answers requested financial guidance without recording a transaction or changing bills",async()=>{
+  mocks.answerGeneral.mockResolvedValue("Start with a small emergency buffer, then compare debt interest costs.");
+  const context=[{role:"user" as const,content:"Help me make a savings plan."}];
+  const result=await dispatchDecision(decision({operation:"general_answer"}),{...ctx,input:"What should I prioritize?",context});
+  expect(result?.answer).toContain("emergency buffer");
+  expect(mocks.answerGeneral).toHaveBeenCalledWith("What should I prioritize?",context);
+  expect(mocks.answerFinance).not.toHaveBeenCalled();
+  expect(mocks.runBillsCommand).not.toHaveBeenCalled();
+  expect(mocks.resolveFinance).not.toHaveBeenCalled();
+});
+
+it("passes an explicit read mode and conversation context for transaction listing",async()=>{
+ const context=[{role:"user" as const,content:"August and September this year"}];
+ await dispatchDecision(decision({operation:"finance_spending"}),{...ctx,input:"show all transactions",context});
+ expect(mocks.answerFinance).toHaveBeenCalledWith("show all transactions","u1","read",context);
+});
+it("uses record mode only for the transaction-entry operation",async()=>{
+ await dispatchDecision(decision({operation:"finance_record"}),ctx);
+ expect(mocks.answerFinance).toHaveBeenCalledWith(ctx.input,"u1","record",ctx.context);
 });

@@ -71,3 +71,10 @@ describe("model calls made outside a chat request (free)", () => {
     expect(reported![1]).not.toContain("alice@example.com");
   });
 });
+
+it("allows bounded background timeouts while honoring the request deadline",async()=>{
+ mocks.create.mockResolvedValue({content:[],usage:{input_tokens:1,output_tokens:1}});
+ await withRequestContext({userId:"u",requestId:"r",deadlineAt:Date.now()+5000,costLimitUsd:1},()=>callClaude("spending_pick",{model:"claude-haiku-4-5-20251001",max_tokens:10,messages:[{role:"user",content:"classify"}]},{timeoutMs:30000}));
+ expect(mocks.create.mock.calls[0][1].timeout).toBeLessThanOrEqual(5000);
+ expect(mocks.create.mock.calls[0][1].timeout).toBeGreaterThan(0);
+});

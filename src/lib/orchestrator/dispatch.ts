@@ -1,3 +1,8 @@
+import { financeFreshness } from "@/lib/finance-sync/review";
+import { answerDraftHistory } from "@/lib/agents/draft-history";
+import { continueEmailFinanceImport } from "@/lib/agents/email-finance-import";
+import { cancelEmailScan } from "@/lib/workflows/email-scan";
+import { recencyDays } from "@/lib/agents/email-query";
 import { answerCalendar } from "@/lib/agents/calendar";
 import { prepareCalendarCreate } from "@/lib/agents/calendar-create";
 import { answerFinance } from "@/lib/agents/finance";
@@ -7,7 +12,7 @@ import { answerStatusLookup } from "@/lib/agents/status-lookup";
 import { acknowledgeLearning } from "@/lib/learning/commands";
 import type { Learning } from "@/lib/learning/learnings";
 import { saveLearning } from "@/lib/learning/store";
-import { answerCasual } from "@/lib/model/claude";
+import { answerCasual, answerGeneral } from "@/lib/model/claude";
 import { prepareAgentStage } from "@/lib/runtime/query-budget";
 import { prepareCalendarAttendeeUpdate, prepareCalendarDelete, resolvePendingCalendarAttendeeUpdate, resolvePendingCalendarCreate, resolvePendingCalendarDelete } from "@/lib/workflows/calendar-create";
 import { resolvePendingFinanceImport } from "@/lib/workflows/finance-import";
@@ -33,7 +38,7 @@ export type DispatchContext = { requestId: string; input: string; userId: string
 /** An answer is always text. If a handler ever hands back anything else, say so plainly and report it, instead of showing "[object Object]". */
 export const NOT_TEXT = "I had trouble putting that answer together, so nothing was shown. Please ask again.";
 function asText(answer: unknown, operation: string) {
-  if (typeof answer === "string") return answer;
+  if (typeof answer === "string" && answer.trim()) return answer;
   reportFailure("answer_not_text", { name: "TypeError" }, { operation });
   return NOT_TEXT;
 }
@@ -68,15 +73,19 @@ export async function answerApproval(approve: boolean, userId: string, conversat
   ];
   for (const [agent, resolve] of resolvers) {
     const outcome = await resolve();
-    if (outcome) return { ...outcome, agents: [agent] };
+    if (outcome) {
+      if (!approve && agent === "finance") await cancelEmailScan(userId, conversationId);
+      return { ...outcome, agents: [agent] };
+    }
   }
-  return null;
+  const cancelledScan = approve ? false : await cancelEmailScan(userId, conversationId);
+  return cancelledScan ? { answer: "Scan cancelled. No additional transactions were imported.", agents: ["email", "finance"], status: "completed" as const } : null;
 }
 const NEEDS_CONVERSATION = "I need a saved conversation before I can prepare that. Please start a new chat and try again.";
 
 /**
  * R19.4: each operation calls the existing deterministic handler with the router's structured arguments.
- * Returns null when the specialist declines (for example the email interpreter says it is not email), so the rule chain can decide.
+ * Returns null when the specialist declines (for example the email interpreter says it is not email), so the caller can ask a focused clarification.
  */
 export async function dispatchDecision(decision: RouterDecision, ctx: DispatchContext): Promise<OrchestratorResult | null> {
   const { requestId, input, userId, context, conversationId } = ctx;
@@ -88,19 +97,37 @@ export async function dispatchDecision(decision: RouterDecision, ctx: DispatchCo
   }
 
   switch (decision.operation) {
+    case "email_draft_history":
+      prepareAgentStage(["email"], "fast");
+      return done(await answerDraftHistory(userId), ["email"]);
+    case "dismiss":
+      return done("Okay, we’ll leave it there.", []);
+    case "general_answer":
+      prepareAgentStage(["orchestrator"], "balanced");
+      return done(await answerGeneral(input, context), []);
+    case "email_import_continue":
+      return done(await continueEmailFinanceImport(userId, conversationId), ["email", "finance"], "waiting_for_user");
     case "email": {
       const turn = await handleEmailConversationTurn(input, userId, conversationId, context);
-      return turn ? done(turn.answer, turn.agents, turn.status) : null;
+      return turn ? done(turn.answer, turn.agents, turn.status, turn.choices) : null;
     }
     case "status_lookup":
       prepareAgentStage(["email"], "fast");
       return done(await answerStatusLookup(userId, { sender: decision.sender!, matter: decision.matter! }), ["email"]);
-    case "finance_spending":
+    case "finance_spending": {
+      prepareAgentStage(["finance", "email"], "balanced");
+      const freshness = await financeFreshness(userId, conversationId).catch(() => ({note: "Email sync is unavailable. This answer uses saved transactions only.", review: false}));
+      if (freshness.review) return done(freshness.note, ["finance", "email"], "waiting_for_user");
+      const answer = await answerFinance(input, userId, "read", context);
+      return done([answer, freshness.note].filter(Boolean).join("\n\n"), ["finance"]);
+    }
     case "finance_record":
       prepareAgentStage(["finance"], "fast");
-      return done(await answerFinance(input, userId), ["finance"]);
-    case "bills_list":
-      return done(await runBillsCommand({ type: "list" }, userId), ["finance"]);
+      return done(await answerFinance(input, userId, "record", context), ["finance"]);
+    case "bills_list": {
+      const answer = await runBillsCommand({ type: "list" }, userId, { conversationId, emailWindowDays: recencyDays(input) ?? 90 });
+      return done(answer, ["finance", "email"], typeof answer === "string" && answer.includes("Choose **Confirm**") ? "waiting_for_user" : "completed");
+    }
     case "bills_paid":
       return done(await runBillsCommand({ type: "paid", merchant: decision.merchant!, paidOn: decision.paidOn }, userId), ["finance"]);
     case "bills_autopay":
@@ -173,10 +200,11 @@ export async function dispatchDecision(decision: RouterDecision, ctx: DispatchCo
     case "approve":
     case "deny": {
       const outcome = await answerApproval(decision.operation === "approve", userId, conversationId);
-      return outcome ? done(outcome.answer, outcome.agents, outcome.status) : done(NOTHING_PENDING, []);
+      return outcome ? done(outcome.answer, outcome.agents, outcome.status) : done(decision.operation === "deny" ? "Okay, we’ll leave it there." : NOTHING_PENDING, []);
     }
     case "crisis":
-      return done(CRISIS_RESPONSE, []);
+      prepareAgentStage(["orchestrator"], "fast");
+      return done(await answerGeneral(input, context, "crisis").catch(() => CRISIS_RESPONSE) || CRISIS_RESPONSE, []);
     case "unsafe":
       return done(UNSAFE_REFUSAL, []);
     case "casual":

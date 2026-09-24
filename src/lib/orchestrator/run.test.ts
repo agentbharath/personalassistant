@@ -2,8 +2,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { RouterDecision } from "./router";
 
 const mocks = vi.hoisted(() => ({
-  route: vi.fn(), dispatch: vi.fn(), approval: vi.fn(), pending: vi.fn(), emailState: vi.fn(),
+  history: vi.fn(), recalled: vi.fn(), resume: vi.fn(), route: vi.fn(), dispatch: vi.fn(), approval: vi.fn(), pending: vi.fn(), emailState: vi.fn(),
 }));
+vi.mock("@/lib/conversations/history", () => ({ recallConversation: mocks.history }));
+vi.mock("@/lib/agents/email-finance-import", () => ({continueEmailFinanceImport: mocks.resume}));
+vi.mock("@/lib/conversations/search-state", async original => ({ ...await original<typeof import("@/lib/conversations/search-state")>(), loadRecentSearchStates: mocks.recalled, loadSearchState: vi.fn(async () => null) }));
 vi.mock("./router-runtime", () => ({ routeForUser: mocks.route }));
 vi.mock("./dispatch", () => ({ dispatchDecision: mocks.dispatch, answerApproval: mocks.approval, NOTHING_PENDING: "NOTHING PENDING" }));
 vi.mock("@/lib/workflows/pending", () => ({ hasPendingApproval: mocks.pending }));
@@ -15,17 +18,18 @@ const decision = (over: Partial<RouterDecision> = {}): RouterDecision => ({ oper
 
 beforeEach(() => {
   for (const mock of Object.values(mocks)) mock.mockReset();
+  mocks.recalled.mockResolvedValue([]);
   mocks.pending.mockResolvedValue(false);
   mocks.emailState.mockResolvedValue(null);
 });
 
 describe("no rules interpret a message, ever (R20.5)", () => {
-  it("says it cannot interpret requests, does nothing, and shows the fixed emergency line, when no model can be used", async () => {
+  it("reports model unavailability without inferring a crisis", async () => {
     mocks.route.mockResolvedValue(null);
     const result = await runOrchestrator("show my receipts", "u1", [], "c1", "r1");
     expect(result).toMatchObject({ requestId: "r1", answer: CANNOT_INTERPRET, agents: [], status: "completed" });
-    expect(result.answer).toMatch(/haven't done anything/);
-    expect(result.answer).toMatch(/988/);
+    expect(result.answer).toMatch(/saved work is unchanged/);
+    expect(result.answer).not.toMatch(/988|emergency|danger/);
     expect(mocks.dispatch).not.toHaveBeenCalled();
   });
 
@@ -83,4 +87,45 @@ describe("the Confirm and Cancel buttons need no model (R20.5)", () => {
     expect((await runOrchestrator("confirm", "u1", [], "c1")).answer).toBe(CANNOT_INTERPRET);
     expect(mocks.approval).not.toHaveBeenCalled();
   });
+});
+
+it("Continue scan is a distinct interface action and never approves an import", async () => {
+  mocks.resume.mockResolvedValue("Scan resumed");
+  expect(await runOrchestrator("Continue scan", "u", [], "c", "r", "continue_scan")).toMatchObject({answer:"Scan resumed",status:"waiting_for_user"});
+  expect(mocks.resume).toHaveBeenCalledWith("u","c");
+  expect(mocks.approval).not.toHaveBeenCalled();
+  expect(mocks.route).not.toHaveBeenCalled();
+});
+
+it("passes dated cross-conversation search recall to both routing and answering", async () => {
+  mocks.recalled.mockResolvedValue([{ query: "Chinese restaurants Sunnyvale", updatedAt: Date.now() - 86400000, places: [{ name: "Ginger Cafe", address: "Sunnyvale", note: "Previously shown" }] }]);
+  mocks.route.mockResolvedValue(decision({ operation: "general_answer" }));
+  mocks.dispatch.mockResolvedValue({ answer: "Ginger Cafe", agents: [], status: "completed" });
+  const context = [{ role: "user" as const, content: "Do you remember the Chinese restaurants from yesterday?" }];
+  await runOrchestrator("Tell me what you remember about them", "u1", context, "c1");
+  expect(JSON.stringify(mocks.route.mock.calls[0][0].context)).toContain("Ginger Cafe");
+  expect(JSON.stringify(mocks.dispatch.mock.calls[0][1].context)).toContain("Ginger Cafe");
+  expect(mocks.dispatch.mock.calls[0][1].context.at(-1)).toEqual(context[0]);
+});
+
+it.each(["calendar meeting", "resume draft", "personal preferences", "restaurant list"])("retrieves older %s before answering or dispatching a resolved follow-up", async topic => {
+ mocks.route.mockResolvedValueOnce(decision({operation: "clarify", historyQuery: topic})).mockResolvedValueOnce(decision({operation: "general_answer", resolvedInput: `Explain the earlier ${topic}`}));
+ mocks.history.mockResolvedValue({text: `Original details about ${topic}`, references: []});
+ mocks.dispatch.mockResolvedValue({answer: "Remembered", agents: [], status: "completed"});
+ await runOrchestrator("Tell me more about that", "u1", [], "c1");
+ expect(mocks.history).toHaveBeenCalledWith("u1", "c1", topic, []);
+ expect(mocks.route).toHaveBeenCalledTimes(2);
+ expect(mocks.dispatch).toHaveBeenCalledTimes(1);
+ expect(mocks.dispatch.mock.calls[0][1].input).toBe(`Explain the earlier ${topic}`);
+ expect(JSON.stringify(mocks.dispatch.mock.calls[0][1].context)).toContain(`Original details about ${topic}`);
+ expect(mocks.approval).not.toHaveBeenCalled();
+});
+
+it("never dispatches or approves an action when context repair remains blocked", async () => {
+  mocks.pending.mockResolvedValue(true);
+  mocks.route.mockResolvedValue(decision({operation:"clarify", continuityBlocked:true, clarification:"Your reply is saved, but I couldn't connect it reliably."}));
+  const result = await runOrchestrator("Daylark drafts", "u1", [], "c1");
+  expect(result.status).toBe("partially_completed");
+  expect(mocks.dispatch).not.toHaveBeenCalled();
+  expect(mocks.approval).not.toHaveBeenCalled();
 });

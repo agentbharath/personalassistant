@@ -2,7 +2,7 @@
  * A model reads the amount off a receipt, and a model can be wrong: it once returned 2,026.00 for a $152.72 hotel stay by taking the year in
  * "Sep 6, 2026" for money. So an amount is only used if the email itself shows it as money. Code checks this; it never decides what an email means.
  */
-const CURRENCY = String.raw`(?:US\$|CA\$|\$|USD\s?|CAD\s?|EUR\s?|GBP\s?|€|£)`;
+const CURRENCY = String.raw`(?:US\$|CA\$|\$|USD\s?|CAD\s?|EUR\s?|GBP\s?|INR\s?|Rs\.?\s?|€|£|₹)`;
 const WHOLE = String.raw`\d{1,3}(?:,\d{3})+|\d+`;
 // A currency mark and then an amount ("$152.72", "USD 20", "$2,026"), or a bare number that has exactly two decimals ("152.72").
 const MARKED = new RegExp(String.raw`${CURRENCY}\s?(${WHOLE})(?:\.(\d{1,2}))?(?![\d])`, "gi");

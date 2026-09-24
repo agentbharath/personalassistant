@@ -1,3 +1,4 @@
+import { followupContext, FOLLOWUP_RULES } from "@/lib/conversations/followup";
 import type Anthropic from "@anthropic-ai/sdk";
 import { Temporal } from "@js-temporal/polyfill";
 import { z } from "zod";
@@ -8,7 +9,7 @@ import { reportFailure } from "@/lib/observability/report";
  * R20.5: which day, range or time a message means is read by a model, never by patterns. The model returns concrete local date-times; the
  * code below only checks their form (valid, ordered, a sensible length, a sensible year) and asks when the model says it is unsure (R22).
  */
-export const TIME_INTERPRETER_VERSION = "time-v3";
+export const TIME_INTERPRETER_VERSION = "time-v5";
 
 export type CalendarWindow = { start: Temporal.ZonedDateTime; end: Temporal.ZonedDateTime; label: string };
 
@@ -17,13 +18,13 @@ export type TimeReading =
   | { kind: "ask"; question: string; choices: string[] }
   | { kind: "unavailable" };
 
-export type TimeInput = { message: string; today: string; timeZone: string; userId: string; context?: { role: "user" | "assistant"; content: string }[] };
+export type TimeInput = { message: string; today: string; timeZone: string; userId: string; context?: { role: "user" | "assistant"; content: string; choices?: string[] }[] };
 export type TimeDeps = { complete: (params: Anthropic.MessageCreateParamsNonStreaming) => Promise<Anthropic.Message>; cache?: InterpretationCache | null };
 
 const MAX_SPAN_DAYS = 62;
 const MAX_YEAR_DISTANCE = 2;
 
-export const TIME_SYSTEM = `You read what day, date range or time of day a person means in a message to their calendar assistant. You do not answer the message. You return the exact window to look at, as local date-times with no offset, in the person's own time zone.
+export const TIME_SYSTEM = `${FOLLOWUP_RULES}\n\nYou read what day, date range or time of day a person means in a message to their calendar assistant. You do not answer the message. You return the exact window to look at, as local date-times with no offset, in the person's own time zone.
 
 You are given today's date and weekday. Work out the dates yourself.
 - kind "none": the message names no time at all. Use it only then; the assistant will show today.
@@ -70,12 +71,13 @@ export function buildTimeMessage(input: TimeInput) {
   const today = Temporal.PlainDate.from(input.today);
   const weekday = today.toLocaleString("en-US", { weekday: "long" });
   const recent = (input.context ?? []).slice(-4).map((item) => `${item.role}: ${item.content.slice(0, 300)}`);
-  return JSON.stringify({ today: input.today, weekday, timeZone: input.timeZone, recent, message: input.message });
+  const history = (input.context ?? []).find(item => item.content.startsWith("Earlier conversation summary"))?.content.slice(0, 12000) ?? null;
+  return JSON.stringify({ followupExchange: followupContext(input.context ?? [], input.message), history, today: input.today, weekday, timeZone: input.timeZone, recent, message: input.message });
 }
 
 /** Identical message + today + prompt version = identical reading, so repeated questions are repeatable and free (R16.3). */
 export function timeCacheMaterial(input: TimeInput) {
-  return [TIME_INTERPRETER_VERSION, input.userId, input.today, input.timeZone, input.message.normalize("NFKC").trim().toLowerCase().replace(/\s+/g, " "), (input.context ?? []).slice(-4).map((item) => item.content.slice(0, 300)).join("|")].join(" || ");
+  return [TIME_INTERPRETER_VERSION, input.userId, input.today, input.timeZone, input.message.normalize("NFKC").trim().toLowerCase().replace(/\s+/g, " "), buildTimeMessage({ ...input, message: "" })].join(" || ");
 }
 
 function parseLocal(value: string, timeZone: string): Temporal.ZonedDateTime | null {

@@ -1,3 +1,4 @@
+import { requestEmailScanStop } from "@/lib/workflows/email-scan";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { runOrchestrator } from "@/lib/orchestrator/run";
@@ -10,18 +11,19 @@ import { ModelBudgetExceededError } from "@/lib/runtime/model-runtime";
 import { recordQueryTelemetry } from "@/lib/observability/query-telemetry";
 import { resolveRetryMessage } from "@/lib/conversations/retry";
 
-/** Vercel's limit for this route. The app stops a query itself at 20 seconds (below), and saving the answer needs a little longer, so this leaves plenty of room. */
-export const maxDuration = 60;
+/** Normal queries stop at 20 seconds; bulk imports may extend to 270 seconds, leaving time to save the answer. */
+export const maxDuration = 300;
 
 const QUERY_TIMEOUT_MS = 20_000;
 
 const requestSchema = z.object({
   message: z.string().trim().min(1).max(4_000),
   conversationId: z.string().uuid().optional(),
+  automaticContinuation: z.boolean().optional().default(false),
   isRetry: z.boolean().optional().default(false),
   /** The Confirm or Cancel button on an approval card: a fixed value that needs no interpretation (R20.5). */
-  uiAction: z.enum(["confirm", "cancel"]).optional(),
-}).refine((value) => !value.isRetry || Boolean(value.conversationId), { message: "Retry requires an existing conversation" });
+  uiAction: z.enum(["confirm", "cancel", "continue_scan", "pause_scan"]).optional(),
+}).refine(value => !value.automaticContinuation || (Boolean(value.conversationId) && value.uiAction === "continue_scan"), { message: "Automatic continuation requires a saved scan conversation" }).refine((value) => !value.isRetry || Boolean(value.conversationId), { message: "Retry requires an existing conversation" });
 
 /**
  * Clients that accept NDJSON get progress lines while the answer is worked out, then one final line with the result.
@@ -32,11 +34,13 @@ export async function POST(request: Request) {
   const encoder = new TextEncoder();
   return new Response(new ReadableStream({
     async start(controller) {
-      const send = (line: unknown) => controller.enqueue(encoder.encode(`${JSON.stringify(line)}\n`));
+      let disconnected = false;
+      const send = (line: unknown) => { if (disconnected) return; try { controller.enqueue(encoder.encode(`${JSON.stringify(line)}\n`)); } catch { disconnected = true; } };
       let last = "";
-      const onProgress = (agents: string[]) => {
-        const key = agents.join(",");
-        if (key !== last) { last = key; send({ type: "progress", agents }); }
+      let lastSentAt = Date.now();
+      const onProgress = (agents: string[], scan?: RequestContext["scanProgress"]) => {
+        const key = JSON.stringify([agents, scan]);
+        if (key !== last || Date.now() - lastSentAt >= 10_000) { last = key; lastSentAt = Date.now(); send({ type: "progress", agents, scan }); }
       };
       send({ type: "progress", agents: [] });
       try {
@@ -45,12 +49,12 @@ export async function POST(request: Request) {
       } catch {
         send({ type: "result", status: 500, body: { message: "I couldn’t complete that request right now. Nothing unconfirmed was changed.", retryable: true } });
       }
-      controller.close();
+      if (!disconnected) controller.close();
     },
   }), { headers: { "content-type": "application/x-ndjson; charset=utf-8", "cache-control": "no-store" } });
 }
 
-async function handle(request: Request, onProgress?: (agents: string[]) => void): Promise<Response> {
+async function handle(request: Request, onProgress?: (agents: string[], scan?: RequestContext["scanProgress"]) => void): Promise<Response> {
   const supabase = await createClient();
   const { data, error } = await supabase.auth.getClaims();
   const userId = data?.claims?.sub;
@@ -59,6 +63,7 @@ async function handle(request: Request, onProgress?: (agents: string[]) => void)
   const parsed = requestSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: "INVALID_REQUEST" }, { status: 400 });
 
+  if (parsed.data.uiAction === "pause_scan" && !parsed.data.conversationId) return Response.json({ error: "CONVERSATION_REQUIRED" }, { status: 400 });
   let conversationId = parsed.data.conversationId;
   let context: { role: "user" | "assistant"; content: string }[] = [];
   let persistenceWarning: string | undefined;
@@ -71,15 +76,19 @@ async function handle(request: Request, onProgress?: (agents: string[]) => void)
       const conversation = await getConversation(userId, conversationId);
       if (!conversation) return Response.json({ error: "CONVERSATION_NOT_FOUND" }, { status: 404 });
       context = conversation.contextMessages;
+      if (parsed.data.uiAction === "pause_scan") {
+        await requestEmailScanStop(userId, conversationId);
+        return Response.json({ pausing: true, conversationId });
+      }
     } else {
       conversationId = await createConversation(userId, parsed.data.message);
     }
-    if (!parsed.data.isRetry) await appendMessage(userId, conversationId, { role: "user", content: parsed.data.message });
+    if (!parsed.data.automaticContinuation) await appendMessage(userId, conversationId, { role: "user", content: resolveRetryMessage(parsed.data.message, parsed.data.isRetry, context) });
   } catch (error) {
     logFailure("conversation_write_user", error);
-    persistenceWarning = "This conversation could not be saved. Your request can still be answered.";
-    conversationId = undefined;
-    context = [];
+    if (parsed.data.uiAction === "pause_scan") return Response.json({ error: "PAUSE_NOT_SAVED" }, { status: 503 });
+    // Never interpret a follow-up without its saved context, or execute an unrecorded turn.
+    return Response.json({ message: "I couldn’t load or save this chat right now. I haven’t processed your request. Please try again.", retryable: true }, { status: 503 });
   }
 
   try {
@@ -97,11 +106,11 @@ async function handle(request: Request, onProgress?: (agents: string[]) => void)
       timer = setTimeout(check, QUERY_TIMEOUT_MS);
     });
     let execution;
-    const progressTimer = onProgress ? setInterval(() => onProgress(queryContext?.activeAgents ?? []), 150) : undefined;
+    const progressTimer = onProgress ? setInterval(() => onProgress(queryContext?.activeAgents ?? [], queryContext?.scanProgress), 150) : undefined;
     try {
       execution = await Promise.race([
-        withRequestContext(queryContext = { requestId, userId, conversationId, startedAt: queryStartedAt, deadlineAt, signal: controller.signal, reservedModelCostUsd: 0, actualModelCostUsd: 0 }, async () => {
-          const result = await runOrchestrator(effectiveMessage, userId, context, conversationId, requestId, parsed.data.uiAction);
+        withRequestContext(queryContext = { automaticScan: true, requestId, userId, conversationId, startedAt: queryStartedAt, deadlineAt, signal: controller.signal, reservedModelCostUsd: 0, actualModelCostUsd: 0 }, async () => {
+          const result = await runOrchestrator(effectiveMessage, userId, context, conversationId, requestId, parsed.data.uiAction === "pause_scan" ? undefined : parsed.data.uiAction);
           return { result, budget: queryBudgetSnapshot() };
         }),
         expiry,
@@ -111,11 +120,12 @@ async function handle(request: Request, onProgress?: (agents: string[]) => void)
       if (progressTimer) clearInterval(progressTimer);
     }
     const { result, budget } = execution;
-    console.info("query_complete", JSON.stringify({ requestId, durationMs: QUERY_TIMEOUT_MS - budget.remainingMs, reservedCostUsd: budget.reservedCostUsd, actualCostUsd: budget.actualCostUsd, agents: result.agents, status: result.status }));
+    if (queryContext?.contextPersistenceFailed) result.answer += "\n\nI couldn’t save this result list’s references. The answer remains in chat, but referring to its items later may require another search.";
+    console.info("query_complete", JSON.stringify({ requestId, durationMs: Date.now() - queryStartedAt, reservedCostUsd: budget.reservedCostUsd, actualCostUsd: budget.actualCostUsd, agents: result.agents, status: result.status }));
     await recordQueryTelemetry({ userId, requestId, conversationId, agents: result.agents, status: result.status, outcome: "success", durationMs: Date.now() - queryStartedAt, reservedCostUsd: budget.reservedCostUsd, actualCostUsd: budget.actualCostUsd, cacheHits: queryContext?.cacheHits, cacheMisses: queryContext?.cacheMisses });
-    if (conversationId) {
+    if (conversationId && !(parsed.data.automaticContinuation && queryContext?.scanProgress?.canContinue)) {
       try {
-        await appendMessage(userId, conversationId, { role: "assistant", content: result.answer });
+        await appendMessage(userId, conversationId, { role: "assistant", content: result.answer, choices: result.choices });
         await compactConversationContext(userId, conversationId).catch((error) => logFailure("conversation_compaction", error));
       } catch (error) {
         logFailure("conversation_write_assistant", error);
@@ -123,7 +133,7 @@ async function handle(request: Request, onProgress?: (agents: string[]) => void)
       }
     }
     const sequence = conversationId && !persistenceWarning ? await latestSequence(userId, conversationId).catch(() => undefined) : undefined;
-    return Response.json({ ...result, conversationId, persistenceWarning, sequence });
+    return Response.json({ ...result, conversationId, persistenceWarning, sequence, scan: queryContext?.scanProgress });
   } catch (error) {
     logFailure("orchestrator", error);
     Sentry.withScope((scope) => {
@@ -155,7 +165,7 @@ async function handle(request: Request, onProgress?: (agents: string[]) => void)
       message: timedOut
         ? "This is taking longer than expected, so I stopped safely. Nothing unconfirmed was changed."
         : costLimited
-          ? "I reached this query’s $0.10 processing limit and stopped safely. Try a narrower request."
+          ? `I reached this query’s $${(queryContext?.costLimitUsd ?? 0.10).toFixed(2)} processing limit and stopped safely. Try a narrower request.`
         : tokenLimited
           ? "I’ve used today’s AI model budget, so anything that needs the model is paused until it resets. Bills, spending totals, receipts and imports that don’t need it still work. To raise the limit, set MODEL_DAILY_TOKEN_BUDGET in .env.local and restart. Nothing was changed."
         : "I couldn’t complete that request right now. Nothing unconfirmed was changed.",

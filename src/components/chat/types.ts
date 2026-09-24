@@ -29,21 +29,13 @@ export function progressLabel(agents: string[]) {
   return known.length ? known.join(" ") : "Understanding your request…";
 }
 
-/** Fixed next-step suggestions by which agents answered. They are sent as ordinary messages and interpreted like any other. */
-const FOLLOW_UPS: Record<string, string[]> = {
-  email: ["Show the amounts", "Search the last 7 days", "Only unread ones"],
-  calendar: ["What’s on tomorrow?", "Find a free hour this week"],
-  finance: ["Break it down by category", "What bills are outstanding?"],
-};
-
-export function followUps(message: Message | undefined) {
-  if (!message || message.role !== "assistant" || message.notice || message.status !== "completed") return [];
-  const agent = message.agents?.find((name) => FOLLOW_UPS[name]);
-  return agent ? FOLLOW_UPS[agent] : [];
-}
+/** Do not infer follow-up suggestions from an agent name: an email answer may be a work order, not a receipt. */
+export function followUps(_message: Message | undefined): string[] { return []; }
 
 /** The options to show under a question Daylark just asked. Only for a live question with a few answers; free text always still works. */
 export function answerChoices(message: Message | undefined) {
-  if (!message || message.role !== "assistant" || message.notice || message.status !== "waiting_for_user") return [];
+  if (!message || message.role !== "assistant" || message.notice || (message.status !== undefined && message.status !== "waiting_for_user")) return [];
   return (message.choices ?? []).filter((choice) => choice.trim().length > 0).slice(0, 8);
 }
+
+export function hasScanActions(content: string) { return content.includes("**Continue scan**"); }

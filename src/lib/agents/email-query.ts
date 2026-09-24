@@ -45,18 +45,19 @@ export function recencyDays(input: string) {
   return Math.min(n * { day: 1, week: 7, month: 30, year: 365 }[unit], 365);
 }
 
-export function toGmailQuery(input: string, timeZone = process.env.DEFAULT_USER_TIMEZONE ?? "America/Los_Angeles", options: { ignoreSender?: boolean; ignoreDate?: boolean } = {}) {
+export function toGmailQuery(input: string, timeZone = process.env.DEFAULT_USER_TIMEZONE ?? "America/Los_Angeles", options: { ignoreSender?: boolean; ignoreDate?: boolean; searchTerms?: string[]; sender?: string | null } = {}) {
   const { core, exclusions } = stripExclusions(input);
   const email = core.match(/[\w.+-]+@[\w.-]+\.[a-z]{2,}/i)?.[0];
-  const sender = options.ignoreSender ? null : extractRequestedSender(input);
+  const sender = options.ignoreSender ? null : options.sender !== undefined ? options.sender : extractRequestedSender(input);
   const quoted = [...core.matchAll(/["“]([^"”]+)["”]/g)].map((match) => `"${match[1]}"`);
   const recency = options.ignoreDate ? null : recencyDays(core);
   const dates = options.ignoreDate ? "" : dateQuery(core, timeZone);
-  const parts = [email ? `from:${email}` : sender ? organizationQuery(sender) : "", dates, recency ? `newer_than:${recency}d` : "", /\bunread\b/i.test(core) ? "is:unread" : "", ...quoted].filter(Boolean);
-  if (RECRUITER_WORDS.test(core)) parts.push('{recruiter recruiting "talent acquisition" hiring interview opportunity staffing sourcer}');
+  const topical = options.searchTerms?.length ? options.searchTerms.map(term => `"${term.replace(/[^\p{L}\p{N} ._-]/gu, " ").trim()}"`) : /\babout\s+"/i.test(core) ? quoted : [];
+  const parts = [email ? `from:${email}` : sender ? organizationQuery(sender) : "", dates, recency ? `newer_than:${recency}d` : "", /\bunread\b/i.test(core) ? "is:unread" : "", ...(topical.length ? [`{${topical.join(" ")}}`] : quoted)].filter(Boolean);
+  if (!topical.length && RECRUITER_WORDS.test(core)) parts.push('{recruiter recruiting "talent acquisition" hiring interview opportunity staffing sourcer}');
   // R4.6: confirmation-style subjects, so promo and shipping mail from the same store cannot crowd out real receipts.
-  else if (RECEIPT_WORDS.test(core)) parts.push("{subject:confirmed subject:confirmation subject:receipt subject:invoice subject:ordered subject:order subject:statement subject:bill subject:payment}");
-  else if (PROMO_WORDS.test(core)) parts.push('{category:promotions promotion promotional offer deal discount coupon sale}');
+  else if (!topical.length && RECEIPT_WORDS.test(core)) parts.push("{subject:confirmed subject:confirmation subject:receipt subject:invoice subject:ordered subject:order subject:statement subject:bill subject:payment}");
+  else if (!topical.length && PROMO_WORDS.test(core)) parts.push('{category:promotions promotion promotional offer deal discount coupon sale}');
   if (PROMO_WORDS.test(exclusions)) parts.push("-category:promotions");
   if ((options.ignoreSender || options.ignoreDate) && !dates && !recency) parts.push("newer_than:365d");
   if (!parts.length) {

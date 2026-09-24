@@ -28,10 +28,7 @@ async function executeTask(task: AgentTask, input: string, userId: string, conte
   if (task.agent === "calendar") return answerCalendar(instruction, userId);
   if (task.agent === "email") return answerEmail(instruction, userId);
   if (task.agent === "finance") {
-    if (!/\b(how much|total|summary|summarize|spending|spendings|transactions?|what did i spend|what are my)\b/i.test(instruction)) {
-      return "This finance step may change stored data, so it was not run as part of an automatic multi-agent plan. Ask for it separately to review the action.";
-    }
-    return answerFinance(instruction, userId);
+    return answerFinance(instruction, userId, "read", context);
   }
   return answerPublicSearch(instruction);
 }

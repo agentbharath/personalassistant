@@ -57,3 +57,13 @@ describe("Google access tokens that Google rejects before they expire (free)", (
     expect(operation).toHaveBeenCalledWith("new");
   });
 });
+it("asks to reconnect when a Testing-mode refresh token expires (invalid_grant)", async () => {
+ mocks.row = {...(mocks.row as object), access_token_expires_at: "2020-01-01"};
+ vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ok: false, status: 400, json: async () => ({error: "invalid_grant"})}));
+ await expect(withGoogleCredential("u", "calendar", vi.fn())).rejects.toBeInstanceOf(GoogleConnectionRequiredError);
+});
+it("does not ask to reconnect for a transient token-service outage", async () => {
+ mocks.row = {...(mocks.row as object), access_token_expires_at: "2020-01-01"};
+ vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ok: false, status: 503, json: async () => ({})}));
+ await expect(withGoogleCredential("u", "calendar", vi.fn())).rejects.toThrow("GOOGLE_TOKEN_REFRESH_UNAVAILABLE");
+});

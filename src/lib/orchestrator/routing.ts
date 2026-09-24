@@ -2,7 +2,7 @@
 // only checks the clauses of a plan the model already made (multi-agent.ts). The fixed notice is what is shown when a write is declined.
 export function isEmailFinanceImport(input: string) {
   const normalized = input.toLowerCase();
-  return /\b(import|record|add|save)\b/.test(normalized) && /\b(receipts?|invoices?|orders?|bills?|statements?|purchases?)\b/.test(normalized);
+  return /\b(import|record|add|save)\b/.test(normalized) && /\b(receipts?|invoices?|orders?|bills?|statements?|purchases?|spendings?|expenses?|payments?)\b/.test(normalized);
 }
 
 export function isPublicSearchQuery(input: string) {

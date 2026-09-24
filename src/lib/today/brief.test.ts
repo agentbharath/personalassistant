@@ -19,6 +19,7 @@ describe("bills due today and this week (free)", () => {
     expect(buckets.overdue.map((item) => item.id)).toEqual(["late"]);
     expect(buckets.dueToday.map((item) => item.id)).toEqual(["now"]);
     expect(buckets.dueThisWeek.map((item) => item.id)).toEqual(["soon"]);
+    expect(buckets.dueLater.map((item) => item.id)).toEqual(["later"]);
     expect(buckets.noDueDate.map((item) => item.id)).toEqual(["none"]);
   });
 

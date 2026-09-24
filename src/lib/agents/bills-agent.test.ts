@@ -7,6 +7,9 @@ const mocks = vi.hoisted(() => ({
   settled: [] as Array<{ id: string; paidOn: string }>,
   saved: [] as Learning[],
   autopay: [] as string[],
+  importDues: vi.fn(),
+  lastChecked: null as Date | null,
+  recorded: [] as Date[],
 }));
 
 vi.mock("@/lib/tools/finance/bills", () => ({
@@ -23,11 +26,20 @@ vi.mock("@/lib/learning/store", () => ({
 }));
 vi.mock("@/lib/tools/email/google-gmail", () => ({ searchGmail: async () => [], readGmailMessage: async () => ({}) }));
 
+vi.mock("./email-finance-import", () => ({ prepareEmailDuesImport: mocks.importDues }));
+vi.mock("@/lib/tools/finance/sync-state", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/tools/finance/sync-state")>("@/lib/tools/finance/sync-state");
+  return {
+    ...actual,
+    lastBillsEmailCheck: async () => mocks.lastChecked,
+    recordBillsEmailCheck: async (_user: string, when: Date) => { mocks.recorded.push(when); },
+  };
+});
 import { answerBills, outstandingLine, runBillsCommand } from "./bills-agent";
 
 const bill = (over: Partial<Bill> = {}): Bill => ({ id: "b1", merchant: "PG&E", amountMinor: 14630, currency: "USD", category: "utilities", statementDate: "2026-09-17", dueDate: "2099-10-05", status: "outstanding", paidOn: null, ...over });
 
-beforeEach(() => { mocks.bills = []; mocks.settled = []; mocks.saved = []; mocks.autopay = []; });
+beforeEach(() => { mocks.bills = []; mocks.settled = []; mocks.saved = []; mocks.autopay = []; mocks.lastChecked = null; mocks.recorded = []; mocks.importDues.mockReset(); });
 
 describe("I paid the bill (R17.5)", () => {
   it("marks the oldest matching outstanding bill paid on the day given", async () => {
@@ -79,5 +91,53 @@ describe("what the user sees (R17.3, R17.7, R17.8)", () => {
     expect(await outstandingLine("u1")).toMatch(/^Not counted yet: 1 unpaid bill, \$146\.30 \(PG&E/);
     mocks.bills = [bill({ status: "paid" })];
     expect(await outstandingLine("u1")).toBe("");
+  });
+});
+
+
+describe("dues from saved bills and email", () => {
+  it("shows saved bills together with the statement review and uses the requested window", async () => {
+    mocks.bills = [bill()];
+    mocks.importDues.mockResolvedValue("Review email statements. Choose **Confirm**.");
+    const answer = await answerBills("u1", "c1", 30);
+    expect(answer).toContain("Saved dues");
+    expect(answer).toContain("PG&E");
+    expect(answer).toContain("Review email statements");
+    expect(mocks.importDues).toHaveBeenCalledWith("u1", "c1", 30);
+  });
+  it("keeps saved dues visible if the mailbox scan fails", async () => {
+    mocks.bills = [bill()];
+    mocks.importDues.mockRejectedValue(new Error("mail unavailable"));
+    const answer = await answerBills("u1", "c1");
+    expect(answer).toContain("PG&E");
+    expect(answer).toContain("email coverage is incomplete");
+  });
+  it("records when the sweep ran, so a repeat ask right after skips the sweep and just shows saved dues", async () => {
+    mocks.bills = [bill()];
+    mocks.importDues.mockResolvedValue("Review email statements. Choose **Confirm**.");
+    await answerBills("u1", "c1");
+    expect(mocks.recorded).toHaveLength(1);
+    mocks.lastChecked = mocks.recorded[0];
+    mocks.importDues.mockClear();
+    const answer = await answerBills("u1", "c1");
+    expect(mocks.importDues).not.toHaveBeenCalled();
+    expect(answer).toContain("PG&E");
+    expect(answer).toMatch(/Checked your email for new statements (just now|.* ago)/);
+  });
+  it("sweeps again once enough time has passed since the last check", async () => {
+    mocks.bills = [bill()];
+    mocks.lastChecked = new Date(Date.now() - 7 * 60 * 60 * 1000);
+    mocks.importDues.mockResolvedValue("Review email statements. Choose **Confirm**.");
+    const answer = await answerBills("u1", "c1");
+    expect(mocks.importDues).toHaveBeenCalled();
+    expect(answer).toContain("Review email statements");
+  });
+  it("sweeps anyway when asked to, even right after a check", async () => {
+    mocks.bills = [bill()];
+    mocks.lastChecked = new Date();
+    mocks.importDues.mockResolvedValue("Review email statements. Choose **Confirm**.");
+    const answer = await answerBills("u1", "c1", 90, true);
+    expect(mocks.importDues).toHaveBeenCalled();
+    expect(answer).toContain("Review email statements");
   });
 });

@@ -1,3 +1,6 @@
+import { emailScanContinuationNote } from "./email-scan";
+import { IMPORT_BUDGET } from "@/lib/runtime/import-budget";
+import { extendRequestBudget } from "@/lib/runtime/request-context";
 import { randomUUID } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { decryptText, encryptText } from "@/lib/security/encryption";
@@ -5,13 +8,14 @@ import { piiHmac } from "@/lib/security/pii-hmac";
 import { createBill, settleBill } from "@/lib/tools/finance/bills";
 import { createTransactionCandidate, type TransactionCandidate } from "@/lib/tools/finance/transactions";
 
-type PendingImport = {
+export type PendingImport = {
   candidate: TransactionCandidate;
-  source: { type: "email" | "receipt"; externalRef: string; payload: string };
+  source: { type: "email" | "receipt"; externalRef: string; payload: string; orderId?: string };
   /** R17: a bill is stored as a bill; a payment settles a bill; anything else is an expense. */
   kind?: "bill" | "payment";
   billId?: string;
   dueOn?: string | null;
+  accountLastFour?: string | null;
 };
 
 type Outcome = { kind: "expense" | "bill" | "paid"; /** A card payment: recorded, but not spending. */ transfer?: boolean; duplicate: boolean; merchant: string; amountMinor: number; currency: string; date: string; dueOn?: string | null };
@@ -20,14 +24,14 @@ async function applyItem(userId: string, item: PendingImport): Promise<Outcome> 
   const { candidate, source } = item;
   const base = { merchant: candidate.merchant, amountMinor: candidate.amountMinor, currency: candidate.currency, date: candidate.occurredOn };
   if (item.kind === "bill") {
-    const result = await createBill(userId, { merchant: candidate.merchant, amountMinor: candidate.amountMinor, currency: candidate.currency, category: candidate.category, statementDate: candidate.occurredOn, dueDate: item.dueOn ?? null }, { externalRef: source.externalRef, payload: source.payload });
-    return { ...base, kind: "bill", duplicate: result.duplicate, dueOn: result.bill.dueDate };
+    const result = await createBill(userId, { merchant: candidate.merchant, amountMinor: candidate.amountMinor, currency: candidate.currency, category: candidate.category, statementDate: candidate.occurredOn, dueDate: item.dueOn ?? null, paymentDirection: candidate.direction === "transfer" ? "transfer" : "expense", accountLastFour: item.accountLastFour }, { externalRef: source.externalRef, payload: source.payload });
+    return { ...base, kind: "bill", transfer: candidate.direction === "transfer", duplicate: result.duplicate, dueOn: result.bill.dueDate };
   }
   if (item.kind === "payment" && item.billId) {
-    const result = await settleBill(userId, item.billId, candidate.occurredOn, { type: source.type, externalRef: source.externalRef, payload: source.payload }, candidate.direction === "transfer" ? "transfer" : "expense");
-    return { ...base, kind: "paid", transfer: candidate.direction === "transfer", duplicate: result.duplicate };
+    const result = await settleBill(userId, item.billId, candidate.occurredOn, { type: source.type, externalRef: source.externalRef, payload: source.payload }, candidate.direction === "transfer" ? "transfer" : "expense", { amountMinor: candidate.amountMinor, currency: candidate.currency, accountLastFour: item.accountLastFour });
+    return { ...base, kind: "paid", transfer: result.bill.paymentDirection === "transfer" || candidate.direction === "transfer", duplicate: result.duplicate };
   }
-  const result = await createTransactionCandidate(userId, candidate, { type: source.type, externalRef: source.externalRef, payload: source.payload });
+  const result = await createTransactionCandidate(userId, candidate, { type: source.type, externalRef: source.externalRef, payload: source.payload, orderId: source.orderId });
   return { ...base, kind: "expense", transfer: candidate.direction === "transfer", duplicate: result.duplicate };
 }
 
@@ -35,13 +39,13 @@ const day = (iso: string) => new Intl.DateTimeFormat("en-US", { month: "short", 
 
 function describeOutcome(outcome: Outcome) {
   const amount = `**${outcome.merchant} — ${formatMoney(outcome.amountMinor, outcome.currency)}**`;
-  if (outcome.kind === "bill") return outcome.duplicate ? `${amount} was already recorded as a bill.` : `Recorded ${amount} as a bill${outcome.dueOn ? `, due ${day(outcome.dueOn)}` : ""}. It isn't counted as spending until it's paid.`;
-  if (outcome.kind === "paid") return outcome.duplicate ? `${amount} was already marked paid.` : `Marked the ${outcome.merchant} bill paid: ${formatMoney(outcome.amountMinor, outcome.currency)} on ${day(outcome.date)}. It now counts as spending.`;
-  if (outcome.transfer) return outcome.duplicate ? `I didn’t add another copy. ${amount} is already recorded as a card payment.` : `Recorded ${amount} as a **card payment**. It isn't counted as spending, because the purchases on the card are.`;
+  if (outcome.kind === "bill") return outcome.duplicate ? `${amount} was already recorded as a bill.` : `Recorded ${amount} as a bill${outcome.dueOn ? `, due ${day(outcome.dueOn)}` : ""}. ${outcome.transfer ? "Paying this credit-card balance is a transfer, not new spending." : "It isn’t counted as spending until it’s paid."} It appears in Perch → Reminders → All dues.`;
+  if (outcome.kind === "paid") return outcome.duplicate ? `${amount} was already marked paid.` : `Marked the ${outcome.merchant} bill paid: ${formatMoney(outcome.amountMinor, outcome.currency)} on ${day(outcome.date)}. ${outcome.transfer ? "It is recorded as a transfer, not new spending." : "It now counts as spending."}`;
+  if (outcome.transfer) return outcome.duplicate ? `I didn’t add another copy. ${amount} is already recorded as a transfer.` : `Recorded ${amount} as a **transfer**. It isn't counted as spending.`;
   return outcome.duplicate ? `I didn’t add another copy. ${amount} is already recorded.` : `Imported ${amount} from the approved email.`;
 }
 
-type PendingImportBatch = { items: PendingImport[] };
+type PendingImportBatch = { items: PendingImport[]; sync?: {runId: string; candidateIds: string[]} };
 
 export async function createFinanceImportApproval(userId: string, conversationId: string, pending: PendingImport | PendingImportBatch) {
   const admin = createAdminClient();
@@ -111,17 +115,23 @@ export async function resolvePendingFinanceImport(userId: string, conversationId
     ]);
     return { answer: "That import preview expired. Ask me to find the email again and I’ll create a fresh preview.", status: "waiting_for_user" as const };
   }
+  const encrypted = checkpointData.payloadCiphertext;
+  if (!encrypted) throw new Error("FINANCE_IMPORT_CHECKPOINT_INVALID");
+  const pending = JSON.parse(decryptText(encrypted)) as PendingImport | PendingImportBatch;
+  const items = "items" in pending ? pending.items : [pending];
+  const sync = "items" in pending ? pending.sync : undefined;
   if (decision === "deny") {
+    const { data: denied, error: denyError } = await admin.from("approvals").update({status: "denied"}).eq("id", approval.id).eq("status", "pending").select("id").maybeSingle();
+    if (denyError) throw denyError;
+    if (!denied) return {answer: "That import was already resolved.", status: "completed" as const};
+    if (sync) await (await import("@/lib/finance-sync/store")).settleSyncCandidates(userId, sync.runId, sync.candidateIds, "rejected");
     await Promise.all([
       admin.from("approvals").update({ status: "denied" }).eq("id", approval.id).eq("status", "pending"),
       admin.from("workflow_checkpoints").update({ state: "cancelled", updated_at: new Date().toISOString() }).eq("id", checkpoint.id),
     ]);
     return { answer: "Import cancelled. Nothing was added to your finances.", status: "completed" as const };
   }
-  const encrypted = checkpointData.payloadCiphertext;
-  if (!encrypted) throw new Error("FINANCE_IMPORT_CHECKPOINT_INVALID");
-  const pending = JSON.parse(decryptText(encrypted)) as PendingImport | PendingImportBatch;
-  const items = "items" in pending ? pending.items : [pending];
+  if (items.length > 1) extendRequestBudget(IMPORT_BUDGET.totalMs, IMPORT_BUDGET.costLimitUsd);
   const { data: claimed, error: claimError } = await admin.from("approvals")
     .update({ status: "approved" })
     .eq("id", approval.id)
@@ -133,15 +143,17 @@ export async function resolvePendingFinanceImport(userId: string, conversationId
   try {
     const results: Outcome[] = [];
     for (const item of items) results.push(await applyItem(userId, item));
+    if (sync) await (await import("@/lib/finance-sync/store")).settleSyncCandidates(userId, sync.runId, sync.candidateIds, "approved");
     await Promise.all([
       admin.from("approvals").update({ status: "consumed", consumed_at: new Date().toISOString() }).eq("id", approval.id),
       admin.from("workflow_checkpoints").update({ state: "completed", updated_at: new Date().toISOString() }).eq("id", checkpoint.id),
     ]);
-    if (results.length === 1) return { answer: describeOutcome(results[0]), status: "completed" as const };
+    const continuation = await emailScanContinuationNote(userId, conversationId).catch(() => "");
+    if (results.length === 1) return { answer: describeOutcome(results[0]) + continuation, status: "completed" as const };
     const added = results.filter((result) => !result.duplicate);
     const skipped = results.length - added.length;
     return {
-      answer: `Saved ${added.length} of ${results.length} items${skipped ? ` (${skipped} already recorded, so not added again)` : ""}.\n\n${results.map((result) => `- ${describeOutcome(result)}`).join("\n")}`,
+      answer: `Saved ${added.length} of ${results.length} items${skipped ? ` (${skipped} already recorded, so not added again)` : ""}.\n\n${results.map((result) => `- ${describeOutcome(result)}`).join("\n")}${continuation}`,
       status: "completed" as const,
     };
   } catch (importError) {

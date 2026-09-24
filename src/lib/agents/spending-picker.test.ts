@@ -28,6 +28,14 @@ describe("the spending picker (free)", () => {
     expect(again.ids).toEqual(["0", "50", "100"]);
   });
 
+  it("keeps statement selections separate from spending exclusions in the cache", async () => {
+    const values = new Map<string, string>();
+    const cache = { get: async (key: string) => values.get(key) ?? null, set: async (key: string, value: string) => { values.set(key, value); } };
+    const emails = [{ ...mail("a"), subject: "Credit card statement ready" }];
+    expect((await pickSpendingEmails("u", emails, { cache, complete: async () => reply([]) })).ids).toEqual([]);
+    expect((await pickSpendingEmails("u", emails, { cache, complete: async () => reply([1]) }, "bills")).ids).toEqual(["a"]);
+  });
+
   it("numbers emails from 1 and keeps the text short", () => {
     const message = JSON.parse(buildPickerMessage([{ ...mail("a"), snippet: "x".repeat(1000) }])) as { emails: Array<{ n: number; text: string }> };
     expect(message.emails[0].n).toBe(1);

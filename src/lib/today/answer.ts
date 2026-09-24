@@ -1,6 +1,6 @@
 import { Temporal } from "@js-temporal/polyfill";
 import type { CalendarEvent } from "@/lib/tools/calendar/google-calendar";
-import { billsTotal, money } from "./brief";
+import { billTotalsByCurrency, money } from "./brief";
 import { loadDailyView, type DailyView, type Section } from "./load";
 
 const TIME_ZONE = process.env.DEFAULT_USER_TIMEZONE ?? "America/Los_Angeles";
@@ -32,13 +32,14 @@ export function renderDailyView(view: DailyView) {
   lines.push("", "**Bills to pay**", "");
   if (view.bills.state !== "ok") lines.push(problem(view.bills, "your bills"));
   else {
-    const { overdue, dueToday, dueThisWeek, noDueDate } = view.bills.value;
+    const { overdue, dueToday, dueThisWeek, dueLater, noDueDate } = view.bills.value;
     const row = (label: string) => (bill: (typeof overdue)[number]) => `- ${bill.merchant}, ${money(bill.amountMinor, bill.currency)}${label ? ` · ${label}` : bill.dueDate ? ` · due ${shortDate(bill.dueDate)}` : ""}`;
-    if (!overdue.length && !dueToday.length && !dueThisWeek.length && !noDueDate.length) lines.push("No unpaid bills.");
+    if (!overdue.length && !dueToday.length && !dueThisWeek.length && !dueLater.length && !noDueDate.length) lines.push("No unpaid bills.");
     else {
-      lines.push(...overdue.map(row("overdue")), ...dueToday.map(row("due today")), ...dueThisWeek.map(row("")), ...noDueDate.map(row("no due date")));
-      const total = billsTotal([...overdue, ...dueToday, ...dueThisWeek]);
-      if (total) lines.push("", `Total to pay: **${money(total.amountMinor, total.currency)}**. Unpaid bills don't count as spending until they're paid.`);
+      lines.push(...overdue.map(row("overdue")), ...dueToday.map(row("due today")), ...dueThisWeek.map(row("")), ...dueLater.map(row("")), ...noDueDate.map(row("no due date")));
+      const totals = billTotalsByCurrency([...overdue, ...dueToday, ...dueThisWeek, ...dueLater, ...noDueDate]);
+      for (const total of totals) lines.push("", `Total to pay (${total.currency}): **${money(total.amountMinor, total.currency)}**.`);
+      lines.push("", "Unpaid bills don’t count as spending until they’re paid.");
     }
   }
 

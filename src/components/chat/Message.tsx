@@ -31,6 +31,8 @@ type AssistantProps = {
   id?: string;
   highlight?: "match" | "active";
   approval?: boolean;
+  resumable?: boolean;
+  onContinue?: () => void;
   retryable?: boolean;
   notice?: boolean;
   busy?: boolean;
@@ -43,7 +45,7 @@ type AssistantProps = {
   onRetry?: () => void;
 };
 
-export function AssistantMessage({ children, id, highlight, approval, retryable, notice, busy, rating, canRate, onRate, onNote, onConfirm, onCancel, onRetry }: AssistantProps) {
+export function AssistantMessage({ children, id, highlight, approval, resumable, onContinue, retryable, notice, busy, rating, canRate, onRate, onNote, onConfirm, onCancel, onRetry }: AssistantProps) {
   const [copied, setCopied] = useState(false);
   const [noteOpen, setNoteOpen] = useState(false);
   const [note, setNote] = useState("");
@@ -71,8 +73,9 @@ export function AssistantMessage({ children, id, highlight, approval, retryable,
   return <article id={id} className={`${styles.assistant} ${highlight ? styles[highlight] : ""}`} aria-label={notice ? "Daylark notice" : "Daylark replied"}>
     <header className={styles.head}>Daylark</header>
     <div className={notice ? styles.notice : undefined}><Markdown>{children}</Markdown></div>
-    {approval && <div className={styles.actions}>
-      <Button variant="primary" disabled={busy} onClick={onConfirm}><CheckIcon width={16} height={16} />Confirm</Button>
+    {(approval || resumable) && <div className={styles.actions}>
+      {resumable && <Button variant="primary" disabled={busy} onClick={onContinue}>Continue scan</Button>}
+      {approval && <Button variant={resumable ? "secondary" : "primary"} disabled={busy} onClick={onConfirm}><CheckIcon width={16} height={16} />{resumable ? "Import reviewed items" : "Confirm"}</Button>}
       <Button variant="ghost" disabled={busy} onClick={onCancel}>Cancel</Button>
     </div>}
     {retryable && <div className={styles.actions}><Button variant="secondary" disabled={busy} onClick={onRetry}>Try again</Button></div>}
@@ -101,7 +104,7 @@ export function PendingMessage({ label, takingLonger }: { label: string; takingL
     <header className={styles.head}>Daylark</header>
     <div className={styles.pending} role="status">
       <span className={styles.dots} aria-hidden="true"><i /><i /><i /></span>
-      <span>{takingLonger ? "This is taking a little longer than usual…" : label}</span>
+      <span>{takingLonger && !label.includes("emails checked") ? "This is taking a little longer than usual…" : label}</span>
     </div>
   </article>;
 }

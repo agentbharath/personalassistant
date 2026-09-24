@@ -8,7 +8,7 @@ describe("Daylark persona guardrails", () => {
   });
 
   it("contains an explicit safety escalation rule", () => {
-    expect(DAYLARK_PERSONA).toContain("possible self-harm");
+    expect(DAYLARK_PERSONA).toContain("self-harm risk");
     expect(DAYLARK_PERSONA).toContain("immediate danger");
   });
 });

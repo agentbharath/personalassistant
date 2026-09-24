@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { Temporal } from "@js-temporal/polyfill";
 import { CalendarIcon, CheckIcon, ClockIcon, WalletIcon } from "@/components/ui/icons";
 import { eventWhen, shortDate, titleCase } from "@/components/today/format";
-import { billsTotal, money, type WeeklySpending } from "@/lib/today/brief";
+import { billTotalsByCurrency, money, type WeeklySpending } from "@/lib/today/brief";
 import type { DailyView } from "@/lib/today/load";
 import type { Bill } from "@/lib/agents/bills";
 import type { CalendarEvent } from "@/lib/tools/calendar/google-calendar";
@@ -47,7 +47,7 @@ function BillRows({ bills, today, kind }: { bills: Bill[]; today: string; kind: 
       : kind === "soon" ? { text: `${bill.dueDate ? shortDate(bill.dueDate) : ""} · in ${days} day${days === 1 ? "" : "s"}`, tone: styles.pillPlain }
       : { text: "No due date", tone: styles.pillPlain };
     return <li className={styles.bill} key={bill.id}>
-      <span className={styles.what}>{bill.merchant}<span className={`${styles.pill} ${pill.tone}`}>{pill.text}</span></span>
+      <span className={styles.what}>{bill.merchant}{bill.accountLastFour && <span className={styles.sub}>ending {bill.accountLastFour}</span>}<span className={`${styles.pill} ${pill.tone}`}>{pill.text}</span></span>
       <span className={styles.amount}>{money(bill.amountMinor, bill.currency)}</span>
     </li>;
   })}</ul>;
@@ -90,7 +90,7 @@ function Spending({ week }: { week: WeeklySpending }) {
 export function TodayView({ view, replies }: { view: DailyView; /** The "Waiting on your reply" card. It loads separately, so it arrives as a slot. */ replies?: ReactNode }) {
   const heading = new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: "UTC" }).format(new Date(`${view.today}T00:00:00Z`));
   const meetings = view.meetingsToday, ahead = view.meetingsAhead, bills = view.bills, spending = view.spending;
-  const billCount = bills.state === "ok" ? bills.value.overdue.length + bills.value.dueToday.length + bills.value.dueThisWeek.length : 0;
+  const billCount = bills.state === "ok" ? bills.value.overdue.length + bills.value.dueToday.length + bills.value.dueThisWeek.length + bills.value.dueLater.length + bills.value.noDueDate.length : 0;
 
   return <div className={styles.page}>
     <p className={styles.eyebrow}>Your perch · your day at a glance</p>
@@ -104,25 +104,30 @@ export function TodayView({ view, replies }: { view: DailyView; /** The "Waiting
         </>}
       </Card>
 
-      <Card label="Bills to pay" tone="amber" icon={<ClockIcon />} badge={bills.state === "ok" ? (billCount ? `${billCount} due` : "Nothing due") : undefined}>
+      <section className={styles.stack} aria-labelledby="reminders-title">
+      <h2 id="reminders-title" className={styles.cardTitle}>Reminders</h2>
+      <Card label="All dues" tone="amber" icon={<ClockIcon />} badge={bills.state === "ok" ? (billCount ? `${billCount} outstanding` : "Nothing recorded") : undefined}>
         {bills.state !== "ok" ? <Unavailable what="your bills" state={bills.state} /> : (() => {
-          const { overdue, dueToday, dueThisWeek, noDueDate } = bills.value;
-          if (!overdue.length && !dueToday.length && !dueThisWeek.length && !noDueDate.length) return <p className={styles.allClear}><CheckIcon />No unpaid bills. Anything you paid is already counted in your spending.</p>;
-          const total = billsTotal([...overdue, ...dueToday, ...dueThisWeek]);
+          const { overdue, dueToday, dueThisWeek, dueLater, noDueDate } = bills.value;
+          if (!overdue.length && !dueToday.length && !dueThisWeek.length && !dueLater.length && !noDueDate.length) return <p className={styles.allClear}><CheckIcon />No unpaid bills recorded. Ask Daylark to import your bills from email to add any missing dues.</p>;
+          const totals = billTotalsByCurrency([...overdue, ...dueToday, ...dueThisWeek, ...dueLater, ...noDueDate]);
           return <>
             {overdue.length > 0 && <Group label="Overdue" tone="late"><BillRows bills={overdue} today={view.today} kind="overdue" /></Group>}
             <Group label="Due today">{dueToday.length ? <BillRows bills={dueToday} today={view.today} kind="today" /> : <p className={styles.quiet}>Nothing due today.</p>}</Group>
             <Group label="Coming up this week">{dueThisWeek.length ? <BillRows bills={dueThisWeek} today={view.today} kind="soon" /> : <p className={styles.quiet}>Nothing due in the next 7 days.</p>}</Group>
+            {dueLater.length > 0 && <Group label="Due later"><BillRows bills={dueLater} today={view.today} kind="soon" /></Group>}
             {noDueDate.length > 0 && <Group label="No due date"><BillRows bills={noDueDate} today={view.today} kind="open" /></Group>}
             <div className={styles.foot}>
-              {total && <p className={styles.footRow}><span>To pay in all</span><strong>{money(total.amountMinor, total.currency)}</strong></p>}
-              <p>Unpaid bills don’t count as spending until they’re paid. Tell Daylark “I paid the electric bill” to update them.</p>
+              {totals.map((total) => <p key={total.currency} className={styles.footRow}><span>Total outstanding ({total.currency})</span><strong>{money(total.amountMinor, total.currency)}</strong></p>)}
+              <p>Utility bills count as spending when paid; credit-card repayments are transfers. Tell Daylark “I paid the electric bill” to update them.</p>
             </div>
           </>;
         })()}
+        <div className={styles.foot}><Link className={styles.action} href="/?intent=dues">Find statements in email</Link><p>Review new statement balances in chat, then confirm to add them here.</p></div>
       </Card>
 
       {replies}
+      </section>
 
       <Card label="Spending this week" tone="green" icon={<WalletIcon />}>
         {spending.state !== "ok" ? <Unavailable what="your spending" state={spending.state} />

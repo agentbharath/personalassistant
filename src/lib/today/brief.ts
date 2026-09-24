@@ -5,7 +5,7 @@ import { toKnownCategory } from "@/lib/learning/preferences";
 /** The daily view (R26): what is due, what is on, and how spending is going. Everything here is plain arithmetic over saved records, with no model involved. */
 export const WEEK_DAYS = 7;
 
-export type BillBuckets = { overdue: Bill[]; dueToday: Bill[]; dueThisWeek: Bill[]; noDueDate: Bill[] };
+export type BillBuckets = { overdue: Bill[]; dueToday: Bill[]; dueThisWeek: Bill[]; dueLater: Bill[]; noDueDate: Bill[] };
 
 const byDue = (left: Bill, right: Bill) => (left.dueDate ?? "9999").localeCompare(right.dueDate ?? "9999");
 
@@ -17,6 +17,7 @@ export function billBuckets(bills: Bill[], today: string): BillBuckets {
     overdue: open.filter((bill) => bill.dueDate !== null && bill.dueDate < today),
     dueToday: open.filter((bill) => bill.dueDate === today),
     dueThisWeek: open.filter((bill) => bill.dueDate !== null && bill.dueDate > today && bill.dueDate <= horizon),
+    dueLater: open.filter((bill) => bill.dueDate !== null && bill.dueDate > horizon),
     noDueDate: open.filter((bill) => bill.dueDate === null),
   };
 }
@@ -26,6 +27,13 @@ export function billsTotal(bills: Bill[]): { amountMinor: number; currency: stri
   if (!bills.length) return null;
   const currency = bills[0].currency;
   return bills.every((bill) => bill.currency === currency) ? { amountMinor: bills.reduce((sum, bill) => sum + bill.amountMinor, 0), currency } : null;
+}
+
+/** Keep every outstanding amount visible without adding different currencies together. */
+export function billTotalsByCurrency(bills: Bill[]) {
+  const totals = new Map<string, number>();
+  for (const bill of bills) totals.set(bill.currency, (totals.get(bill.currency) ?? 0) + bill.amountMinor);
+  return [...totals].sort(([a], [b]) => a.localeCompare(b)).map(([currency, amountMinor]) => ({ currency, amountMinor }));
 }
 
 export type SpendingRecord = { occurredOn: string; amountMinor: number; currency: string; direction: "expense" | "income" | "transfer"; merchant: string; category: string };

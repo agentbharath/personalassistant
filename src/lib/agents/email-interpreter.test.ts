@@ -167,3 +167,66 @@ describe("clarification noise (R16.3, R16.5)", () => {
     expect(canonicalize(output({ confidence: 0.4, clarification: "Which sender?" }) as never, "x").clarification).toBe("Which sender?");
   });
 });
+
+it("retains the specific email subject across interpretation and date follow-ups", async () => {
+  const result = await interpretEmail(input("Have I received any mail for my home maintenance update"), { complete: vi.fn().mockResolvedValue(reply(output({ topic: "general", sender: null, searchTerms: ["maintenance", "work order", "repair request"] }))) });
+  expect(result.request.searchTerms).toEqual(["maintenance", "work order", "repair request"]);
+  expect(buildInterpreterMessage(input("last 90 days", { request: result.request, results: [], updatedAt: Date.now() }))).toContain('"searchTerms":["maintenance","work order","repair request"]');
+});
+
+it("includes the offered action and distinguishes identical yes replies in the cache", async () => {
+  const cache = memoryCache();
+  const complete = vi.fn().mockResolvedValue(reply(output({ topic: "general", sender: null, searchTerms: ["maintenance", "work order"] })));
+  const maintenance = { ...input("yes"), context: [{ role: "user" as const, content: "Any update on my home maintenance?" }, { role: "assistant" as const, content: "Should I search your email for the maintenance update?" }] };
+  await interpretEmail(maintenance, { complete, cache });
+  expect(complete.mock.calls[0][0].messages[0].content).toContain("Should I search your email for the maintenance update?");
+  await interpretEmail(maintenance, { complete, cache });
+  expect(complete).toHaveBeenCalledTimes(1);
+  await interpretEmail({ ...maintenance, context: [{ role: "assistant", content: "Should I look for your utility bills?" }] }, { complete, cache });
+  expect(complete).toHaveBeenCalledTimes(2);
+});
+it("reviews a redundant question after the user accepts a single offered action", async () => {
+  const complete = vi.fn().mockResolvedValueOnce(reply(output({ confidence: 0.4, clarification: "Search for what?" })))
+    .mockResolvedValueOnce(reply(output({ topic: "general", sender: null, searchTerms: ["maintenance"] })));
+  const result = await interpretEmail({ ...input("Yes, search for it"), context: [{ role: "assistant", content: "Would you like me to search for your maintenance update?" }] }, { complete });
+  expect(result.clarification).toBeNull();
+  expect(result.request.searchTerms).toEqual(["maintenance"]);
+  expect(complete.mock.calls[1][0].messages[0].content).toContain("Context review");
+});
+it("includes a selected option and topic change instead of only stale email state", () => {
+  const message = JSON.parse(buildInterpreterMessage({ ...input("Daylark's saved drafts"), context: [{ role: "assistant", content: "Daylark's saved drafts, or Gmail drafts?" }] }));
+  expect(message.lastAssistantTurn).toContain("Daylark's saved drafts");
+  expect(message.recent).toHaveLength(1);
+});
+it("does not turn an ambiguous yes into a chosen alternative", async () => {
+  const complete = vi.fn().mockResolvedValue(reply(output({ confidence: 0.4, clarification: "Receipts or promotions?" })));
+  const result = await interpretEmail({ ...input("yes"), context: [{ role: "assistant", content: "Do you want receipts or promotions?" }] }, { complete });
+  expect(result.clarification).toBe("Receipts or promotions?");
+  expect(result.confidence).toBeLessThan(0.7);
+});
+it("uses the archived list bounds when newer results replaced the original list", async () => {
+ const request: EmailRequest = {action: "list", topic: "general", sender: null, days: 30, calendar: null, unread: false, humansOnly: false, exclusion: "", intent: "home maintenance update"};
+ const old: EmailState = {request, updatedAt: 1, results: ["old-first", "old-second"].map(id => ({id, subject: id, from: "Heritage", date: "2026-08-01"}))};
+ const current = {...old, results: old.results.slice(0, 1)};
+ const complete = vi.fn().mockResolvedValue(reply(output({pick: 2, pickAction: "show", referenceId: "old-list", intent: request.intent})));
+ const result = await interpretEmail({...input("open the second email from the older list", current), archives: [{id: "old-list", state: old}]}, {complete});
+ expect(result.pick).toEqual({index: 1, action: "show", referenceId: "old-list"});
+ expect(result.request.intent).toBe(request.intent);
+});
+it("does not silently use the latest list for an invented archive ID", async () => {
+ const complete = vi.fn().mockResolvedValue(reply(output({pick: 1, pickAction: "show", referenceId: "invented"})));
+ const result = await interpretEmail(input("show the first email from last month"), {complete});
+ expect(result.pick).toBeNull();
+ expect(result.clarification).toBeTruthy();
+});
+
+it("does not repeat a selected email option even when the model's repair fails", async () => {
+  const question = "Receipts or promotions?";
+  const complete = vi.fn().mockResolvedValue(reply(output({confidence:0.4, clarification:question})));
+  const cache = memoryCache();
+  const result = await interpretEmail({...input("Receipts"), context:[{role:"assistant",content:question,choices:["Receipts","Promotions"]}]}, {complete, cache});
+  expect(result.continuityBlocked).toBe(true);
+  expect(result.clarification).not.toBe(question);
+  expect(cache.store.size).toBe(0);
+  expect(complete).toHaveBeenCalledTimes(2);
+});

@@ -5,6 +5,10 @@ import { detectEmailIntent, type EmailIntent } from "./email-relevance";
 
 /** Everything Daylark understands about an email request, parsed once. Follow-ups edit these fields instead of rewriting sentences. */
 export type EmailRequest = {
+  intent?: string;
+  offset?: number;
+  searchTerms?: string[];
+  excludedTerms?: string[];
   action: "list" | "facts" | "amounts" | "import" | "import_all";
   topic: EmailIntent;
   sender: string | null;
@@ -38,6 +42,7 @@ export function parseEmailRequest(raw: string): EmailRequest {
   return {
     action: importing ? (/\b(?:all|every|each)\b/i.test(input) ? "import_all" : "import") : topic === "receipt" && asksForInvoiceFacts(core) ? (PLURAL_DOCUMENTS.test(core) && !SINGLE_OUT.test(core.replace(PERIODS, " ")) ? "amounts" : "facts") : "list",
     topic,
+    ...(/\babout\s+/i.test(core) && core.includes('"') ? { searchTerms: [...core.matchAll(/"([^"\n]+)"/g)].map(match => match[1]) } : {}),
     sender: extractRequestedSender(input),
     days: recencyDays(core),
     calendar: (core.match(/\b(today|yesterday|this week)\b/i)?.[1]?.toLowerCase() as EmailRequest["calendar"]) ?? null,
@@ -61,6 +66,6 @@ export function renderEmailRequest(request: EmailRequest) {
   else if (request.action === "amounts") head = `Show the amounts on my receipts ${from}`;
   else if (request.action === "facts") { head = `Find the latest invoice ${from} ${window} and tell me the amount and billing date`; tail = [request.unread ? "unread" : ""]; }
   else { head = `Find ${request.unread ? "unread " : ""}${noun ? `${noun} ` : ""}emails ${from}`; tail = [window]; }
-  const sentence = [head, ...tail, request.humansOnly ? "only real people" : ""].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
+  const sentence = [head, request.searchTerms?.length ? `about ${request.searchTerms.map(term => `"${term.replaceAll('"', " ")}"`).join(" or ")}` : "", ...tail, request.humansOnly ? "only real people" : ""].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
   return request.exclusion ? `${sentence}, ${request.exclusion}` : sentence;
 }

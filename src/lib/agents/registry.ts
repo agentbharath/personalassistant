@@ -29,6 +29,7 @@ export const AGENT_TOOLS: Readonly<Record<AgentName, readonly string[]>> = {
     "finance.create_bill",
     "finance.list_bills",
     "finance.settle_bill",
+    "finance.sync_state",
   ],
 };
 

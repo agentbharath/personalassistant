@@ -1,10 +1,11 @@
+import { FinanceSyncCard } from "@/components/today/FinanceSyncCard";
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/layout/AppShell";
 import { RefreshOnReturn } from "@/components/today/RefreshOnReturn";
 import { RepliesSection, RepliesSkeleton } from "@/components/today/RepliesSection";
 import { TodayView } from "@/components/today/TodayView";
-import { loadDailyView } from "@/lib/today/load";
+import { loadDaySummaryParts } from "@/lib/today/summary";
 import { isPerchEnabled } from "@/lib/replies/dismissals";
 import { listConversations } from "@/lib/conversations/store";
 import { createClient } from "@/lib/supabase/server";
@@ -21,9 +22,10 @@ export default async function PerchPage() {
   const userId = typeof data?.claims?.sub === "string" ? data.claims.sub : undefined;
   // Perch was turned off in Settings: leave it out, and nothing is read.
   if (!(await isPerchEnabled(userId))) redirect("/");
-  const [view, recent] = userId ? await Promise.all([loadDailyView(userId), listConversations(userId, { limit: 40 }).catch(() => [])]) : [null, []];
+  const summary = userId ? loadDaySummaryParts(userId) : null;
+  const [view, recent] = userId ? await Promise.all([summary!.view, listConversations(userId, { limit: 40 }).catch(() => [])]) : [null, []];
 
   return <AppShell title="Perch" email={email} signOutAction={signOut} recent={recent} activeView="perch">
-    {view && userId ? <><RefreshOnReturn /><TodayView view={view} replies={<Suspense fallback={<RepliesSkeleton />}><RepliesSection userId={userId} /></Suspense>} /></> : null}
+    {view && userId ? <><RefreshOnReturn /><FinanceSyncCard /><TodayView view={view} replies={<Suspense fallback={<RepliesSkeleton />}><RepliesSection userId={userId} result={summary!.replies} /></Suspense>} /></> : null}
   </AppShell>;
 }

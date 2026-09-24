@@ -110,7 +110,11 @@ async function refreshGoogleAccessToken(refreshToken: string, capability: Capabi
     }),
     signal: AbortSignal.timeout(8_000),
   });
-  if (!response.ok) throw new GoogleConnectionRequiredError(capability);
+  if (!response.ok) {
+    const failure = await response.json().catch(() => ({})) as {error?: string};
+    if (failure.error === "invalid_grant" || response.status === 401) throw new GoogleConnectionRequiredError(capability);
+    throw new Error("GOOGLE_TOKEN_REFRESH_UNAVAILABLE");
+  }
   const body = await response.json() as { access_token?: string };
   if (!body.access_token) throw new GoogleConnectionRequiredError(capability);
   return body.access_token;

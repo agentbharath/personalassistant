@@ -33,17 +33,17 @@ describe("dates in emails (R17.2)", () => {
 const bill = (over: Partial<Bill> = {}): Bill => ({ id: "b1", merchant: "PG&E", amountMinor: 14630, currency: "USD", category: "utilities", statementDate: "2026-09-17", dueDate: "2026-10-05", status: "outstanding", paidOn: null, ...over });
 
 describe("a payment settles a bill (R17.4)", () => {
-  const payment = { merchant: "Pacific Gas and Electric", amountMinor: 14630, date: "2026-09-25" };
+  const payment = { currency: "USD", merchant: "Pacific Gas and Electric", amountMinor: 14630, date: "2026-09-25" };
   it("matches the same merchant, a matching amount, after the statement", () => {
     expect(matchPayment([bill()], { ...payment, merchant: "PG&E" })?.id).toBe("b1");
-    expect(matchPayment([bill()], { ...payment, amountMinor: 14700 })?.id).toBe("b1");
+    expect(matchPayment([bill()], { ...payment, amountMinor: 14700 })).toBeNull();
   });
   it.each([
     ["a different amount", { ...payment, merchant: "PG&E", amountMinor: 9900 }],
     ["a different merchant", { ...payment, merchant: "Comcast" }],
     ["a payment dated before the statement", { ...payment, merchant: "PG&E", date: "2026-09-01" }],
   ])("does not match %s", (_name, pay) => expect(matchPayment([bill()], pay)).toBeNull());
-  it("ignores a bill that is already paid, and picks the closest amount", () => {
+  it("ignores a bill that is already paid, and requires the exact amount", () => {
     expect(matchPayment([bill({ status: "paid" })], { ...payment, merchant: "PG&E" })).toBeNull();
     expect(matchPayment([bill({ id: "far", amountMinor: 14700 }), bill({ id: "near", amountMinor: 14630 })], { ...payment, merchant: "PG&E" })?.id).toBe("near");
   });
@@ -80,4 +80,16 @@ describe("what the user sees (R17.3, R17.7, R17.8)", () => {
   it("says so when nothing is outstanding", () => {
     expect(renderBills([], "2026-09-20")).toMatch(/No outstanding bills/);
   });
+});
+
+it("requires matching currency, account and a unique bill", () => {
+  const payment = { merchant: "PG&E", amountMinor: 14630, date: "2026-09-25", currency: "USD", accountLastFour: "1234" };
+  expect(matchPayment([bill({ currency: "INR", accountLastFour: "1234" })], payment)).toBeNull();
+  expect(matchPayment([bill({ accountLastFour: "5678" })], payment)).toBeNull();
+  expect(matchPayment([bill({ accountLastFour: "1234" })], { ...payment, accountLastFour: undefined })).toBeNull();
+  expect(matchPayment([bill({ accountLastFour: "1234" })], payment)?.id).toBe("b1");
+  expect(matchPayment([bill({ accountLastFour: "1234" }), bill({ id: "b2", accountLastFour: "1234" })], payment)).toBeNull();
+});
+it("recognizes Xfinity's payment subject", () => {
+  expect(classifyDocument("Thanks for your payment")).toBe("payment");
 });

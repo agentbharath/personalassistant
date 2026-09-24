@@ -1,3 +1,4 @@
+import { messageChoices } from "@/lib/conversations/message-context";
 import { decryptText } from "@/lib/security/encryption";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -30,9 +31,9 @@ async function readAll(table: string, columns: string, userId: string, order: st
  * feedback. Sign-in tokens are left out on purpose (they are credentials, not the user's data); only which connections exist is listed.
  */
 export async function buildAccountExport(userId: string, email: string | null) {
-  const [conversations, messages, learnings, transactions, sources, bills, feedback, connections, drafts] = await Promise.all([
+  const [conversations, messages, learnings, transactions, sources, bills, feedback, connections, drafts, syncState, syncCandidates, senderRegistry, digestLog, references] = await Promise.all([
     readAll("conversations", "id, title_ciphertext, pinned_at, created_at, updated_at", userId, "created_at"),
-    readAll("conversation_messages", "conversation_id, role, content_ciphertext, sequence_number, created_at", userId, "created_at"),
+    readAll("conversation_messages", "*", userId, "created_at"),
     readAll("user_learnings", "kind, value_ciphertext, created_at, updated_at", userId, "created_at"),
     readAll("finance_transactions", "id, occurred_on, amount_minor, currency, direction, merchant_ciphertext, category, note_ciphertext, created_at", userId, "occurred_on"),
     readAll("finance_transaction_sources", "transaction_id, source_type, created_at", userId, "created_at"),
@@ -40,12 +41,17 @@ export async function buildAccountExport(userId: string, email: string | null) {
     readAll("message_feedback", "conversation_id, sequence_number, rating, note_ciphertext, created_at", userId, "created_at"),
     readAll("oauth_connections", "capability, scopes, created_at, updated_at", userId, "created_at"),
     readAll("email_drafts", "versions_ciphertext, discarded_at, created_at", userId, "created_at"),
+    readAll("finance_sync_state", "status, synced_through, covered_from, checked, last_error, updated_at", userId, "updated_at"),
+    readAll("finance_import_candidates", "status, classification, payload_ciphertext, created_at", userId, "created_at"),
+    readAll("finance_sender_registry", "sender_hmac, status, positive_count, negative_count, updated_at", userId, "updated_at"),
+    readAll("digest_log", "local_date, status, provider_message_id, created_at", userId, "created_at"),
+    readAll("conversation_references", "conversation_id, kind, payload_ciphertext, created_at", userId, "created_at"),
   ]);
 
   const byConversation = new Map<string, Row[]>();
   for (const message of messages) {
     const list = byConversation.get(message.conversation_id as string) ?? [];
-    list.push({ sequence: message.sequence_number, role: message.role, content: plain(message.content_ciphertext), at: message.created_at });
+    list.push({ sequence: message.sequence_number, role: message.role, content: plain(message.content_ciphertext), ...messageChoices(message.context_ciphertext), at: message.created_at });
     byConversation.set(message.conversation_id as string, list);
   }
   const sourcesByTransaction = new Map<string, string[]>();
@@ -91,6 +97,9 @@ export async function buildAccountExport(userId: string, email: string | null) {
     answerFeedback: feedback.map((item) => ({ conversationId: item.conversation_id, message: item.sequence_number, rating: item.rating, note: plain(item.note_ciphertext) })),
     // Drafts Daylark saved in Gmail, with the versions of their wording. Discarded drafts keep no wording.
     emailDrafts: drafts.map((draft) => ({ createdAt: draft.created_at, discardedAt: draft.discarded_at, versions: (() => { const text = plain(draft.versions_ciphertext); try { return text ? JSON.parse(text) : []; } catch { return []; } })() })),
+    financeSync: {state: syncState, candidates: syncCandidates.map(({payload_ciphertext, ...row}) => ({...row, payload: plain(payload_ciphertext)})), senderRegistry},
+    digestDeliveries: digestLog,
+    conversationReferences: references.map(({payload_ciphertext, ...row}) => ({...row, payload: plain(payload_ciphertext)})),
     connections: connections.map((connection) => ({ service: connection.capability, permissions: connection.scopes, connectedAt: connection.created_at })),
   };
 }

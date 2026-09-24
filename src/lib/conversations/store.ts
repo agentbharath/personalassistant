@@ -1,8 +1,9 @@
+import { messageChoices } from "./message-context";
 import { createClient } from "@/lib/supabase/server";
 import { decryptText, encryptText } from "@/lib/security/encryption";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-export type StoredMessage = { role: "user" | "assistant"; content: string; sequence?: string };
+export type StoredMessage = { role: "user" | "assistant"; content: string; choices?: string[]; sequence?: string };
 export type ConversationSummary = { id: string; title: string; updatedAt: string; pinned?: boolean; pinnedAt?: string | null };
 const DISPLAY_MESSAGE_LIMIT = 50;
 const RECENT_CONTEXT_LIMIT = 12;
@@ -44,20 +45,33 @@ export function summarizeConversationTitle(input: string) {
 
 export async function appendMessage(userId: string, conversationId: string, message: StoredMessage) {
   const supabase = await createClient();
-  const { error } = await supabase.rpc("append_conversation_message", {
+  const { error } = await supabase.rpc(message.role === "assistant" && message.choices?.length ? "append_conversation_message_with_context" : "append_conversation_message", {
     p_user_id: userId,
     p_conversation_id: conversationId,
     p_role: message.role,
     p_content_ciphertext: encryptText(message.content),
+    ...(message.role === "assistant" && message.choices?.length ? {p_context_ciphertext: encryptText(JSON.stringify({choices: message.choices}))} : {}),
   });
+  if (error && message.role === "assistant" && message.choices?.length &&
+    ["PGRST202", "42883"].includes(error.code) && error.message.includes("append_conversation_message_with_context")) {
+    // During a rolling schema upgrade, preserve the answer and options as encrypted text.
+    // Only retry a definitively missing function, never an ambiguous network/write failure.
+    const fallback = await supabase.rpc("append_conversation_message", {
+      p_user_id: userId, p_conversation_id: conversationId, p_role: message.role,
+      p_content_ciphertext: encryptText(`${message.content}\n\nOptions: ${message.choices.join(" · ")}`),
+    });
+    if (fallback.error) throw fallback.error;
+    return;
+  }
   if (error) throw error;
 }
 
+// Read optional message metadata with the row so older schemas remain readable before migration 0025.
 export async function getConversation(userId: string, conversationId: string) {
   const supabase = await createClient();
   const [conversationResult, messageResult] = await Promise.all([
     supabase.from("conversations").select("id, title_ciphertext, title_custom, context_summary_ciphertext").eq("id", conversationId).eq("user_id", userId).maybeSingle(),
-    supabase.from("conversation_messages").select("role, content_ciphertext, sequence_number").eq("conversation_id", conversationId).eq("user_id", userId).order("sequence_number", { ascending: false }).limit(DISPLAY_MESSAGE_LIMIT + 1),
+    supabase.from("conversation_messages").select("*").eq("conversation_id", conversationId).eq("user_id", userId).order("sequence_number", { ascending: false }).limit(DISPLAY_MESSAGE_LIMIT + 1),
   ]);
   const { data: conversation, error: conversationError } = conversationResult;
   if (conversationError) throw conversationError;
@@ -68,7 +82,7 @@ export async function getConversation(userId: string, conversationId: string) {
   const page = (messages ?? []).slice(0, DISPLAY_MESSAGE_LIMIT);
   const decryptedMessages = page.reverse().flatMap((message) => {
     if ((message.role !== "user" && message.role !== "assistant") || !message.content_ciphertext) return [];
-    return [{ role: message.role, content: decryptText(message.content_ciphertext as string), sequence: String(message.sequence_number) } as StoredMessage];
+    return [{ role: message.role, content: decryptText(message.content_ciphertext as string), ...messageChoices(message.context_ciphertext), sequence: String(message.sequence_number) } as StoredMessage];
   });
   const summary = conversation.context_summary_ciphertext ? decryptText(conversation.context_summary_ciphertext as string) : null;
   return {
@@ -92,7 +106,7 @@ export async function getConversationMessagesPage(userId: string, conversationId
   if (!conversation) return null;
   const pageSize = Math.max(1, Math.min(limit, 50));
   const { data, error } = await supabase.from("conversation_messages")
-    .select("role, content_ciphertext, sequence_number")
+    .select("*")
     .eq("conversation_id", conversationId).eq("user_id", userId)
     .lt("sequence_number", beforeSequence)
     .order("sequence_number", { ascending: false }).limit(pageSize + 1);
@@ -100,7 +114,7 @@ export async function getConversationMessagesPage(userId: string, conversationId
   const hasMore = (data?.length ?? 0) > pageSize;
   const messages = (data ?? []).slice(0, pageSize).reverse().flatMap((message) => {
     if ((message.role !== "user" && message.role !== "assistant") || !message.content_ciphertext) return [];
-    return [{ role: message.role, content: decryptText(message.content_ciphertext as string), sequence: String(message.sequence_number) } as StoredMessage];
+    return [{ role: message.role, content: decryptText(message.content_ciphertext as string), ...messageChoices(message.context_ciphertext), sequence: String(message.sequence_number) } as StoredMessage];
   });
   return { messages, hasMore, oldestSequence: messages[0]?.sequence };
 }
@@ -119,14 +133,14 @@ export async function compactConversationContext(userId: string, conversationId:
   const summarizedThrough = Number(conversation.summarized_through_sequence ?? 0);
   if (cutoff <= summarizedThrough + 1) return;
   const { data: older, error: olderError } = await supabase.from("conversation_messages")
-    .select("role, content_ciphertext, sequence_number")
+    .select("*")
     .eq("conversation_id", conversationId).eq("user_id", userId)
     .gt("sequence_number", summarizedThrough).lt("sequence_number", cutoff)
     .order("sequence_number", { ascending: true });
   if (olderError || !older?.length) return;
   const prior = conversation.context_summary_ciphertext ? decryptText(conversation.context_summary_ciphertext as string) : "";
   const additions = older.flatMap((message) => message.content_ciphertext && (message.role === "user" || message.role === "assistant")
-    ? [`${message.role === "user" ? "User" : "Assistant"}: ${decryptText(message.content_ciphertext as string)}`]
+    ? [`${message.role === "user" ? "User" : "Assistant"}: ${decryptText(message.content_ciphertext as string)}${messageChoices(message.context_ciphertext).choices ? " Options: " + messageChoices(message.context_ciphertext).choices!.join(" / ") : ""}`]
     : []);
   const summary = buildContextCheckpoint(prior, additions);
   const lastSequence = Number(older.at(-1)?.sequence_number ?? summarizedThrough);

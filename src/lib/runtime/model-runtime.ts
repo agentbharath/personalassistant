@@ -25,7 +25,7 @@ const actorFor = (userId?: string): Actor | undefined => {
   return userId ? { userId, requestId: randomUUID() } : undefined;
 };
 
-export async function callClaude(operation: string, params: Anthropic.MessageCreateParamsNonStreaming, options: { userId?: string } = {}) {
+export async function callClaude(operation: string, params: Anthropic.MessageCreateParamsNonStreaming, options: { userId?: string; timeoutMs?: number } = {}) {
   const actor = actorFor(options.userId);
   const estimatedInputTokens = Math.ceil(JSON.stringify(params.messages).length / 4);
   params = { ...params, model: selectQueryModel(estimatedInputTokens, params.max_tokens) };
@@ -38,7 +38,8 @@ export async function callClaude(operation: string, params: Anthropic.MessageCre
   for (let attempt = 1; attempt <= 2; attempt += 1) {
     const startedAt = performance.now();
     try {
-      const timeout = remainingRequestMs(10_000);
+      const requestedTimeout = Number.isFinite(options.timeoutMs) ? Math.max(1000, Math.min(30000, options.timeoutMs!)) : 10000;
+      const timeout = remainingRequestMs(requestedTimeout);
       const signal = getRequestContext()?.signal;
       if (timeout <= 0 || signal?.aborted) throw new DOMException("Query deadline exceeded", "AbortError");
       const response = await client.messages.create(params, { maxRetries: 0, timeout, signal });

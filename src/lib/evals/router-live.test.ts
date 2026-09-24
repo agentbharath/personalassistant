@@ -14,7 +14,8 @@ const mode = liveMode();
 const REPEAT = Number(process.env.LIVE_EVAL_REPEAT ?? 0);
 
 type Case = { id: string; rule: string; input: string; pending?: boolean; home?: string; search?: { query: string; places: Array<{ name: string; address: string }> }; state?: { topic: string; sender: string; action: string; results: number }; context?: Array<{ role: "user" | "assistant"; content: string }>; expect: RouterExpect };
-const cases = readFileSync(resolve(process.cwd(), "evals/router.jsonl"), "utf8").trim().split("\n").map((line) => JSON.parse(line) as Case);
+const casePrefix = process.env.LIVE_EVAL_CASE_PREFIX;
+const cases = readFileSync(resolve(process.cwd(), "evals/router.jsonl"), "utf8").trim().split("\n").map((line) => JSON.parse(line) as Case).filter(item => !casePrefix || item.id.startsWith(casePrefix));
 const idOf = (item: Case) => item.id;
 const hashOf = (item: Case) => caseHash(item);
 const pending = mode === "off" ? [] : pendingCases(cases, loadLedger("router"), ROUTER_VERSION, idOf, hashOf);

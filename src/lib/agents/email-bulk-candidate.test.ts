@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { cleanBodyText, stripHtml } from "@/lib/tools/email/google-gmail";
-import { bulkImportQuery, deterministicOrderExtraction, orderPlacedOn, resolveBulkCandidate, senderDisplayName } from "./email-finance-import";
+import { bulkImportQuery, deduplicateSpendingOrders, deterministicOrderExtraction, orderPlacedOn, resolveBulkCandidate, senderDisplayName } from "./email-finance-import";
 import { applyMerchantLearnings, guessCategory, toKnownCategory } from "@/lib/learning/preferences";
 import { NO_LEARNINGS } from "@/lib/learning/learnings";
 import { buildEvidence, extractInvoiceFacts } from "./email-invoice";
@@ -8,7 +8,7 @@ import { buildEvidence, extractInvoiceFacts } from "./email-invoice";
 const email = { subject: "Order Confirmed #946406863", from: "iHerb <noreply@info.iherb.com>", date: "Mon, 3 Aug 2026 10:15:00 -0700", snippet: "Order #946406863", text: "" };
 /** The amount a model reads must be one the email shows as money, so fixtures that use a model amount include it in the text. */
 const withAmount = (base: typeof email, amount: string) => ({ ...base, text: `Order Total: ${amount}` });
-const none = { isTransaction: false, amountMinor: null, currency: null, direction: null, merchant: null, category: null, occurredOn: null, note: null, missingFields: [] } as never;
+const none = { isTransaction: false, amountMinor: null, currency: null, direction: null, merchant: null, category: null, occurredOn: null, note: null, missingFields: [] } as import("@/lib/model/claude").ExtractedTransaction;
 
 describe("bulk import candidates (R8.6, R8.7)", () => {
   it("keeps a complete model extraction as is", () => {
@@ -16,11 +16,11 @@ describe("bulk import candidates (R8.6, R8.7)", () => {
     expect(result).toMatchObject({ candidate: { amountMinor: 2606, occurredOn: "2026-08-03" }, usedEmailDate: false });
   });
   it("falls back to a labeled body total, the sender name, and the email date", () => {
-    const result = resolveBulkCandidate(none, { ...email, text: "Order Total: $26.06" });
+    const result = resolveBulkCandidate({ ...none, isTransaction: true }, { ...email, text: "Order Total: $26.06" });
     expect(result).toMatchObject({ candidate: { amountMinor: 2606, merchant: "iHerb", occurredOn: "2026-08-03" }, usedEmailDate: true });
   });
   it("never guesses an absent amount", () => {
-    expect(resolveBulkCandidate(none, email)).toMatchObject({ reason: expect.stringContaining("no total found") });
+    expect(resolveBulkCandidate({ ...none, isTransaction: true }, email)).toMatchObject({ reason: expect.stringContaining("no total found") });
   });
   it("rejects a non-purchase email even with an amount", () => {
     expect(resolveBulkCandidate(none, { ...email, subject: "Weekly favorites", text: "Total: $5.00" })).toEqual({ reason: "not a purchase record" });
@@ -146,14 +146,55 @@ describe("category guess from the merchant (R14.4)", () => {
 });
 
 describe("the Gmail search for a bulk import (free)", () => {
-  it("keeps the sender and window when they are named, with no subject keywords", () => {
-    expect(bulkImportQuery("iHerb", 30)).toBe('{from:"iHerb" "iHerb"} -in:sent -in:chats -in:drafts -in:spam ({subject:confirmed subject:confirmation subject:receipt subject:ereceipt subject:invoice subject:ordered subject:order subject:payment subject:purchase subject:booking subject:reservation subject:paid subject:charged} OR category:purchases OR (-category:promotions -category:social -category:forums {order receipt payment paid total invoice booking reservation purchase charged confirmation confirmed subscription ticket trip ride renewal billed})) newer_than:30d');
+  it("keeps the sender and window when they are named, excluding UPI alerts", () => {
+    expect(bulkImportQuery("iHerb", 30)).toBe('{from:"iHerb" "iHerb"} -in:sent -in:chats -in:drafts -in:spam -in:trash -subject:UPI newer_than:30d');
   });
   it("sweeps every sender when none is named, searches wide, and leaves choosing purchases to the model", () => {
     const query = bulkImportQuery(null, 7);
     expect(query).not.toContain("from:");
-    expect(query).toContain("category:purchases");
-    expect(query).toContain("-category:promotions");
+    expect(query).not.toContain("category:");
+    expect(query).toContain("-subject:UPI");
     expect(query.endsWith("newer_than:7d")).toBe(true);
   });
+});
+
+
+describe("spending correctness across senders", () => {
+  it("does not merge matching order numbers belonging to different merchants", () => {
+    const a = { ...email, subject: "Order confirmation #123456" };
+    const b = { ...a, from: "Unknown Shop <orders@unknown.example>" };
+    expect(deduplicateSpendingOrders([a, b])).toHaveLength(2);
+    expect(deduplicateSpendingOrders([{ ...a, subject: "Order #123456 delivered" }, a])[0].subject).toContain("confirmation");
+  });
+  it("uses evidence for a credit-card repayment from an unfamiliar issuer and keeps the payment date", () => {
+    const payment = { ...email, from: "Local Credit Union", subject: "Payment confirmation", text: "Payment to your credit card: $42.00. Payment date: 2026-08-01" };
+    expect(resolveBulkCandidate({ ...none, isTransaction: true, amountMinor: 4200, occurredOn: "2026-08-01" }, payment)).toMatchObject({ candidate: { direction: "transfer", occurredOn: "2026-08-01" } });
+    expect(deterministicOrderExtraction(payment)).toBeNull();
+  });
+  it("does not override a rejected extraction just because the subject says receipt", () => {
+    expect(resolveBulkCandidate(none, { ...email, subject: "Your payment receipt", text: "Your scheduled payment is $42.00" })).toEqual({ reason: "not a purchase record" });
+  });
+  it("sends non-USD receipts to extraction rather than assuming dollars are USD", () => {
+    expect(deterministicOrderExtraction({ ...email, text: "Order Total: CA$26.06 CAD" })).toBeNull();
+  });
+  it("accepts a total present only in an attached receipt, but not an ungrounded body total", () => {
+    const extracted = { ...none, isTransaction: true, amountMinor: 4200, merchant: "Local Shop", occurredOn: "2026-08-03" };
+    expect(resolveBulkCandidate(extracted, email, true)).toMatchObject({ candidate: { amountMinor: 4200 } });
+    expect(resolveBulkCandidate(extracted, email)).toHaveProperty("reason");
+  });
+});
+
+describe("utility payments are spending", () => {
+  it.each([
+    ["Xfinity <online.communications@alerts.comcast.net>", "Thanks for your payment", "Payment received: $44.88"],
+    ["Local Provider <billing@new-provider.example>", "Payment received", "Your internet service payment of $44.88 was received. Paid with credit card."],
+  ])("corrects a transfer extraction using service evidence from %s", (from, subject, text) => {
+    const result = resolveBulkCandidate({ ...none, isTransaction: true, amountMinor: 4488, currency: "USD", direction: "transfer", merchant: "Utility", occurredOn: "2026-08-26" }, { ...email, from, subject, text });
+    expect(result).toMatchObject({ candidate: { direction: "expense", category: "utilities", amountMinor: 4488 } });
+  });
+});
+
+it("keeps a card repayment a transfer despite utility advertising", () => {
+  const result = resolveBulkCandidate({ ...none, isTransaction: true, amountMinor: 24121, currency: "USD", direction: "expense", merchant: "Discover", occurredOn: "2026-09-20" }, { ...email, from: "Discover <payments@discover.com>", subject: "We've received your payment", text: "Your payment to your credit card of $241.21 was received. Tip: pay your internet bill automatically." });
+  expect(result).toMatchObject({ candidate: { direction: "transfer", note: "Credit card payment" } });
 });

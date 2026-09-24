@@ -11,10 +11,24 @@ export type Bill = {
   dueDate: string | null;
   status: "outstanding" | "paid";
   paidOn: string | null;
+  paymentDirection?: "expense" | "transfer";
+  accountLastFour?: string | null;
 };
 
+/** Card statements carry forward a balance; an older statement is not another debt on the same account. */
+export function currentOutstandingBills(bills: Bill[]) {
+  const latest = new Map<string, Bill>();
+  const key = (bill: Bill) => bill.paymentDirection === "transfer" && bill.accountLastFour
+    ? `${bill.merchant.toLowerCase().trim()}:${bill.currency}:${bill.accountLastFour}` : null;
+  for (const bill of bills) {
+    const account = key(bill);
+    if (account && (!latest.has(account) || latest.get(account)!.statementDate < bill.statementDate)) latest.set(account, bill);
+  }
+  return bills.filter((bill) => bill.status === "outstanding" && (!key(bill) || latest.get(key(bill)!) === bill));
+}
+
 // R17.1: by subject. Payment words win, because "payment received for your bill" is a payment.
-const PAYMENT_SUBJECT = /\b(?:payment (?:received|confirmation|successful|receipt|was (?:made|processed))|(?:we['’]ve|we have) received your payment|thank you for your payment|autopay (?:payment )?(?:processed|received|successful)|payment (?:made|processed)|payment (?:has )?(?:posted|cleared)|your (?:credit card |card |bill )?payment (?:of \$?[\d,.]+ )?(?:was|has been) (?:received|posted|processed|successful)|thank you for (?:making )?your (?:credit card |card )?payment|received your (?:credit card |card )?payment|your (?:[\w&.'’-]+ ){1,3}payment (?:of \$?[\d,.]+ )?(?:was|has been|is) (?:received|posted|processed|successful|confirmed)|payment (?:is |has been )?(?:confirmed|received))\b/i;
+const PAYMENT_SUBJECT = /\b(?:payment (?:received|confirmation|successful|receipt|was (?:made|processed))|(?:we['’]ve|we have) received your payment|thank(?:s| you) for your payment|autopay (?:payment )?(?:processed|received|successful)|payment (?:made|processed)|payment (?:has )?(?:posted|cleared)|your (?:credit card |card |bill )?payment (?:of \$?[\d,.]+ )?(?:was|has been) (?:received|posted|processed|successful)|thank you for (?:making )?your (?:credit card |card )?payment|received your (?:credit card |card )?payment|your (?:[\w&.'’-]+ ){1,3}payment (?:of \$?[\d,.]+ )?(?:was|has been|is) (?:received|posted|processed|successful|confirmed)|payment (?:is |has been )?(?:confirmed|received))\b/i;
 const BILL_SUBJECT = /\b(?:(?:statement|bill)\s+(?:is\s+)?(?:now\s+)?(?:ready|available|here)|(?:your|new|latest|monthly)(?:\s+\w+){0,2}\s+(?:statement|bill)\b|amount due|payment due|energy statement)/i;
 
 export function classifyDocument(subject: string): DocumentKind {
@@ -69,11 +83,13 @@ export function sameMerchant(left: string, right: string) {
 }
 
 /** R17.4: the outstanding bill a payment settles, or null. */
-export function matchPayment(bills: Bill[], payment: { merchant: string; amountMinor: number; date: string }) {
-  const tolerance = (bill: Bill) => Math.max(100, Math.round(bill.amountMinor * 0.01));
-  return bills
-    .filter((bill) => bill.status === "outstanding" && sameMerchant(bill.merchant, payment.merchant) && bill.statementDate <= payment.date && Math.abs(bill.amountMinor - payment.amountMinor) <= tolerance(bill))
-    .sort((left, right) => Math.abs(left.amountMinor - payment.amountMinor) - Math.abs(right.amountMinor - payment.amountMinor) || right.statementDate.localeCompare(left.statementDate))[0] ?? null;
+export function matchPayment(bills: Bill[], payment: { merchant: string; amountMinor: number; currency?: string; accountLastFour?: string | null; date: string }) {
+  if (!payment.currency) return null;
+  const matches = bills.filter(bill => bill.status === "outstanding" && sameMerchant(bill.merchant, payment.merchant)
+    && bill.currency === payment.currency && bill.statementDate <= payment.date && bill.amountMinor === payment.amountMinor
+    && (bill.accountLastFour ?? null) === (payment.accountLastFour ?? null));
+  // Ambiguous or partial payments remain standalone transactions, never guessed settlements.
+  return matches.length === 1 ? matches[0] : null;
 }
 
 /** R17.6: outstanding bills of an autopay merchant whose due date has arrived. */
@@ -92,7 +108,7 @@ export type BillsCommand =
   | { type: "autopay"; merchant: string };
 
 const EMAILISH = /\b(?:find|search|email|emails|inbox|gmail|received|receipt|receipts)\b/i;
-const LIST = /\bwhat do i owe\b|\bhow much do i owe\b|\b(?:my|any)\s+(?:unpaid |outstanding |pending |open |upcoming )?bills?\b|\bbills?\s+(?:are\s+|do i have\s+)?(?:outstanding|due|unpaid|pending|left)\b|\b(?:what|which)\s+bills\b|\b(?:outstanding|unpaid|pending|upcoming)\s+bills?\b|\bwhat(?:'s| is| are)\s+(?:the\s+)?(?:bills?|due)\b/i;
+const LIST = /\b(?:all (?:my )?dues|my dues|outstanding dues|pending dues|payment dues|what(?: is|’s|\'s)? due)\b|\bwhat do i owe\b|\bhow much do i owe\b|\b(?:my|any)\s+(?:unpaid |outstanding |pending |open |upcoming )?bills?\b|\bbills?\s+(?:are\s+|do i have\s+)?(?:outstanding|due|unpaid|pending|left)\b|\b(?:what|which)\s+bills\b|\b(?:outstanding|unpaid|pending|upcoming)\s+bills?\b|\bwhat(?:'s| is| are)\s+(?:the\s+)?(?:bills?|due)\b/i;
 const PAID = new RegExp(String.raw`\bi(?:'ve| have)?\s+(?:just |already )?paid\s+(?:the |my |our )?(.{2,40}?)\s+bill\b(?:.*?\bon\s+${DATE})?|\bmark\s+(?:the |my )?(.{2,40}?)\s+bill\s+(?:as\s+)?paid\b(?:.*?\bon\s+${DATE})?|\b(?:the |my )?(.{2,40}?)\s+bill\s+(?:is|was)\s+paid\b(?:.*?\bon\s+${DATE})?`, "i");
 const AUTOPAY = /^(?:please\s+)?(?:the |my )?(.{2,40}?)\s+(?:bill\s+)?(?:is|are)\s+on\s+(?:auto[- ]?pay|automatic payments?)\b|^(?:i(?:'ve| have)?\s+)?(?:set up|turned on|have)\s+auto[- ]?pay\s+(?:for|on)\s+(?:the |my )?(.{2,40}?)[.!]*$/i;
 

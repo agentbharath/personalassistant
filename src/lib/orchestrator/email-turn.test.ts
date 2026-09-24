@@ -140,3 +140,28 @@ describe("when the model cannot read the message (R20.5)", () => {
     expect(await handleEmailConversationTurn("what's on my calendar", "u1", "c1", [])).toBeNull();
   });
 });
+
+it("passes structured scope to search without asking again after yes", async () => {
+  mocks.interpretation = interpreted({ topic: "general", sender: null, days: 30, searchTerms: ["maintenance", "work order"], excludedTerms: ["renewal"] });
+  const turn = await handleEmailConversationTurn("yes", "u1", "c1", [{ role: "assistant", content: "Shall I search your email for the maintenance update?" }]);
+  expect(turn?.answer).toBe("ANSWER");
+  expect(mocks.answerEmail.mock.calls[0][2].request).toMatchObject({ topic: "general", sender: null, searchTerms: ["maintenance", "work order"], excludedTerms: ["renewal"] });
+});
+it("imports the selected original email after a later search replaces the current list", async () => {
+ const { withRequestContext } = await import("@/lib/runtime/request-context");
+ const old = stateWith({});
+ old.results.push({...old.results[0], id: "old-second"});
+ mocks.state = {...old, results: [{...old.results[0], id: "new-first"}]};
+ mocks.interpretation = interpreted({}, {pick: {index: 1, action: "import", referenceId: "old-list"}});
+ await withRequestContext({userId: "u1", requestId: "r", recalledReferences: [{id: "old-list", kind: "email_results", createdAt: "2026-08-01", state: old}]}, () => handleEmailConversationTurn("import the second from the older list", "u1", "c1", []));
+ expect(mocks.importForMessage).toHaveBeenCalledWith("u1", "c1", "old-second");
+});
+it("explains when a saved reference outlives the original Gmail message", async () => {
+ const { GoogleGmailAccessError } = await import("@/lib/tools/email/gmail-transport");
+ mocks.state = stateWith({});
+ mocks.interpretation = interpreted({}, {pick: {index: 0, action: "import"}});
+ mocks.importForMessage.mockRejectedValue(new GoogleGmailAccessError("not_found", 404));
+ const result = await handleEmailConversationTurn("import that email", "u1", "c1", []);
+ expect(result?.answer).toContain("saved conversation");
+ expect(result?.answer).toContain("no longer available in Gmail");
+});

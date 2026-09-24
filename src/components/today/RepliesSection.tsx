@@ -1,12 +1,12 @@
-import { loadWaitingReplies } from "@/lib/replies/waiting";
+import { loadWaitingReplies, type WaitingResult } from "@/lib/replies/waiting";
 import { MailIcon } from "@/components/ui/icons";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { WaitingCard } from "./WaitingCard";
 import card from "./TodayView.module.css";
 
 /** Loads on its own behind a Suspense boundary, so judging mail never delays the rest of the page. */
-export async function RepliesSection({ userId }: { userId: string }) {
-  return <WaitingCard result={await loadWaitingReplies(userId)} />;
+export async function RepliesSection({ userId, result }: { userId: string; result?: Promise<WaitingResult> }) {
+  return <WaitingCard result={await (result ?? loadWaitingReplies(userId))} />;
 }
 
 /** Shown while mail is checked: the real card's header, a plain sentence saying what is happening, and placeholder rows. */

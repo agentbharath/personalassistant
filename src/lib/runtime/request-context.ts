@@ -1,6 +1,11 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 
 export type RequestContext = {
+  /** The chat client can advance saved scans without another user turn. */
+  automaticScan?: boolean;
+  contextPersistenceFailed?: boolean;
+  recalledReferences?: import("@/lib/conversations/references").ConversationReference[];
+  scanProgress?: { conversationId?: string; checked: number; found: number; retryAt: number; canContinue: boolean; label: string; checkpoint: string };
   requestId: string;
   userId: string;
   conversationId?: string;
