@@ -56,6 +56,36 @@ export async function loadRecentSearchStates(userId: string): Promise<SearchStat
   } catch { return []; }
 }
 
+/** A query the router built follows "<Cuisine> restaurants in/near <place>": pull just the cuisine out for a clean group heading. Anything
+ * else (a follow-up like "best orange chicken ...", or "more food restaurants...") keeps its own full query as the heading instead of
+ * guessing at a label, so a group is never named something that was never actually searched. */
+function groupLabel(query: string): string {
+  const match = query.match(/^([A-Za-z][A-Za-z\s]{1,24}?)\s+restaurants?\b\s*(?:in|near)\b/i);
+  return match ? match[1].trim() : query;
+}
+
+/**
+ * "List everything you've suggested": rendered directly from the saved records, so a long list can never be scanned incompletely or have a
+ * place added to it that was never actually found (R29). Places are grouped by the search that found them, oldest group first, and a place
+ * repeated across searches is listed once, under its most recent search's group.
+ */
+export function renderSearchHistory(states: SearchState[]): string {
+  if (!states.length) return "You don't have any saved place searches from the last 30 days.";
+  const seen = new Set<string>();
+  const groups = new Map<string, string[]>();
+  for (const state of states) {
+    const label = groupLabel(state.query);
+    for (const place of state.places) {
+      const key = place.name.trim().toLowerCase();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      groups.set(label, [...(groups.get(label) ?? []), place.name.trim()]);
+    }
+  }
+  const sections = [...groups.entries()].reverse().map(([label, names]) => `**${label}**\n${names.map((name) => `- ${name}`).join("\n")}`);
+  return `Here's everything from your saved searches (last 30 days):\n\n${sections.join("\n\n")}`;
+}
+
 export function searchRecallContext(states: SearchState[]) {
   if (!states.length) return "";
   const records = states.map(state => ({

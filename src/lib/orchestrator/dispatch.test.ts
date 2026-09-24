@@ -5,7 +5,7 @@ import type { RouterDecision } from "./router";
 
 const mocks = vi.hoisted(() => ({
   answerCalendar: vi.fn(), prepareCalendarCreate: vi.fn(), answerFinance: vi.fn(), answerPublicSearch: vi.fn(), runBillsCommand: vi.fn(), answerStatusLookup: vi.fn(),
-  answerGeneral: vi.fn(), draftHistory: vi.fn(), answerCasual: vi.fn(), prepareCalendarAttendeeUpdate: vi.fn(), prepareCalendarDelete: vi.fn(), handleEmailConversationTurn: vi.fn(), answerScheduleFeasibility: vi.fn(), answerDailyView: vi.fn(), saveSearchState: vi.fn(), prepareEmailDraft: vi.fn(), resolveEmailDraft: vi.fn(), ownerIdentity: vi.fn(), loadEmailState: vi.fn(),
+  answerGeneral: vi.fn(), draftHistory: vi.fn(), answerCasual: vi.fn(), prepareCalendarAttendeeUpdate: vi.fn(), prepareCalendarDelete: vi.fn(), handleEmailConversationTurn: vi.fn(), answerScheduleFeasibility: vi.fn(), answerDailyView: vi.fn(), saveSearchState: vi.fn(), loadRecentSearchStates: vi.fn(), renderSearchHistory: vi.fn(), prepareEmailDraft: vi.fn(), resolveEmailDraft: vi.fn(), ownerIdentity: vi.fn(), loadEmailState: vi.fn(),
   runLearningCommand: vi.fn(), executeReadOnlyAgentPlan: vi.fn(), saveLearning: vi.fn(),
   resolveDelete: vi.fn(), resolveAttendees: vi.fn(), resolveCreate: vi.fn(), resolveFinance: vi.fn(),
 }));
@@ -53,7 +53,7 @@ beforeEach(() => {
   for (const resolver of [mocks.resolveDelete, mocks.resolveAttendees, mocks.resolveCreate, mocks.resolveFinance]) resolver.mockResolvedValue(null);
 });
 
-vi.mock("@/lib/conversations/search-state", () => ({ saveSearchState: (...args: unknown[]) => mocks.saveSearchState(...args) }));
+vi.mock("@/lib/conversations/search-state", () => ({ saveSearchState: (...args: unknown[]) => mocks.saveSearchState(...args), loadRecentSearchStates: (...args: unknown[]) => mocks.loadRecentSearchStates(...args), renderSearchHistory: (...args: unknown[]) => mocks.renderSearchHistory(...args) }));
 
 describe("an answer is always text (free)", () => {
   it("replaces anything that is not text with a plain message, instead of showing [object Object]", async () => {
@@ -80,6 +80,23 @@ describe("a web search uses the search the router wrote (free)", () => {
     expect(mocks.answerPublicSearch).not.toHaveBeenCalled();
     expect(result?.answer).toMatch(/what place should i search/i);
     expect(result?.status).toBe("waiting_for_user");
+  });
+});
+
+describe("listing every saved search is rendered in code, never left for a model to enumerate (R29)", () => {
+  it("skips the model entirely and renders the saved records directly", async () => {
+    mocks.loadRecentSearchStates.mockResolvedValue([{ query: "Chinese restaurants in Sunnyvale, CA", places: [{ name: "Ginger Cafe" }], updatedAt: 1 }]);
+    mocks.renderSearchHistory.mockReturnValue("**Chinese**\n- Ginger Cafe");
+    const result = await dispatchDecision(decision({ operation: "general_answer", listSavedSearches: true } as never), ctx);
+    expect(mocks.answerGeneral).not.toHaveBeenCalled();
+    expect(mocks.loadRecentSearchStates).toHaveBeenCalledWith("u1");
+    expect(result?.answer).toBe("**Chinese**\n- Ginger Cafe");
+  });
+  it("still uses the model for a narrower recall question about the same saved records", async () => {
+    mocks.answerGeneral.mockResolvedValue("They're on Wolfe Road.");
+    const result = await dispatchDecision(decision({ operation: "general_answer" }), ctx);
+    expect(mocks.renderSearchHistory).not.toHaveBeenCalled();
+    expect(result?.answer).toBe("They're on Wolfe Road.");
   });
 });
 

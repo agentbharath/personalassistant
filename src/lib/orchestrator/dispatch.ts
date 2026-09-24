@@ -17,7 +17,7 @@ import { prepareCalendarAttendeeUpdate, prepareCalendarDelete, resolvePendingCal
 import { resolvePendingFinanceImport } from "@/lib/workflows/finance-import";
 import { handleEmailConversationTurn } from "./email-turn";
 import { answerScheduleFeasibility } from "./feasibility";
-import { saveSearchState } from "@/lib/conversations/search-state";
+import { loadRecentSearchStates, renderSearchHistory, saveSearchState } from "@/lib/conversations/search-state";
 import { answerDailyView } from "@/lib/today/answer";
 import { runLearningCommand } from "./learning-turn";
 import { composeMultiAgentAnswer, executeReadOnlyAgentPlan, planClauseInstructions } from "./multi-agent";
@@ -101,9 +101,12 @@ export async function dispatchDecision(decision: RouterDecision, ctx: DispatchCo
       return done(await answerDraftHistory(userId), ["email"]);
     case "dismiss":
       return done("Okay, we’ll leave it there.", []);
-    case "general_answer":
+    case "general_answer": {
+      // R29: "list everything you've suggested" is rendered from the saved records directly, never left to a model to scan and reproduce.
+      if (decision.listSavedSearches) return done(renderSearchHistory(await loadRecentSearchStates(userId)), []);
       prepareAgentStage(["orchestrator"], "balanced");
       return done(await answerGeneral(input, context), []);
+    }
     case "email_import_continue":
       return done(await continueEmailFinanceImport(userId, conversationId), ["email", "finance"], "waiting_for_user");
     case "email": {

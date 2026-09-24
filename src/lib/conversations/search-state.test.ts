@@ -31,7 +31,7 @@ vi.mock("@/lib/supabase/admin", () => ({
     },
   }),
 }));
-import { loadRecentSearchStates, loadSearchState, saveSearchState, searchRecallContext } from "./search-state";
+import { loadRecentSearchStates, loadSearchState, renderSearchHistory, saveSearchState, searchRecallContext } from "./search-state";
 beforeEach(() => { db.rows = []; db.conversations = ["c", "c2"]; });
 
 it("recalls yesterday's restaurants across conversations without exposing another user's records", async () => {
@@ -73,4 +73,23 @@ it("a second search in the same conversation never pushes the first out of cross
 it("saves nothing for an empty result, so a failed search cannot look like a real, empty suggestion", async () => {
   await saveSearchState("u", "c", { query: "Nonexistent cuisine", places: [] });
   expect(await loadSearchState("u", "c")).toBeNull();
+});
+
+it("renders a saved-search list deterministically, grouped by search, newest occurrence winning a repeated place, oldest group first", () => {
+  const states = [
+    { query: "Thai restaurants in Sunnyvale, CA", updatedAt: 3, places: [{ name: "Thai Spoons", address: "", note: "" }] },
+    { query: "best orange chicken Ginger Cafe P.F. Chang's Sunnyvale CA", updatedAt: 2, places: [{ name: "P.F. Chang's", address: "", note: "" }, { name: "Ginger Cafe", address: "", note: "" }] },
+    { query: "Chinese restaurants in Sunnyvale, CA", updatedAt: 1, places: [{ name: "Ginger Cafe", address: "", note: "" }, { name: "P.F. Chang's", address: "", note: "" }, { name: "Hunan House", address: "", note: "" }] },
+  ]; // newest first, as loadRecentSearchStates returns them
+  const text = renderSearchHistory(states as never);
+  expect(text).toBe(
+    "Here's everything from your saved searches (last 30 days):\n\n" +
+    "**Chinese**\n- Hunan House\n\n" +
+    "**best orange chicken Ginger Cafe P.F. Chang's Sunnyvale CA**\n- P.F. Chang's\n- Ginger Cafe\n\n" +
+    "**Thai**\n- Thai Spoons"
+  );
+});
+
+it("says plainly when there is nothing saved, rather than an empty list", () => {
+  expect(renderSearchHistory([])).toBe("You don't have any saved place searches from the last 30 days.");
 });

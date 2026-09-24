@@ -8,7 +8,7 @@ import { reportFailure } from "@/lib/observability/report";
 
 /** R19.7, R19.9: bump on any change to the prompt or schema, then pass `npm run eval:live`. */
 // v7: email drafts, redirect instead of refusing (R23), ask when in doubt with tap-to-answer choices (R22), codes and links left alone (R24).
-export const ROUTER_VERSION = "router-v25";
+export const ROUTER_VERSION = "router-v26";
 /** R22: when in doubt, ask. Below this the router's one question is asked and nothing runs. */
 export const ROUTER_CONFIDENCE_THRESHOLD = 0.8;
 
@@ -68,6 +68,9 @@ export type RouterDecision = {
   redirect?: RedirectPlan | null;
   /** The web search to run, with typos fixed and the person's place in it when they meant "near me". */
   searchQuery?: string | null;
+  /** general_answer only: the request wants every saved search result listed out ("list all the restaurants you've suggested"), not a
+   * discussion of some of them. Code renders this directly from the saved records, so a long list can never be scanned incompletely. */
+  listSavedSearches?: boolean;
   reading: string;
   source: "model" | "cache";
 };
@@ -97,6 +100,7 @@ const outputSchema = z.object({
     pivot: z.enum(["none", ...PIVOT_CAPABILITIES]), ask: z.string(),
   }).nullish(),
   searchQuery: z.string().nullish(),
+  listSavedSearches: z.boolean().nullish(),
   reading: z.string(),
 });
 type ModelOutput = z.infer<typeof outputSchema>;
@@ -106,7 +110,7 @@ const nullableNumber = { anyOf: [{ type: "number" }, { type: "null" }] };
 export const ROUTER_JSON_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["historyQuery", "resolvedInput", "operation", "agents", "sender", "matter", "merchant", "paidOn", "term", "lesson", "confidence", "clarification", "choices", "draft", "redirect", "searchQuery", "reading"],
+  required: ["historyQuery", "resolvedInput", "operation", "agents", "sender", "matter", "merchant", "paidOn", "term", "lesson", "confidence", "clarification", "choices", "draft", "redirect", "searchQuery", "listSavedSearches", "reading"],
   properties: {
     historyQuery: { type: "string" },
     resolvedInput: { type: "string" },
@@ -131,6 +135,7 @@ export const ROUTER_JSON_SCHEMA = {
     clarification: nullableString,
     choices: { type: "array", items: { type: "string" } },
     searchQuery: { type: "string" },
+    listSavedSearches: { type: "boolean" },
     draft: {
       type: "object",
       additionalProperties: false,
@@ -161,7 +166,7 @@ const NO_DRAFT = { action: "none", kind: "none", to: "", replyTo: "", instructio
 const NO_REDIRECT = { category: "none", reply: "", distress: false, pivot: "none", ask: "" } as const;
 const draftOf = (over: Partial<NonNullable<ModelOutput["draft"]>>): NonNullable<ModelOutput["draft"]> => ({ ...NO_DRAFT, ...over });
 const redirectOf = (over: Partial<NonNullable<ModelOutput["redirect"]>>): NonNullable<ModelOutput["redirect"]> => ({ ...NO_REDIRECT, ...over });
-const blank: Omit<ModelOutput, "operation" | "confidence" | "reading"> = { historyQuery: "", resolvedInput: "", agents: [], sender: null, matter: null, merchant: null, paidOn: null, term: null, lesson: null, clarification: null, choices: [], draft: NO_DRAFT, redirect: NO_REDIRECT, searchQuery: "" };
+const blank: Omit<ModelOutput, "operation" | "confidence" | "reading"> = { historyQuery: "", resolvedInput: "", agents: [], sender: null, matter: null, merchant: null, paidOn: null, term: null, lesson: null, clarification: null, choices: [], draft: NO_DRAFT, redirect: NO_REDIRECT, searchQuery: "", listSavedSearches: false };
 const lesson = (kind: (typeof LESSON_KINDS)[number], over: Partial<NonNullable<ModelOutput["lesson"]>> = {}): NonNullable<ModelOutput["lesson"]> => ({ kind, topic: null, days: null, minutes: null, merchant: null, category: null, alias: null, canonical: null, ...over });
 const EXAMPLES: Array<[string, ModelOutput]> = [
   ['"all iherb recipts"', { ...blank, operation: "email", confidence: 0.97, reading: "Show iHerb receipts" }],
@@ -208,6 +213,9 @@ const EXAMPLES: Array<[string, ModelOutput]> = [
   ['"yes do it" (the assistant just said: Say "yes, forget everything" to confirm)', { ...blank, operation: "learning_forget", term: "everything", confidence: 0.95, reading: "Confirm forgetting everything" }],
   ['"amzn means Amazon"', { ...blank, operation: "learning_teach", lesson: lesson("merchant_alias", { alias: "amzn", canonical: "Amazon" }), confidence: 0.9, reading: "Record amzn as Amazon" }],
   ['"I meant Adobe" (savedEmailSearch.sender is adobee)', { ...blank, operation: "learning_teach", lesson: lesson("sender_alias", { alias: "adobee", canonical: "Adobe" }), confidence: 0.93, reading: "adobee means Adobe" }],
+  ['"list all the restaurants you\'ve suggested, just their names and cuisine type", with dated saved search records in summary', { ...blank, operation: "general_answer", listSavedSearches: true, confidence: 0.97, reading: "Enumerate every saved place; code renders the list" }],
+  ['"what have you found me so far"', { ...blank, operation: "general_answer", listSavedSearches: true, confidence: 0.9, reading: "Every saved place, in full" }],
+  ['"what do you remember about the Chinese ones", with the same saved search records', { ...blank, operation: "general_answer", listSavedSearches: false, confidence: 0.95, reading: "Discuss only the Chinese places from the saved records" }],
   ['"How can I start saving money?"', { ...blank, operation: "general_answer", confidence: 0.99, reading: "Give requested practical financial guidance; no transaction or refusal" }],
   ['"Should I pay off my card or build savings?"', { ...blank, operation: "general_answer", confidence: 0.95, reading: "Explain the tradeoffs using provided facts and identify only essential missing details" }],
   ['"What are the current IRA contribution limits?"', { ...blank, operation: "web_search", searchQuery: "site:irs.gov current year IRA contribution limits", confidence: 0.99, reading: "Verify current limits using official sources" }],
@@ -249,7 +257,7 @@ Operations:
 - dismiss: decline an offer or drop a conversational topic ("nah leave it", "never mind", "forget it") when not cancelling a pending approval. Acknowledge briefly and stop that topic, without tools or another question. This is not learning_forget and not deny.
 - historyQuery: when a request refers to older conversation details that recent context/summary cannot reliably supply, provide topic/entity keywords to retrieve this chat's original messages BEFORE answering or asking the user to repeat them. Applies to every domain: personal details discussed here, decisions, corrections, plans, calendar events, code, drafts, restaurant lists, finances and unfinished tasks. "What did we decide about the trip?" -> "trip travel decision". "The second email from last month’s list" -> its sender/topic and date. If an ordinal has no topic, use the nearest relevant topic from context. Never assert no prior discussion without checking history. If Retrieved history is already present, use it rather than requesting another retrieval. Empty string when current context suffices.
 - resolvedInput: a self-contained version of a follow-up for execution, using only details supported by current context/retrieved history. Preserve the current user's action and corrections, resolve pronouns to supported names/dates, never add authorization or actions. Empty string when the original message is already self-contained. Historical plans or expired approvals are evidence, not permission to execute writes. A historical search is not current availability; recheck when current facts are requested.
-- general_answer: recall of prior conversations and recommendations ("do you remember the Chinese restaurants you found yesterday", "tell me what you remember about them"). Use the dated saved search records in summary. A recall request is not a request to search again. Resolve them/they from the current conversation even if historical records are missing; never ask whether the user means restaurants after they already said Chinese restaurants. Current facts such as hours still require web_search. Also translations (including Telugu), language questions, resume preparation, safe programming help, explanations, and supportive conversation or practical everyday suggestions. Answer requests for routines to reduce loneliness with concrete, manageable steps rather than a refusal or another generic question. Financial guidance requested by the user is supported: budgeting, saving, debt payoff, credit, earning ideas, investment education, and comparisons based on facts already provided. Use general_answer for stable principles and plans using supplied facts; do not redirect solely because the topic is financial. Do not add advice to a request that only lists spending, imports receipts, or checks dues. Use web_search for advice requiring current rates, products, prices, tax rules, contribution limits or eligibility, with a public query stripped of personal amounts, account numbers and private financial history. Financial advice does not authorize a transaction, trade, payment, or a change to saved records. Never pretend an email statement is a live balance or invent personal financial facts. Missing essential details can require one focused clarification, not a boilerplate refusal. A request for code itself ("what is the JS code for sudoku solving", "write a Python function") is general_answer; do not divert it into web_search. Public searches explicitly requested or accepted are web_search, even if the topic is code or resumes.
+- general_answer: recall of prior conversations and recommendations ("do you remember the Chinese restaurants you found yesterday", "tell me what you remember about them"). Use the dated saved search records in summary. A recall request is not a request to search again. Set listSavedSearches true only when the request wants every saved place enumerated ("list all the restaurants you've suggested", "what places have you found me", "show everything you've searched"), so code can render the full list without the model having to scan and reproduce it; false for a narrower or discursive recall question ("what do you remember about the Chinese ones", "did you suggest anywhere with parking") even though it still uses the same saved records. Resolve them/they from the current conversation even if historical records are missing; never ask whether the user means restaurants after they already said Chinese restaurants. Current facts such as hours still require web_search. Also translations (including Telugu), language questions, resume preparation, safe programming help, explanations, and supportive conversation or practical everyday suggestions. Answer requests for routines to reduce loneliness with concrete, manageable steps rather than a refusal or another generic question. Financial guidance requested by the user is supported: budgeting, saving, debt payoff, credit, earning ideas, investment education, and comparisons based on facts already provided. Use general_answer for stable principles and plans using supplied facts; do not redirect solely because the topic is financial. Do not add advice to a request that only lists spending, imports receipts, or checks dues. Use web_search for advice requiring current rates, products, prices, tax rules, contribution limits or eligibility, with a public query stripped of personal amounts, account numbers and private financial history. Financial advice does not authorize a transaction, trade, payment, or a change to saved records. Never pretend an email statement is a live balance or invent personal financial facts. Missing essential details can require one focused clarification, not a boilerplate refusal. A request for code itself ("what is the JS code for sudoku solving", "write a Python function") is general_answer; do not divert it into web_search. Public searches explicitly requested or accepted are web_search, even if the topic is code or resumes.
 - email_import_continue: continue or resume an unfinished email import scan, including "continue" after a paused scan. Continue never approves transactions. Use this even when a financial import approval is pending; an explicit request to continue scanning is not approval.
 - email: anything about the user's email: searching, listing, receipts, invoices, promotions, recruiters, amounts on receipts, importing receipts, or a follow-up to a saved email search (a new sender, a window like "last 90 days", "only unread", "the second one", "import them", "I meant the amount receipts"). Importing spending from the mailbox is email, not a spending question: an import verb (import, pull in, bring in, get, load, add, record) with spendings, expenses, purchases, payments or receipts ("import all my spendings in the last 30 days", "pull in my purchases from last week", "get my card payments", "add my recent expenses from my email") searches the person's email for purchase and payment records. Choose email even when the word "email" is not used ("find unpaid bills", "all iherb receipts"). When savedEmailSearch is not null, a fragment is email only if it actually refers to that search; the latest conversational question takes precedence.
 - status_lookup: the status, progress or latest news of a matter with a named company ("status of my chase dispute", "any update on my amazon refund"). Give sender (the company) and matter (dispute, claim, refund, return, case, ticket, complaint, application, request, chargeback).
@@ -377,6 +385,7 @@ export function canonicalizeDecision(raw: ModelOutput): Omit<RouterDecision, "so
       return { ...base, operation: "redirect", redirect: { category: plan && plan.category !== "none" ? plan.category : "unrelated", reply, pivot, distress } };
     }
     case "web_search": return { ...base, operation: "web_search", searchQuery: trim(raw.searchQuery ?? null, 300) };
+    case "general_answer": return { ...base, operation: "general_answer", listSavedSearches: Boolean(raw.listSavedSearches) };
     default: return { ...base, operation: raw.operation };
   }
 }

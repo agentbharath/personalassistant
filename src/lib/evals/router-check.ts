@@ -15,6 +15,8 @@ export type RouterExpect = {
   /** The web search the router wrote: it must include (or leave out) some text, compared without case. */
   searchQueryIncludes?: string;
   searchQueryExcludes?: string;
+  /** general_answer only: whether the request wants every saved search result enumerated (R29). */
+  listSavedSearches?: boolean;
 };
 
 const lower = (value: unknown) => (typeof value === "string" ? value.toLowerCase() : value);
@@ -48,6 +50,7 @@ export function checkDecision(decision: RouterDecision | null, want: RouterExpec
 
   if (want.searchQueryIncludes && !(decision.searchQuery ?? "").toLowerCase().includes(want.searchQueryIncludes.toLowerCase())) problems.push(`searchQuery: wanted it to include ${want.searchQueryIncludes}, got ${JSON.stringify(decision.searchQuery ?? "")}`);
   if (want.searchQueryExcludes && (decision.searchQuery ?? "").toLowerCase().includes(want.searchQueryExcludes.toLowerCase())) problems.push(`searchQuery: should not include ${want.searchQueryExcludes}, got ${JSON.stringify(decision.searchQuery)}`);
+  if (want.listSavedSearches !== undefined && Boolean(decision.listSavedSearches) !== want.listSavedSearches) problems.push(`listSavedSearches: wanted ${want.listSavedSearches}, got ${Boolean(decision.listSavedSearches)}`);
 
   // Every redirect, whatever else is expected of it (R23): a real message, not a bare refusal.
   if (decision.operation === "redirect") {
