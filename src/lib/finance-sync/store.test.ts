@@ -38,14 +38,18 @@ it("claims with a version guard and does not steal an unexpired lease", async ()
  expect(db.filters).toContainEqual(["finance_sync_state", "eq", "version", 2]);
  expect(db.writes[0].value.lease_id).toBeTruthy();
 });
-it("starts the initial full-history scan and freezes its query boundaries", async () => {
+it("a brand-new account's first sync covers the last 90 days, not its entire Gmail history", async () => {
  db.queues.finance_sync_state = [{data: null}, {data: state}];
  await queueSync("u", undefined, false, Date.parse("2026-09-22T10:00:00Z"));
  const write = db.writes[0].value;
- expect(write.scan_from).toBe("1970-01-01T00:00:00.000Z");
+ expect(write.scan_from).toBe("2026-06-24T10:00:00.000Z");
  expect(write.scan_through).toBe("2026-09-22T10:00:00.000Z");
- expect(String(write.cursor_ciphertext)).not.toContain("after:");
- expect(String(write.cursor_ciphertext)).not.toContain("newer_than");
+ expect(String(write.cursor_ciphertext)).toContain("after:");
+});
+it("an explicit backfill request still bounds itself to 90 days back", async () => {
+ db.queues.finance_sync_state = [{data: null}, {data: state}];
+ await queueSync("u", undefined, true, Date.parse("2026-09-22T10:00:00Z"));
+ expect(db.writes[0].value.scan_from).toBe("2026-06-24T10:00:00.000Z");
 });
 it("never replaces an unfinished scan with a requested backfill", async () => {
  db.queues.finance_sync_state = [{data: state}]; expect(await queueSync("u", undefined, true)).toEqual(state); expect(db.writes).toEqual([]);

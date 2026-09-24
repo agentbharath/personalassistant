@@ -18,7 +18,9 @@ export async function queueSync(userId: string, conversationId?: string, backfil
  const old = await loadSync(userId);
  if (old && old.status !== "idle") return old;
  const until = new Date(Math.floor(now / 1000) * 1000).toISOString();
- const since = backfill === "all" || !old?.synced_through && !backfill ? 0 : backfill ? Math.min(now - 90 * 86400000, old?.synced_through ? Date.parse(old.synced_through) - 86400000 : now) : old?.synced_through ? Date.parse(old.synced_through) - 86400000 : now - 7 * 86400000;
+ // A brand-new sync with no explicit backfill request used to fall through to 0 (the Unix epoch: a person's entire Gmail history) by
+ // accident. Only "all" means every message ever; a first-time sync with no flag gets the same 90-day window "backfill" gives.
+ const since = backfill === "all" ? 0 : backfill ? Math.min(now - 90 * 86400000, old?.synced_through ? Date.parse(old.synced_through) - 86400000 : now) : old?.synced_through ? Date.parse(old.synced_through) - 86400000 : now - 90 * 86400000;
  // A one-day overlap catches late-arriving mail. The source ledger makes overlap idempotent.
  const from = new Date(Math.floor(since / 1000) * 1000).toISOString();
  const query = `${since > 0 ? `after:${Math.floor(since / 1000) - 1} ` : ""}before:${Math.floor(now / 1000)} -in:spam -in:trash`;
