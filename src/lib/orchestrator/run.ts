@@ -48,7 +48,12 @@ export async function runOrchestrator(input: string, userId: string, context: Co
       : { requestId, answer: NOTHING_PENDING, agents: [], confidence: 1, status: "completed" };
   }
 
-  const recalled = searchRecallContext(await loadRecentSearchStates(userId));
+  // Cross-conversation search recall matters most early in a conversation ("what did you find me yesterday"). Once a conversation has
+  // built up its own real context (a multi-turn trip being planned, say), a pile of unrelated saved restaurant searches only competes with
+  // it for the model's attention and can dilute a plain "the trip we're already discussing" reference. R29's own "list everything" answer
+  // does not depend on this block being present: it re-reads the saved records directly, so nothing is lost by skipping this when it
+  // would only be noise.
+  const recalled = context.length <= 4 ? searchRecallContext(await loadRecentSearchStates(userId)) : "";
   if (recalled) context = [{ role: "assistant", content: `Earlier conversation summary:\n${context.filter(turn => turn.content.startsWith("Earlier conversation summary")).map(turn => turn.content).join("\n")}\n${recalled}` }, ...context.filter(turn => !turn.content.startsWith("Earlier conversation summary"))];
 
   // R19, R20.5: one model call decides what the message means, including safety, approvals, dates and lessons, and the agents do the work

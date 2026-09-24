@@ -108,6 +108,22 @@ it("passes dated cross-conversation search recall to both routing and answering"
   expect(mocks.dispatch.mock.calls[0][1].context.at(-1)).toEqual(context[0]);
 });
 
+it("skips cross-conversation search recall once a conversation has built up its own real context, so it can't dilute an unrelated multi-turn task", async () => {
+  mocks.recalled.mockResolvedValue([{ query: "Chinese restaurants Sunnyvale", updatedAt: Date.now() - 86400000, places: [{ name: "Ginger Cafe", address: "Sunnyvale", note: "Previously shown" }] }]);
+  mocks.route.mockResolvedValue(decision({ operation: "web_search", searchQuery: "shopping in Colorado" }));
+  mocks.dispatch.mockResolvedValue({ answer: "shopping ideas", agents: [], status: "completed" });
+  const context = [
+    { role: "user" as const, content: "plan a trip to Colorado for Thanksgiving" },
+    { role: "assistant" as const, content: "Here are some Thanksgiving activities in Colorado..." },
+    { role: "user" as const, content: "what kind of shopping should I do for my november trip" },
+    { role: "assistant" as const, content: "Shopping for the trip itself, or activities while there?" },
+    { role: "user" as const, content: "for the trip" },
+  ];
+  await runOrchestrator("for the trip", "u1", context, "c1");
+  expect(JSON.stringify(mocks.route.mock.calls[0][0].context)).not.toContain("Ginger Cafe");
+  expect(JSON.stringify(mocks.route.mock.calls[0][0].context)).not.toContain("Earlier conversation summary");
+});
+
 it.each(["calendar meeting", "resume draft", "personal preferences", "restaurant list"])("retrieves older %s before answering or dispatching a resolved follow-up", async topic => {
  mocks.route.mockResolvedValueOnce(decision({operation: "clarify", historyQuery: topic})).mockResolvedValueOnce(decision({operation: "general_answer", resolvedInput: `Explain the earlier ${topic}`}));
  mocks.history.mockResolvedValue({text: `Original details about ${topic}`, references: []});
