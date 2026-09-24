@@ -80,14 +80,14 @@ describe("a web search uses the search the router wrote (free)", () => {
   });
   it("passes the router's query, so the saved home place is in it", async () => {
     await dispatchDecision(decision({ operation: "web_search", searchQuery: "Indian restaurants in Sunnyvale, CA" } as never), ctx);
-    expect(mocks.answerPublicSearch).toHaveBeenCalledWith("Indian restaurants in Sunnyvale, CA", expect.any(Function), "");
+    expect(mocks.answerPublicSearch).toHaveBeenCalledWith("Indian restaurants in Sunnyvale, CA", expect.any(Function), "", expect.any(String));
   });
   it("runs two genuinely separate subjects as two searches and joins both real answers, instead of shortchanging one (R29)", async () => {
     mocks.answerPublicSearch.mockResolvedValueOnce("Protein bars: go with RXBAR.").mockResolvedValueOnce("Collagen: go with marine collagen.");
     const result = await dispatchDecision(decision({ operation: "web_search", searchQuery: "best protein bars", searchQueries: ["best protein bars", "best collagen supplements"] } as never), ctx);
     expect(mocks.answerPublicSearch).toHaveBeenCalledTimes(2);
-    expect(mocks.answerPublicSearch).toHaveBeenNthCalledWith(1, "best protein bars", expect.any(Function), "");
-    expect(mocks.answerPublicSearch).toHaveBeenNthCalledWith(2, "best collagen supplements", undefined, "");
+    expect(mocks.answerPublicSearch).toHaveBeenNthCalledWith(1, "best protein bars", expect.any(Function), "", expect.any(String));
+    expect(mocks.answerPublicSearch).toHaveBeenNthCalledWith(2, "best collagen supplements", undefined, "", expect.any(String));
     expect(result?.answer).toContain("Protein bars: go with RXBAR.");
     expect(result?.answer).toContain("Collagen: go with marine collagen.");
   });

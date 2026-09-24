@@ -33,7 +33,7 @@ export async function withPublicQueryCache(query: string, load: () => Promise<st
     recordCache(false);
     return load();
   }
-  const key = `public-search:v7:${createHash("sha256").update(`${normalizePublicQuery(query)}||${extra}`).digest("hex")}`;
+  const key = `public-search:v8:${createHash("sha256").update(`${normalizePublicQuery(query)}||${extra}`).digest("hex")}`; // v8: synthesis now reasons about today's date, invalidating pre-fix answers
   try {
     const cached = await getRedis()?.get<unknown>(key);
     if (cached) {

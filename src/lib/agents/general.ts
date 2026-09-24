@@ -10,20 +10,21 @@ export type RememberSearch = (state: { query: string; places: SearchPlaces }) =>
 type Loaded = { text: string; places: SearchPlaces };
 
 /** R31: memoryContext personalizes a recommendation-style search ("suggest a collagen supplement") with the person's own stated facts. It
- * also folds into the cache key, so a personalized answer is never served back for a different (or since-changed) fact set. */
-export async function answerPublicSearch(query: string, remember?: RememberSearch, memoryContext = "") {
+ * also folds into the cache key, so a personalized answer is never served back for a different (or since-changed) fact set. `today` lets
+ * synthesis tell a stale, differently-dated source ("Nov 27, 2025") apart from a confirmed date for the year actually being asked about. */
+export async function answerPublicSearch(query: string, remember?: RememberSearch, memoryContext = "", today?: string) {
   // The saved value is the finished answer and the places in it, so a cached answer can still be followed up.
-  const raw = await withPublicQueryCache(query, async () => JSON.stringify(await loadAnswer(query, memoryContext)), memoryContext);
+  const raw = await withPublicQueryCache(query, async () => JSON.stringify(await loadAnswer(query, memoryContext, today)), memoryContext);
   const { text, places } = parseLoaded(raw);
   if (places.length && remember) await remember({ query, places }).catch(() => undefined);
   return text;
 }
 
-async function loadAnswer(query: string, memoryContext: string): Promise<Loaded> {
+async function loadAnswer(query: string, memoryContext: string, today?: string): Promise<Loaded> {
   const research = await searchPublicWeb(query);
   // The same numbered evidence goes to the model and to the reader, so a [3] in the answer is source 3 in the list below it.
   const evidence = research.sources.slice(0, 5);
-  const structured = evidence.length ? await synthesizeSearchResults(query, evidence, memoryContext) : null;
+  const structured = evidence.length ? await synthesizeSearchResults(query, evidence, memoryContext, today) : null;
   const answer = structured ? renderSearchAnswer(structured, query, evidence.length) : cleanModelText(research.answer ?? "");
   const text = [answer, sourceList(answer, evidence)].filter(Boolean).join("\n\n") || "I couldn’t find reliable current results for that query.";
   const places = structured?.kind === "places" ? structured.items.slice(0, 5).map((item) => ({ name: plain(item.name, 80), address: plain(item.address, 120), note: plain(item.note, 140) })).filter((place) => place.name) : [];

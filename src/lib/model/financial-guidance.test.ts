@@ -25,6 +25,15 @@ it("applies the same boundaries to web synthesis and includes retrieved evidence
   expect(complete.mock.calls[0][1].system).toContain(FINANCIAL_GUIDANCE);
   expect(complete.mock.calls[0][1].messages[0].content).toContain("Official retirement-plan rules");
 });
+it("tells synthesis today's date and warns against presenting a differently-dated source as current, only when a date is given",async()=>{
+  complete.mockResolvedValue({content:[{type:"text",text:JSON.stringify({kind:"answer",intro:"",items:[],answer:"x",caveat:""})}]});
+  await synthesizeSearchResults("Thanksgiving in Colorado",[{title:"x",url:"https://x",snippet:"x"}],"","2026-09-24");
+  expect(complete.mock.calls[0][1].system).toContain("Today is 2026-09-24");
+  expect(complete.mock.calls[0][1].system).toContain("last cycle's information");
+  complete.mockClear();
+  await synthesizeSearchResults("Thanksgiving in Colorado",[{title:"x",url:"https://x",snippet:"x"}]);
+  expect(complete.mock.calls[0][1].system).not.toContain("Today is");
+});
 it("requires requested advice, preserves uncertainty, and never authorizes money movement",()=>{
   expect(DAYLARK_PERSONA).toContain("only when the user asks");
   expect(FINANCIAL_GUIDANCE).toContain("Do not use a blanket");

@@ -79,6 +79,12 @@ describe("a web search answer (free)", () => {
     expect(cacheState.extras).toEqual(["Hard fact: doesn't eat meat except fish and chicken"]);
   });
 
+  it("passes today's date to synthesis, so a differently-dated source can't be presented as current", async () => {
+    mocks.synthesize.mockResolvedValue({ kind: "answer", intro: "", items: [], answer: "x", caveat: "" });
+    await answerPublicSearch("Thanksgiving activities in Colorado", undefined, "", "2026-09-24");
+    expect(mocks.synthesize.mock.calls[0][3]).toBe("2026-09-24");
+  });
+
   it("reads a saved answer whether the cache gave back text, an object or an old plain string, and still remembers its places", async () => {
     const saved = { text: "Saved answer [1]", places: [{ name: "Ginger Cafe", address: "", note: "" }] };
     const remember = vi.fn().mockResolvedValue(undefined);

@@ -30,14 +30,14 @@ describe("the general clause of a multi-part request (R19.5)", () => {
       "plan a trip to colorado this upcoming thanksgiving weekend", "u1", [],
       "Thanksgiving activities in Colorado",
     );
-    expect(mocks.answerPublicSearch).toHaveBeenCalledWith("Thanksgiving activities in Colorado", undefined, "");
+    expect(mocks.answerPublicSearch).toHaveBeenCalledWith("Thanksgiving activities in Colorado", undefined, "", undefined);
   });
   it("falls back to the raw clause when the router gave no query (never fails the search entirely)", async () => {
     await executeReadOnlyAgentPlan([{ agent: "general", instruction: "best hiking trails" }], "input", "u1", [], null);
-    expect(mocks.answerPublicSearch).toHaveBeenCalledWith("best hiking trails", undefined, "");
+    expect(mocks.answerPublicSearch).toHaveBeenCalledWith("best hiking trails", undefined, "", undefined);
   });
   it("passes memory context through to the general clause too", async () => {
     await executeReadOnlyAgentPlan([{ agent: "general", instruction: "x" }], "x", "u1", [], "a query", "diet fact");
-    expect(mocks.answerPublicSearch).toHaveBeenCalledWith("a query", undefined, "diet fact");
+    expect(mocks.answerPublicSearch).toHaveBeenCalledWith("a query", undefined, "diet fact", undefined);
   });
 });

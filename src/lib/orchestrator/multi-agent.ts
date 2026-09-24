@@ -12,11 +12,11 @@ export type AgentOutcome = { agent: AgentName; ok: boolean; answer?: string };
 
 /** Executes only read-only generic tasks. Mutations remain in their approval-gated workflows. `searchQuery` is the router's own, properly
  * written search for the general clause (R19.5: the raw regex-split clause is never as good a query as one a model actually wrote for it). */
-export async function executeReadOnlyAgentPlan(tasks: AgentTask[], input: string, userId: string, context: ContextMessage[], searchQuery?: string | null, memoryContext = "") {
+export async function executeReadOnlyAgentPlan(tasks: AgentTask[], input: string, userId: string, context: ContextMessage[], searchQuery?: string | null, memoryContext = "", today?: string) {
   const unique = [...new Map(tasks.map((task) => [task.agent, task])).values()];
   const executions = unique.map((task) => {
     prepareAgentStage([task.agent], task.agent === "general" ? "balanced" : "fast");
-    return executeTask(task, input, userId, context, searchQuery, memoryContext);
+    return executeTask(task, input, userId, context, searchQuery, memoryContext, today);
   });
   const settled = await Promise.allSettled(executions);
   return settled.map<AgentOutcome>((result, index) => result.status === "fulfilled"
@@ -24,14 +24,14 @@ export async function executeReadOnlyAgentPlan(tasks: AgentTask[], input: string
     : { agent: unique[index].agent, ok: false });
 }
 
-async function executeTask(task: AgentTask, input: string, userId: string, context: ContextMessage[], searchQuery?: string | null, memoryContext = "") {
+async function executeTask(task: AgentTask, input: string, userId: string, context: ContextMessage[], searchQuery?: string | null, memoryContext = "", today?: string) {
   const instruction = task.instruction.trim() || input;
   if (task.agent === "calendar") return answerCalendar(instruction, userId);
   if (task.agent === "email") return answerEmail(instruction, userId);
   if (task.agent === "finance") {
     return answerFinance(instruction, userId, "read", context);
   }
-  return answerPublicSearch(searchQuery?.trim() || instruction, undefined, memoryContext);
+  return answerPublicSearch(searchQuery?.trim() || instruction, undefined, memoryContext, today);
 }
 
 export function composeMultiAgentAnswer(outcomes: AgentOutcome[]) {

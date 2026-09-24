@@ -1,3 +1,4 @@
+import { Temporal } from "@js-temporal/polyfill";
 import { financeFreshness } from "@/lib/finance-sync/review";
 import { answerDraftHistory } from "@/lib/agents/draft-history";
 import { continueEmailFinanceImport } from "@/lib/agents/email-finance-import";
@@ -93,6 +94,7 @@ const NEEDS_CONVERSATION = "I need a saved conversation before I can prepare tha
 export async function dispatchDecision(decision: RouterDecision, ctx: DispatchContext): Promise<OrchestratorResult | null> {
   const { requestId, input, userId, context, conversationId } = ctx;
   const done = (answer: string, agents: string[], status: OrchestratorResult["status"] = "completed", choices?: string[] | null): OrchestratorResult => ({ requestId, answer: asText(answer, decision.operation), agents, confidence: decision.confidence, status, ...(choices?.length ? { choices } : {}) });
+  const today = Temporal.Now.zonedDateTimeISO(process.env.DEFAULT_USER_TIMEZONE ?? "America/Los_Angeles").toPlainDate().toString();
 
   // R19.6: unsure means ask, and nothing runs.
   if (decision.operation === "clarify" || (decision.clarification && decision.confidence < ROUTER_CONFIDENCE_THRESHOLD)) {
@@ -214,16 +216,16 @@ export async function dispatchDecision(decision: RouterDecision, ctx: DispatchCo
       // Two or three genuinely separate subjects each get their own search and their own real answer, instead of one being shortchanged
       // by a single blended query ("protein bars and collagen" is two answers, not a compromise between them).
       if (decision.searchQueries && decision.searchQueries.length >= 2) {
-        const answers = await Promise.all(decision.searchQueries.map((query, index) => answerPublicSearch(query, index === 0 ? remember : undefined, searchMemory)));
+        const answers = await Promise.all(decision.searchQueries.map((query, index) => answerPublicSearch(query, index === 0 ? remember : undefined, searchMemory, today)));
         return done(answers.join("\n\n---\n\n"), ["general"]);
       }
       // Remember what was shown, so "the second one" or "which is open now?" can be read next turn.
-      return done(await answerPublicSearch(decision.searchQuery, remember, searchMemory), ["general"]);
+      return done(await answerPublicSearch(decision.searchQuery, remember, searchMemory, today), ["general"]);
     }
     case "multi": {
       const plan = planClauseInstructions(input, decision.agents);
       const multiMemory = decision.agents.includes("general") ? buildMemoryContext(await listMemories(userId).catch(() => [])) : "";
-      const outcomes = await executeReadOnlyAgentPlan(plan.tasks, input, userId, context, decision.searchQuery, multiMemory);
+      const outcomes = await executeReadOnlyAgentPlan(plan.tasks, input, userId, context, decision.searchQuery, multiMemory, today);
       const completed = outcomes.filter((outcome) => outcome.ok).length;
       return done([composeMultiAgentAnswer(outcomes), ...plan.notes.map((note) => `> ${note}`)].join("\n\n"), decision.agents, completed === outcomes.length ? "completed" : "partially_completed");
     }
