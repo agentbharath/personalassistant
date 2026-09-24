@@ -42,18 +42,39 @@ export async function saveSearchState(userId: string, conversationId: string, st
   }
 }
 
-/** Historical recall is user-scoped and bounded; it never represents current hours or availability. */
+function decodeSearchState(ciphertext: string): SearchState | null {
+  try {
+    const state = JSON.parse(decryptText(ciphertext)) as SearchState;
+    return state.places?.length && Number.isFinite(state.updatedAt) && Date.now() - state.updatedAt <= SEARCH_STATE_TTL_MS ? state : null;
+  } catch { return null; }
+}
+
+/**
+ * Historical recall is user-scoped and bounded; it never represents current hours or availability. `conversations.search_state_ciphertext`
+ * holds only the LATEST search per conversation, so a second search in the same conversation overwrites the first one there. Every search
+ * is also archived to `conversation_references` when it happens, so a full "what have you suggested" recall reads both: a conversation's
+ * current search (for conversations saved before references existed) and every archived one (so an earlier search isn't lost to a later
+ * one in the same conversation, as with Vietnamese being overwritten by Thai in one chat).
+ */
 export async function loadRecentSearchStates(userId: string): Promise<SearchState[]> {
   try {
-    const { data, error } = await createAdminClient().from("conversations").select("search_state_ciphertext")
-      .eq("user_id", userId).not("search_state_ciphertext", "is", null).order("updated_at", { ascending: false }).limit(30);
-    if (error) return [];
-    return (data ?? []).flatMap(row => {
-      try {
-        const state = JSON.parse(decryptText(row.search_state_ciphertext)) as SearchState;
-        return state.places?.length && Number.isFinite(state.updatedAt) && Date.now() - state.updatedAt <= SEARCH_STATE_TTL_MS ? [state] : [];
-      } catch { return []; }
-    }).sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 10);
+    const admin = createAdminClient();
+    const [current, archived] = await Promise.all([
+      admin.from("conversations").select("search_state_ciphertext").eq("user_id", userId).not("search_state_ciphertext", "is", null).order("updated_at", { ascending: false }).limit(30),
+      admin.from("conversation_references").select("payload_ciphertext").eq("user_id", userId).eq("kind", "place_results").order("created_at", { ascending: false }).limit(60),
+    ]);
+    const seen = new Set<string>();
+    const states: SearchState[] = [];
+    for (const row of [...(current.data ?? []), ...(archived.data ?? [])]) {
+      const ciphertext = (row as { search_state_ciphertext?: string; payload_ciphertext?: string }).search_state_ciphertext ?? (row as { payload_ciphertext?: string }).payload_ciphertext;
+      const state = ciphertext ? decodeSearchState(ciphertext) : null;
+      if (!state) continue;
+      const key = state.referenceId ?? `${state.query}|${state.updatedAt}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      states.push(state);
+    }
+    return states.sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 20);
   } catch { return []; }
 }
 
