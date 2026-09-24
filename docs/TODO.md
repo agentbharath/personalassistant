@@ -23,7 +23,6 @@ Read `docs/use-cases/README.md` first. It holds 436 use cases, the schema propos
 - [ ] Conversation state for calendar, finance, bills and search (today only email has it).
 
 ## Needs you
-- [ ] Restart the dev server so it picks up `MODEL_DAILY_TOKEN_BUDGET=500000` and the legal-page environment values.
 - [ ] Add Anthropic credits. Until then every model call fails and the app falls back to rules.
 - [ ] Real-data pass in your own signed-in session (I could only test with mock data): streaming progress and Stop, pin (limit 5) and rename, the "Bad answer" note box, long chats, a failed send, delete then Undo, the new sign-in redirect (`/history` while signed out, then sign in).
 - [ ] Try "Delete my account" on a throwaway test account before trusting it. It was only tested against a fake database.

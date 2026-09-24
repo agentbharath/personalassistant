@@ -17,6 +17,7 @@ beforeEach(() => {
 afterEach(() => {
   delete process.env.MODEL_MAX_TOKENS_PER_CALL;
   delete process.env.QUERY_MAX_COST_USD;
+  delete process.env.MODEL_DAILY_TOKEN_BUDGET;
 });
 
 describe("model runtime budget", () => {
@@ -55,6 +56,14 @@ describe("model calls made outside a chat request (free)", () => {
     mocks.rpc.mockResolvedValueOnce({ data: false, error: null });
     await expect(callClaude("reply_needed", params, { userId: "user-1" })).rejects.toBeInstanceOf(ModelBudgetExceededError);
     expect(mocks.create).not.toHaveBeenCalled();
+  });
+
+  it("MODEL_DAILY_TOKEN_BUDGET=0 means no daily cap: the reservation call is skipped, but usage is still recorded", async () => {
+    process.env.MODEL_DAILY_TOKEN_BUDGET = "0";
+    mocks.create.mockResolvedValue({ usage: { input_tokens: 50_000_000, output_tokens: 0 }, content: [] });
+    await callClaude("reply_needed", params, { userId: "user-1" });
+    expect(mocks.rpc).not.toHaveBeenCalledWith("reserve_model_tokens", expect.anything());
+    expect(mocks.rpc).toHaveBeenCalledWith("record_model_usage", expect.objectContaining({ p_user_id: "user-1" }));
   });
 
   it("are not saved when nobody is named (a script or a test)", async () => {

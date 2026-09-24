@@ -74,6 +74,9 @@ export async function callClaude(operation: string, params: Anthropic.MessageCre
 
 async function reservePersistentBudget(tokens: number, actor: Actor | undefined) {
   if (!actor) return;
+  // MODEL_DAILY_TOKEN_BUDGET=0 means no daily cap: usage is still recorded below (so spend stays visible), it is just never gated. Any
+  // other value, or none set, keeps the safety cap (100,000 tokens/day if unset).
+  if (process.env.MODEL_DAILY_TOKEN_BUDGET === "0") return;
   const dailyLimit = positiveInteger(process.env.MODEL_DAILY_TOKEN_BUDGET, 100_000);
   const admin = createAdminClient();
   const { data, error } = await admin.rpc("reserve_model_tokens", { p_user_id: actor.userId, p_tokens: tokens, p_daily_limit: dailyLimit });

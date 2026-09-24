@@ -2,7 +2,7 @@
 
 Daylark is **not connected to any bank or card account.** It knows only what the person typed, imported from an email or receipt, or approved. Everyday bank language ("what hit my card", "my balance", "the Chase thing") is therefore the biggest source of wrong answers: people assume Daylark can see their bank. The correct behaviour is to say what it can and cannot see, and to offer the nearest useful thing (usually bank **emails**). Prefix `FN`.
 
-Rules that apply throughout: a **bill is not spending until it is paid** (R17); shipped mail is not a receipt (R4); imports are capped at 5 (R13); saving anything needs approval; money is shown with the currency; totals state which records they cover.
+Rules that apply throughout: a **bill is not spending until it is paid** (R17); shipped mail is not a receipt (R4); bulk imports process candidates within the request budget and explicitly disclose incomplete scans; saving anything needs approval; money is shown with the currency; totals state which records they cover.
 
 ## A. Spending questions
 
@@ -40,8 +40,8 @@ Rules that apply throughout: a **bill is not spending until it is paid** (R17); 
 | FN-030 | import my latest iherb receipts | import (cap 5) | Preview up to 5 with dedupe; ask approval | ✅ |
 | FN-031 | (uploads a photo or PDF of a receipt) | receipt import | Extract merchant, amount, date; ask approval; do not store the file | ✅ |
 | FN-032 | (uploads a blurry or unreadable receipt) | extraction failed | Say what could not be read; ask the person to type the amount | ◐ |
-| FN-034 | import all my receipts from the last week / record everything I bought this week (no store named) | sweep import | Search purchase and payment emails from any sender in the window; newest 5 with dedupe; ask approval; offer the next batch | ✅ |
-| FN-033 | add all my amazon orders from last year | bulk over the cap | Explain the cap of 5; import the newest 5; offer the next batch | ✅ |
+| FN-034 | import all my receipts from the last week / record everything I bought this week (no store named) | sweep import | Scan email in the requested window across senders and Gmail categories; include purchases and completed payments; preview deduplicated records for approval; disclose unread or skipped records | ✅ |
+| FN-033 | add all my amazon orders from last year | bulk import | Process all selected candidates within the request budget; disclose remaining emails and offer continuation after approval | ✅ |
 
 ## C. Bills and payments
 
@@ -100,3 +100,46 @@ The person may say any of these. Daylark should answer honestly, then offer the 
 | FN-092 | why is starbucks under shopping | Explain the mapping; offer to change it | ◐ |
 | FN-093 | what categories do you have | The ten categories: restaurants, groceries, transport, shopping, utilities, entertainment, software, health, housing, other | ✅ |
 | FN-094 | make a new category for pets | Custom categories are not supported today | ✖ |
+
+### Spending import scan
+
+“Import all my spendings in the last 30 days” searches received Gmail messages in that rolling window without restricting sender, subject keywords, or Gmail categories. Archived mail is included; sent mail, drafts, chats, spam and trash are excluded. Summaries are read with bounded concurrency and cached per user, then classified in model batches. Only candidates need full message reads; clear USD order receipts use deterministic extraction. Supported attachments are read when the body cannot supply a usable record.
+
+Completed merchant payments, rent, utilities, subscriptions, and purchase alerts from banks or payment providers are eligible. Credit-card repayments are imported as transfers and excluded from spending totals. Incoming credits, unpaid statements and scheduled payments are excluded. Matching order numbers from different merchants are kept separate.
+
+The synchronous chat request has a 270-second budget (under a 300-second route ceiling) and scans at most 2,000 email summaries. It no longer stops after 15 extracted items. Metadata failures, search truncation, unread candidates and extraction skips are disclosed; a partial scan must never be described as complete. Large mailboxes can require a smaller date range or another request after confirming the preview. The scan gets up to 120 seconds for Gmail summaries and reads candidates until 240 seconds, reserving time to save a review. This is not a background import job. Model selection and extraction can still miss records; live spending-picker evaluations are opt-in.
+
+
+### All dues and reminders
+
+“Show all my dues” lists saved outstanding bills and scans the last 90 days of email (or the requested rolling window) for credit-card, utility and other payable statements across senders. Statement extraction reads the full amount due, issuer, statement date and payment due date, including supported attachments. It never substitutes a minimum payment or follows sign-in links. Missing amounts or dates are reported; payment status from an old statement is explicitly unverified. Existing recorded statements, including paid ones, are excluded from new previews.
+
+New statements are previewed for confirmation before saving as bills. Confirmed dues appear under **Perch → Reminders → All dues**, including overdue, due today, the next seven days, later dates, and unknown due dates. Totals include every group and stay separate by currency. The **Find statements in email** link opens a prefilled chat request; opening Perch itself does not run a mailbox scan. These are in-app reminders, not push or email notifications.
+
+Credit-card bills retain their payment direction in their encrypted evidence so paying a confirmed card statement is a transfer, not a new expense. Utility payments remain expenses. No database migration is required for this metadata.
+
+
+Email import corrections:
+- UPI transactions are excluded from searches, summary selection, and full-message imports (owner preference). This does not delete existing records.
+- Payment notices are scanned before general mail, so older credit-card payments, including Discover, are less likely to be hidden by an incomplete broad scan.
+- Remitly updates are reconciled by explicit transfer reference and labeled sender amount/currency. Recipient-side conversions are not separate transactions. Ambiguous references or sender amounts are skipped for review rather than guessed.
+- Generic transfers are labeled transfers; only identified card repayments use the card-payment label. Rerun an import to replace a preview created before these rules changed.
+
+Resumable email scans:
+- Primary and Updates are scanned first using Gmail's documented [category search operators](https://support.google.com/mail/answer/7190). Payment notices are checked first within those categories, then the remaining categories are checked.
+- Each scan freezes its original date window and stores page tokens, unfinished message IDs, selected candidates, and extracted results in the existing encrypted workflow checkpoint store. Progress can be resumed in the same conversation for 7 days; an approval preview still expires after 30 minutes and is refreshed on continuation.
+- While the chat stays open, saved batches advance automatically with one progress indicator. Gmail cooldowns are honored; three batches without progress or 30 automatic continuations pause safely. Intermediate batches do not create approval previews. Stop requests a server pause. The current batch saves its progress and releases its lease before Continue becomes available. During a Gmail cooldown, Stop ends the wait immediately. Message-specific extraction failures are attempted at most three times, then disclosed as skipped so later records can be reviewed. Bill settlement requires an exact amount, matching currency/account, and a unique outstanding bill; partial or ambiguous payments are recorded separately. Closing the tab stops automatic continuation; **Continue scan** resumes saved work when the user returns. The final review still requires confirmation.
+- **Continue scan** resumes saved work without importing transactions. **Import reviewed items** confirms the current preview separately. Previously confirmed records are deduplicated when a later preview is built.
+- Gmail cooldowns persist across requests. Pressing Continue early reports the remaining wait and makes no Gmail requests. A versioned lease prevents concurrent continuations, and abandoned requests become resumable after five minutes.
+- Work runs in bounded requests initiated by the user. There is no autonomous background worker or automatic continuation while the chat is closed. Reopening the conversation preserves the Continue action and saved progress.
+- Old previews created before this change have no scan checkpoint; start a new scan once to use continuation.
+
+### Requested financial guidance
+
+Daylark can answer requested budgeting, saving, debt, credit, earning and investment-education questions directly. This includes follow-ups to requested advice. Routine ledger, receipt and dues queries do not trigger unsolicited advice. The shared answer policy avoids boilerplate credential disclaimers while requiring explicit assumptions, material risks, and evidence for personal financial claims. Advice alone never authorizes a write or money movement.
+
+Stable explanations use the conversation's supplied facts; time-sensitive financial rules and product comparisons route to web research using public queries without personal financial details. This does not add bank connectivity or claim the saved ledger is a complete financial picture. These are routing and response instructions, tested offline with mocked models; model judgment is not guaranteed by those tests.
+
+### Transaction-list reads
+
+The finance dispatcher explicitly selects read or record mode; a read cannot fall through to transaction extraction. A structured query resolves inclusive date ranges, merchant/category filters and transaction-list versus spending-summary intent. Named months take precedence over a broad year qualifier; disjoint months retain separate ranges. All-transactions views include expenses, income/refunds and transfers with per-currency, per-direction totals. The ledger reader paginates beyond 1,000 records, and list rendering does not truncate to the five largest entries. Query interpretation failures preserve the read-only boundary.

@@ -6,6 +6,7 @@ Written for the owner. Names of settings only: never paste a secret into this fi
 
 - The code is on GitHub (`agentbharath/personalassistant`). Vercel deploys from there.
 - The database is the **same Supabase project** you use locally, so the migrations are already applied (0001 to 0021). Do not run migrations from Vercel. If you later add a migration, apply it from your machine (`supabase db push`) **before** deploying code that needs it.
+- Apply `0023_conversation_references.sql` before deploying durable conversation references. It adds encrypted result-list snapshots with user-scoped access and deletion cascading from the conversation. The migration is checked into the repository; do not assume it is already applied remotely.
 - Decide whether drafting should be on in production (see step 4).
 
 ## 2. Create the Vercel project
@@ -71,12 +72,18 @@ It opens full-screen, with the Daylark icon and name. There is **no offline mode
 
 ## 7. Limits to know about
 
-- **Request time:** the chat route has a 60-second ceiling (it stops a query itself at 20 seconds); receipt reading and the data export have 60; Perch has 30. Vercel's plan decides whether these are honoured, so check the function limits for your plan.
+- **Request time:** the chat route has a 300-second ceiling. Ordinary queries stop at 20 seconds; spending imports, statement scans and batch confirmations can extend to 270 seconds, with progress heartbeats every 10 seconds. Enable Vercel Fluid Compute to support the configured duration; receipt reading and the data export have 60; Perch has 30. Vercel's plan decides whether these are honoured, so check the function limits for your plan.
 - **Free plan:** Vercel's Hobby plan is for non-commercial use only.
 - **Without Redis** (if the Upstash values are missing) caching falls back to memory inside each serverless instance, so repeated questions are re-answered and cost more.
-- **Cost:** every model call is capped per request and per day (`MODEL_DAILY_TOKEN_BUDGET`). Set a monthly limit in the Anthropic console as well.
+- **Cost:** every model call is capped per request (`QUERY_MAX_COST_USD`). `MODEL_DAILY_TOKEN_BUDGET` adds a per-user daily cap on top of that; set it to `0` for no daily cap (spend is still logged, just never blocked), or a token count to enforce one. Set a monthly limit in the Anthropic console as well.
 - **Monitoring** (scheduled SLO checks, alerts, an uptime monitor on `/api/health`) is not set up yet. Add a Sentry alert rule and an uptime monitor before others use it.
 
 ## 8. Rolling back
 
 Vercel keeps every deployment. In the Deployments list, open the last good one and choose Promote to Production. Database migrations are not rolled back this way, so keep migrations additive.
+
+## Optional finance sync and WhatsApp digest
+
+See [Finance sync and WhatsApp setup](finance-sync-and-whatsapp.md) before enabling either feature. Apply migration **0024**, including its atomic transaction/source function, before deploying this version. The existing finance ledger is retained. Both features default off; no WhatsApp messages are sent until configured and enabled. On Vercel Hobby, the two daily digest schedules use Vercel Cron; frequent finance processing uses the separately enabled GitHub Actions workflow. The real-email evaluation set remains a private, manual labeling task; no live AI evaluations run automatically.
+
+Migration **0025** enables structured, encrypted answer choices and an atomic message/context insert function. Reads remain compatible before it is applied; if the function is missing, new choices are saved as encrypted text with the answer. Applying the migration enables restored choice buttons. Previously unsaved buttons cannot be recovered.

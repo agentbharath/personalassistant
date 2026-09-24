@@ -167,7 +167,7 @@ async function handle(request: Request, onProgress?: (agents: string[], scan?: R
         : costLimited
           ? `I reached this query’s $${(queryContext?.costLimitUsd ?? 0.10).toFixed(2)} processing limit and stopped safely. Try a narrower request.`
         : tokenLimited
-          ? "I’ve used today’s AI model budget, so anything that needs the model is paused until it resets. Bills, spending totals, receipts and imports that don’t need it still work. To raise the limit, set MODEL_DAILY_TOKEN_BUDGET in .env.local and restart. Nothing was changed."
+          ? "That request would need more from the AI model than a single call is allowed to use. Nothing was changed; try asking in a smaller step. (If a daily budget is set with MODEL_DAILY_TOKEN_BUDGET, that can also cause this until it resets.)"
         : "I couldn’t complete that request right now. Nothing unconfirmed was changed.",
       retryable: !costLimited && !tokenLimited,
       conversationId,
