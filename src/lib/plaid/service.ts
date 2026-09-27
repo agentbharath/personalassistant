@@ -55,9 +55,11 @@ export async function createBankLink(userId: string, connectionId?: string) {
   const result = await plaidRequest<{ link_token: string; expiration: string }>("/link/token/create", {
     user: { client_user_id: userId }, client_name: "Daylark", language: "en", country_codes: ["US"],
     // Plaid's documented ceiling for the Transactions product; actual history returned still depends on what the institution has.
-    // Liabilities (due dates/minimum payments) alongside Transactions. An existing connection made before this
-    // must go through Link again (update mode, not a fresh Item) to actually grant the new product.
-    ...(item ? { access_token: decryptText(item.access_token_ciphertext) } : { products: ["transactions"], required_if_supported_products: ["liabilities"], transactions: { days_requested: 730 } }),
+    // Liabilities (due dates/minimum payments) alongside Transactions. Update mode (an existing item) only
+    // re-authenticates products already granted unless a new one is explicitly requested via
+    // additional_consented_products -- required_if_supported_products only applies to a fresh Link/Item.
+    ...(item ? { access_token: decryptText(item.access_token_ciphertext), additional_consented_products: ["liabilities"] }
+      : { products: ["transactions"], required_if_supported_products: ["liabilities"], transactions: { days_requested: 730 } }),
     ...(redirectUri ? { redirect_uri: redirectUri } : {}),
   });
   const { data, error } = await admin.from("bank_link_sessions").insert({ user_id: userId, environment: config.environment,
