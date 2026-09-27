@@ -9,6 +9,10 @@ import { extractSyncCandidate } from "./extraction";
 import { loadSync, claimSync, decodeCursor, saveSync, knownCandidateRefs, stageCandidate, candidates, finishSync } from "./store";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { piiHmac } from "@/lib/security/pii-hmac";
+import { createBill } from "@/lib/tools/finance/bills";
+
+/** Purchases/refunds/transfers are Plaid's job now -- only a payable balance is ever extracted from email. */
+const isBillClass = (kind: MailClass) => kind === "bill_due" || kind === "statement";
 
 /** Sender history is advisory. A marketing domain can also send a real receipt, so it is never a blanket exclusion. */
 async function rememberSender(userId: string, from: string, positive: boolean) {
@@ -49,8 +53,20 @@ export async function advanceFinanceSync(userId: string, budgetMs = 45_000) {
      const kind: MailClass | undefined = cursor.classes[mail.id];
      if (!kind) break;
      try {
-       const item = isPositive(kind) ? await extractSyncCandidate(userId, mail.id, kind) : null;
-       await stageCandidate(state, mail.id, kind, item);
+       const item = isBillClass(kind) ? await extractSyncCandidate(userId, mail.id, kind) : null;
+       // A credit-card statement (direction "transfer", per resolveBillStatement) is redundant with Plaid
+       // Liabilities now -- only a utility/other payable balance imports from email, and it imports itself,
+       // the same as a bank due date: no chat approval for one bill any more than for one transaction.
+       if (item?.kind === "bill" && item.candidate.direction !== "transfer") {
+         await createBill(userId, {
+           merchant: item.candidate.merchant, amountMinor: item.candidate.amountMinor, currency: item.candidate.currency,
+           category: item.candidate.category, statementDate: item.candidate.occurredOn, dueDate: item.dueOn ?? null,
+           accountLastFour: item.accountLastFour ?? null,
+         }, { externalRef: item.source.externalRef, payload: item.source.payload });
+         await stageCandidate(state, mail.id, kind, item, "imported");
+       } else {
+         await stageCandidate(state, mail.id, kind, item);
+       }
        await rememberSender(userId, mail.from, isPositive(kind));
      } catch (error) {
        // Evidence failures need a visible manual decision. Provider/budget failures stay queued for retry.
