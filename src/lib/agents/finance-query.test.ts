@@ -52,6 +52,40 @@ it("shows the same canonical category in the transaction list as the breakdown a
  expect(answer).not.toContain("| Utilities |");
 });
 
+it("analysis mode compares the period to the equal-length period immediately before it", async () => {
+ mocks.model.mockResolvedValue({content:[{type:"text",text:JSON.stringify({...plan,mode:"analysis",ranges:[{from:"2026-09-01",to:"2026-09-30"}]})}]});
+ mocks.list.mockImplementation(async (_u:string,from:string)=>{
+  if(from==="2026-09-01") return [row("A","2026-09-05"),row("B","2026-09-20")];
+  if(from==="2026-08-02") return [row("C","2026-08-15")];
+  return [];
+ });
+ const answer=await answerFinanceQuery("analyze my spending behavior this month","u");
+ expect(mocks.list).toHaveBeenNthCalledWith(1,"u","2026-09-01","2026-09-30");
+ expect(mocks.list).toHaveBeenNthCalledWith(2,"u","2026-08-02","2026-08-31");
+ expect(answer).toContain("### Spending analysis");
+ expect(answer).toContain("$2.00");
+ expect(answer).toContain("▲ 100%");
+ expect(answer).toContain("$1.00");
+});
+it("analysis mode flags a same-amount, roughly-monthly merchant as a recurring charge, not a coincidence", async () => {
+ mocks.model.mockResolvedValue({content:[{type:"text",text:JSON.stringify({...plan,mode:"analysis",ranges:[{from:"2026-09-01",to:"2026-09-30"}]})}]});
+ mocks.list.mockImplementation(async (_u:string,from:string)=>{
+  if(from==="2026-09-01") return [{...row("Netflix","2026-09-10"),amountMinor:1599}];
+  if(from==="2026-08-02") return [{...row("Netflix","2026-08-11"),amountMinor:1599}];
+  return [];
+ });
+ const answer=await answerFinanceQuery("analyze my spending behavior","u");
+ expect(answer).toContain("**Recurring charges**");
+ expect(answer).toContain("Netflix: ~$15.99, monthly (2 charges seen)");
+});
+it("analysis mode skips the comparison for an all-time request instead of computing against 1970", async () => {
+ mocks.model.mockResolvedValue({content:[{type:"text",text:JSON.stringify({...plan,mode:"analysis",ranges:[{from:"1970-01-01",to:"2026-09-25"}]})}]});
+ mocks.list.mockResolvedValue([row("A","2026-09-05")]);
+ const answer=await answerFinanceQuery("analyze all my spending ever","u");
+ expect(mocks.list).toHaveBeenCalledTimes(1);
+ expect(answer).toContain("- **$1.00**");
+ expect(answer).not.toContain("vs");
+});
 it("its JSON schema never uses minItems/maxItems on an array (Anthropic's structured output rejects that keyword, which silently broke every finance question until this was caught live)", () => {
   const walk = (node: unknown): string[] => {
     if (!node || typeof node !== "object") return [];
