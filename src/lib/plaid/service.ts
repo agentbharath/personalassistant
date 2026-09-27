@@ -139,6 +139,37 @@ export async function collectBankSync(accessToken: string, cursor: string | unde
   throw new PlaidError("BANK_SYNC_RETRY");
 }
 
+/**
+ * Every posted, non-removed preview not yet in the ledger gets saved automatically -- no per-transaction click.
+ * A preview matching exactly one existing record (same amount/currency/direction, +/-3 days) is linked to it
+ * instead of creating a duplicate; zero or multiple candidates fall back to a new record, the same as a person
+ * manually choosing "Save new" rather than guess which of several near-matches was meant. Sandbox previews are
+ * never imported (import_bank_transaction itself enforces this). Best effort per row: one bad preview is left
+ * for manual review in the table rather than failing the rest of the batch.
+ */
+async function autoImportBank(userId: string, id: string, environment: PlaidEnvironment) {
+  if (environment !== "production") return 0;
+  const admin = createAdminClient();
+  const { data, error } = await admin.from("bank_transactions").select("id,content_hash,payload_ciphertext")
+    .eq("user_id", userId).eq("connection_id", id).is("ledger_id", null).eq("pending", false).eq("removed", false);
+  if (error || !data?.length) return 0;
+  let imported = 0;
+  await Promise.all(data.map(async row => {
+    const transaction = JSON.parse(decryptText(row.payload_ciphertext)) as PlaidTransaction;
+    const { candidate } = normalizeBankTransaction(transaction);
+    if (!candidate) return;
+    const occurred = Date.parse(`${candidate.occurredOn}T12:00:00Z`);
+    const near = await admin.from("finance_transactions").select("id")
+      .eq("user_id", userId).eq("amount_minor", candidate.amountMinor).eq("currency", candidate.currency).eq("direction", candidate.direction)
+      .eq("bank_voided", false).gte("occurred_on", new Date(occurred - 3 * 86400000).toISOString().slice(0, 10))
+      .lte("occurred_on", new Date(occurred + 3 * 86400000).toISOString().slice(0, 10)).limit(2);
+    if (near.error) return;
+    const matchId = near.data?.length === 1 ? near.data[0].id : undefined;
+    try { await importBankRecord(userId, row.id, row.content_hash, matchId); imported++; } catch { /* left for manual review */ }
+  }));
+  return imported;
+}
+
 export async function syncBank(userId: string, id: string) {
   const { item, lease } = await claim(userId, id);
   try {
@@ -147,7 +178,8 @@ export async function syncBank(userId: string, id: string) {
       p_rows: result.transactions.map(t => bankRecord(item.item_id, t)), p_removed: result.removed.map(ref => piiHmac(`${item.item_id}:${ref}`)),
       p_cursor: encryptText(result.cursor), p_accounts: encryptText(JSON.stringify(result.accounts)), p_status: result.status });
     databaseError(error);
-    return { changed: result.transactions.length, removed: result.removed.length, status: result.status };
+    const imported = await autoImportBank(userId, id, item.environment).catch(() => 0);
+    return { changed: result.transactions.length, removed: result.removed.length, status: result.status, imported };
   } catch (error) {
     await release(userId, id, lease, error instanceof PlaidError ? error.code : "BANK_SYNC_FAILED").catch(() => undefined);
     throw error;

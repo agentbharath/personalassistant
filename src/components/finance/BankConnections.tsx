@@ -48,12 +48,14 @@ export function BankConnections() {
       onSuccess: async token => {
         setBusy(true); setError("");
         try {
+          setMessage("Connecting your bank…");
           const result = await post<{ connectionId: string }>({ action: "exchange", sessionId: session.sessionId, ...(token ? { publicToken: token } : {}) });
           sessionStorage.removeItem(SESSION);
           window.history.replaceState({}, "", "/settings/banks");
-          setMessage("Bank connected. Fetching your transaction preview…");
-          await post({ action: "sync", connectionId: result.connectionId });
-          setMessage("Bank connected. Review your transactions below. If history is still preparing, check again shortly.");
+          setMessage("Bank connected. Importing your transaction history — this can take a moment…");
+          const synced = await post<{ imported: number; changed: number }>({ action: "sync", connectionId: result.connectionId });
+          setMessage(synced.imported ? `Bank connected. ${synced.imported} transaction${synced.imported === 1 ? "" : "s"} imported.`
+            : "Bank connected. History is still preparing on Plaid's side — check again shortly.");
         } catch (e) { setError(e instanceof Error ? e.message : "Could not finish connecting."); }
         finally { await refresh().catch(() => undefined); setBusy(false); }
       },
@@ -95,7 +97,11 @@ export function BankConnections() {
       {item.update_status !== "HISTORICAL_UPDATE_COMPLETE" && <p className={styles.muted}>Initial history may still be preparing.</p>}
       {item.last_error && <p>Last sync did not finish. Try again or reconnect.</p>}
       <div className={styles.actions}>
-        <Button disabled={busy} size="sm" onClick={() => run(async () => { await post({ action: "sync", connectionId: item.id }); setMessage("Bank checked. Review new records below."); })}>Check transactions</Button>
+        <Button disabled={busy} size="sm" onClick={() => run(async () => {
+          setMessage("Importing transactions…");
+          const synced = await post<{ imported: number }>({ action: "sync", connectionId: item.id });
+          setMessage(synced.imported ? `${synced.imported} transaction${synced.imported === 1 ? "" : "s"} imported.` : "Bank checked. No new transactions to import.");
+        })}>Check transactions</Button>
         <Button disabled={busy || !ready} size="sm" onClick={() => connect(item.id)}>Reconnect</Button>
         <Button disabled={busy} size="sm" variant="ghost" onClick={() => {
           if (window.confirm(`Disconnect ${item.institution_name}? Bank previews will be removed. Previously saved transactions will remain.`)) run(async () => { await post({ action: "disconnect", connectionId: item.id }); setMessage("Bank disconnected."); });
