@@ -4,21 +4,20 @@ import { Temporal } from "@js-temporal/polyfill";
 import { z } from "zod";
 import { searchPublicWeb } from "@/lib/tools/general/tavily-search";
 import { extractCalendarEvent } from "@/lib/model/claude";
-import { createCalendarApproval } from "@/lib/workflows/calendar-create";
+import { createCalendarApproval, loadPendingCalendarCreate } from "@/lib/workflows/calendar-create";
 import { DEFAULT_EVENT_MINUTES, normalizeTimeFromEvidence } from "./calendar-time";
 import { reportFailure } from "@/lib/observability/report";
-import { followupContext } from "@/lib/conversations/followup";
-import type { ContextTurn } from "@/lib/conversations/context";
 
 const TIME_ZONE = process.env.DEFAULT_USER_TIMEZONE ?? "America/Los_Angeles";
 const candidateSchema = z.object({ summary: z.string().min(1), start: z.string().datetime({ offset: true }), end: z.string().datetime({ offset: true }), timeZone: z.string().min(1).nullable(), location: z.string().nullable(), attendees: z.array(z.string().email()).max(20), description: z.string().nullable() });
 
-export async function prepareCalendarCreate(input: string, userId: string, conversationId?: string, context: ContextTurn[] = []) {
+export async function prepareCalendarCreate(input: string, userId: string, conversationId?: string) {
   if (!conversationId) return "I need a saved conversation before I can create an approval preview.";
   // A correction to a just-proposed, not-yet-confirmed event ("make it one hour") has no title/date of its own --
-  // the prior "### Review calendar event" reply is the only place those fields exist (found live, R33).
-  const priorProposal = followupContext(context, input)?.assistantReply;
-  const priorEvent = priorProposal?.startsWith("### Review calendar event") ? priorProposal : null;
+  // the open approval's own stored candidate is the source of truth for those fields (found live, R33), not a
+  // re-parse of the reply we already sent, which is one layer removed and can fall out of a long context window.
+  const pending = await loadPendingCalendarCreate(userId, conversationId).catch(() => null);
+  const priorEvent = pending ? JSON.stringify(pending) : null;
   const needsResearch = /\b(find|look up|concert|show|game|public event)\b/i.test(input);
   const isTicketedEvent = /\b(concert|show|game|festival|tour)\b/i.test(input);
   const focusedResearch = needsResearch ? await searchPublicWeb(buildEventResearchQuery(input), isTicketedEvent ? { domains: ["ticketmaster.com", "seatgeek.com", "axs.com"] } : {}) : { sources: [] };

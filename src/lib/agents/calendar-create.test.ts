@@ -1,11 +1,12 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { normalizeTimeFromEvidence } from "./calendar-time";
 
-const mocks = vi.hoisted(() => ({ extractCalendarEvent: vi.fn() }));
+const mocks = vi.hoisted(() => ({ extractCalendarEvent: vi.fn(), loadPendingCalendarCreate: vi.fn() }));
 vi.mock("@/lib/model/claude", () => ({ extractCalendarEvent: mocks.extractCalendarEvent }));
 vi.mock("@/lib/tools/general/tavily-search", () => ({ searchPublicWeb: vi.fn(async () => ({ sources: [] })) }));
 vi.mock("@/lib/learning/store", () => ({ loadLearnings: vi.fn(async () => ({ calendar: {} })) }));
-vi.mock("@/lib/workflows/calendar-create", () => ({ createCalendarApproval: vi.fn() }));
+vi.mock("@/lib/workflows/calendar-create", () => ({ createCalendarApproval: vi.fn(), loadPendingCalendarCreate: mocks.loadPendingCalendarCreate }));
+beforeEach(() => { mocks.loadPendingCalendarCreate.mockReset().mockResolvedValue(null); });
 
 describe("a malformed or truncated extraction degrades to a plain message (found live, R32)", () => {
   it("never crashes the request when extractCalendarEvent throws", async () => {
@@ -16,30 +17,26 @@ describe("a malformed or truncated extraction degrades to a plain message (found
   });
 });
 
-describe("a correction to a just-proposed event carries the prior proposal forward (found live, R33: \"make it only one hour\" had no title/start of its own and failed as underspecified)", () => {
-  const fullEvent = { summary: "Discussion on Plaid Integration with Daylark", start: "2026-09-28T09:00:00-07:00", end: "2026-09-28T11:00:00-07:00", timeZone: "America/Los_Angeles", location: null, attendees: ["bharathkumarvaddineni5@gmail.com"], description: null, missingFields: [] };
-  const priorReply = "### Review calendar event\n\n- **Event:** Discussion on Plaid Integration with Daylark\n- **Starts:** Sep 28, 2026, 9:00 AM\n- **Ends:** Sep 28, 2026, 11:00 AM\n- **Time zone:** America/Los_Angeles\n- **Guests:** bharathkumarvaddineni5@gmail.com\n\nChoose Confirm to create it and send invitations, or Cancel. This preview expires in 30 minutes.";
+describe("a correction to a just-proposed event carries the open approval's exact candidate forward (found live, R33: \"make it only one hour\" had no title/start of its own and failed as underspecified)", () => {
+  const pendingCandidate = { summary: "Discussion on Plaid Integration with Daylark", start: "2026-09-28T09:00:00-07:00", end: "2026-09-28T11:00:00-07:00", timeZone: "America/Los_Angeles", location: null, attendees: ["bharathkumarvaddineni5@gmail.com"], description: null };
+  const fullEvent = { ...pendingCandidate, missingFields: [] };
 
-  it("passes the prior proposed event to extraction instead of leaving the correction to stand alone", async () => {
+  it("passes the open approval's stored candidate to extraction instead of leaving the correction to stand alone", async () => {
+    mocks.loadPendingCalendarCreate.mockResolvedValueOnce(pendingCandidate);
     mocks.extractCalendarEvent.mockResolvedValue({ ...fullEvent, end: "2026-09-28T10:00:00-07:00" });
     const { prepareCalendarCreate } = await import("./calendar-create");
-    const answer = await prepareCalendarCreate("make it only one hour", "u1", "c1", [
-      { role: "user", content: "schedule a meeting tomorrow with bharathkumarvaddineni5@gmail.com at 9 am for discussion on plaid integration with daylark" },
-      { role: "assistant", content: priorReply },
-    ]);
-    expect(mocks.extractCalendarEvent).toHaveBeenCalledWith("make it only one hour", "", expect.any(String), "America/Los_Angeles", priorReply);
+    const answer = await prepareCalendarCreate("make it only one hour", "u1", "c1");
+    expect(mocks.extractCalendarEvent).toHaveBeenCalledWith("make it only one hour", "", expect.any(String), "America/Los_Angeles", JSON.stringify(pendingCandidate));
     expect(answer).not.toMatch(/reliable/);
     expect(answer).toContain("Discussion on Plaid Integration with Daylark");
   });
 
-  it("does not treat an unrelated prior reply as a proposed event to correct", async () => {
+  it("passes null when there is no open approval to correct", async () => {
+    mocks.loadPendingCalendarCreate.mockResolvedValueOnce(null);
     mocks.extractCalendarEvent.mockResolvedValue(fullEvent);
     const { prepareCalendarCreate } = await import("./calendar-create");
-    await prepareCalendarCreate("make it only one hour", "u1", "c1", [
-      { role: "user", content: "what's the weather" },
-      { role: "assistant", content: "It's sunny." },
-    ]);
-    expect(mocks.extractCalendarEvent).toHaveBeenCalledWith("make it only one hour", "", expect.any(String), "America/Los_Angeles", null);
+    await prepareCalendarCreate("dentist appointment friday at 3", "u1", "c1");
+    expect(mocks.extractCalendarEvent).toHaveBeenCalledWith("dentist appointment friday at 3", "", expect.any(String), "America/Los_Angeles", null);
   });
 });
 

@@ -15,6 +15,20 @@ export async function createCalendarApproval(userId: string, conversationId: str
   if (approvalError) throw approvalError;
 }
 
+/** The exact candidate behind a still-open (unexpired, undecided) approval, for a follow-up that corrects it --
+ * not the reply's markdown, which is one more layer removed from the source of truth and can drop out of the
+ * context window on a long conversation. Same pending-approval lookup resolvePendingCalendarCreate uses. */
+export async function loadPendingCalendarCreate(userId: string, conversationId: string): Promise<CalendarEventCandidate | null> {
+  const admin = createAdminClient();
+  const { data } = await admin.from("workflow_checkpoints").select("id,checkpoint").eq("user_id", userId).eq("conversation_id", conversationId).eq("workflow_type", "calendar_create").eq("state", "pending_approval").order("created_at", { ascending: false }).limit(1);
+  const checkpoint = data?.[0];
+  if (!checkpoint) return null;
+  const { data: approval } = await admin.from("approvals").select("expires_at,status").eq("workflow_checkpoint_id", checkpoint.id).in("status", ["pending", "approved"]).maybeSingle();
+  if (!approval || new Date(approval.expires_at as string).getTime() <= Date.now()) return null;
+  const payload = (checkpoint.checkpoint as { payloadCiphertext?: string }).payloadCiphertext;
+  return payload ? (JSON.parse(decryptText(payload)) as CalendarEventCandidate) : null;
+}
+
 export async function resolvePendingCalendarCreate(userId: string, conversationId: string, input: string) {
   const decision = /^(confirm|approve|yes|create it|add it|go ahead)[.!]?$/i.test(input.trim()) ? "approve" : /^(cancel|deny|no|stop)[.!]?$/i.test(input.trim()) ? "deny" : null;
   if (!decision) return null;
