@@ -164,7 +164,13 @@ async function autoImportBank(userId: string, id: string, environment: PlaidEnvi
       .eq("bank_voided", false).gte("occurred_on", new Date(occurred - 3 * 86400000).toISOString().slice(0, 10))
       .lte("occurred_on", new Date(occurred + 3 * 86400000).toISOString().slice(0, 10)).limit(2);
     if (near.error) return;
-    const matchId = near.data?.length === 1 ? near.data[0].id : undefined;
+    let matchId = near.data?.length === 1 ? near.data[0].id : undefined;
+    if (matchId) {
+      // A same-amount, same-window record already claimed by another Plaid transaction (a real coincidence, e.g.
+      // two similar purchases days apart) is not this row's match -- save as a new record instead of failing.
+      const claimed = await admin.from("finance_transaction_sources").select("transaction_id").eq("transaction_id", matchId).eq("source_type", "plaid").maybeSingle();
+      if (claimed.data) matchId = undefined;
+    }
     try { await importBankRecord(userId, row.id, row.content_hash, matchId); imported++; } catch { /* left for manual review */ }
   }));
   return imported;
