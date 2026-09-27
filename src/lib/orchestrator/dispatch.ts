@@ -1,7 +1,6 @@
 import { Temporal } from "@js-temporal/polyfill";
 import { loadLearnings } from "@/lib/learning/store";
 import { NO_LEARNINGS } from "@/lib/learning/learnings";
-import { financeFreshness } from "@/lib/finance-sync/review";
 import { answerDraftHistory } from "@/lib/agents/draft-history";
 import { continueEmailFinanceImport } from "@/lib/agents/email-finance-import";
 import { cancelEmailScan } from "@/lib/workflows/email-scan";
@@ -129,13 +128,11 @@ export async function dispatchDecision(decision: RouterDecision, ctx: DispatchCo
     case "status_lookup":
       prepareAgentStage(["email"], "fast");
       return done(await answerStatusLookup(userId, { sender: decision.sender!, matter: decision.matter! }), ["email"]);
-    case "finance_spending": {
-      prepareAgentStage(["finance", "email"], "balanced");
-      const freshness = await financeFreshness(userId, conversationId).catch(() => ({note: "Email sync is unavailable. This answer uses saved transactions only.", review: false}));
-      if (freshness.review) return done(freshness.note, ["finance", "email"], "waiting_for_user");
-      const answer = await answerFinance(input, userId, "read", context);
-      return done([answer, freshness.note].filter(Boolean).join("\n\n"), ["finance"]);
-    }
+    case "finance_spending":
+      // Spending is Plaid-only now (syncIfStale inside answerFinanceQuery keeps it current) -- email sync
+      // status has nothing to do with this answer any more and used to show a stale "checking your email" note.
+      prepareAgentStage(["finance"], "balanced");
+      return done(await answerFinance(input, userId, "read", context), ["finance"]);
     case "finance_record":
       prepareAgentStage(["finance"], "fast");
       return done(await answerFinance(input, userId, "record", context), ["finance"]);

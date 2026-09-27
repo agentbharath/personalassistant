@@ -14,7 +14,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   if (!userId) logEvent("error", "home_no_user_claims", { hasClaims: Boolean(data?.claims), claimKeys: Object.keys(data?.claims ?? {}).join(",") });
   const params = await searchParams;
   const requestedConversationId = params.conversation;
-  const duesInput = params.intent === "dues" && !requestedConversationId ? "Show all my dues, including credit card and utility statements from email" : undefined;
+  const duesInput = params.intent === "dues" && !requestedConversationId ? "Show all my dues -- credit card and loan payments from my linked bank, utility and other bills from email" : undefined;
   let conversationLoadFailed = false;
   const [conversation, recent] = userId ? await Promise.all([
     requestedConversationId ? getConversation(userId, requestedConversationId).catch((error) => { conversationLoadFailed = true; reportFailure("home_load_conversation_failed", error, {}, { userId }); return null; }) : Promise.resolve(null),

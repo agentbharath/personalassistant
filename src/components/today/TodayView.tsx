@@ -123,7 +123,7 @@ export function TodayView({ view, replies }: { view: DailyView; /** The "Waiting
             </div>
           </>;
         })()}
-        <div className={styles.foot}><Link className={styles.action} href="/?intent=dues">Find statements in email</Link><p>Review new statement balances in chat, then confirm to add them here.</p></div>
+        <div className={styles.foot}><Link className={styles.action} href="/?intent=dues">Check dues</Link><p>Credit card and loan dues sync from your linked bank; utility and other bills found in email are added here automatically.</p></div>
       </Card>
 
       {replies}
