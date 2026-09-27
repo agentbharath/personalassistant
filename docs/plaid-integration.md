@@ -1,8 +1,12 @@
 # Bank connections in Daylark
 
 Settings → Bank connections opens `/settings/banks`. This integration uses Plaid
-Transactions only, requests 90 days initially, and never calls an AI model or a
-payment endpoint. No bank is linked until its owner completes Plaid Link.
+Transactions only, requests up to 730 days of history on a new connection (the
+institution may return less), and never calls an AI model or a payment
+endpoint. No bank is linked until its owner completes Plaid Link. The history
+window is only set when a connection is first created — reconnecting an
+existing one re-authenticates the same Item without re-requesting history, so
+widening this later means disconnecting and connecting that bank again.
 
 ## Setup
 

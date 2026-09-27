@@ -53,7 +53,8 @@ export async function createBankLink(userId: string, connectionId?: string) {
   }
   const result = await plaidRequest<{ link_token: string; expiration: string }>("/link/token/create", {
     user: { client_user_id: userId }, client_name: "Daylark", language: "en", country_codes: ["US"],
-    ...(item ? { access_token: decryptText(item.access_token_ciphertext) } : { products: ["transactions"], transactions: { days_requested: 90 } }),
+    // Plaid's documented ceiling for the Transactions product; actual history returned still depends on what the institution has.
+    ...(item ? { access_token: decryptText(item.access_token_ciphertext) } : { products: ["transactions"], transactions: { days_requested: 730 } }),
     ...(redirectUri ? { redirect_uri: redirectUri } : {}),
   });
   const { data, error } = await admin.from("bank_link_sessions").insert({ user_id: userId, environment: config.environment,
@@ -225,10 +226,13 @@ export async function bankOverview(userId: string, offset = 0) {
     .eq("user_id", userId).eq("environment", environment).order("created_at");
   databaseError(result.error);
   const items = (result.data || []).map(({ accounts_ciphertext, ...row }) => ({ ...row, accounts: accounts_ciphertext ? JSON.parse(decryptText(accounts_ciphertext)) as { account_id: string; name: string; mask: string | null }[] : [] }));
-  if (!items.length) return { environment, items, transactions: [], total: 0 };
+  if (!items.length) return { environment, items, transactions: [], total: 0, imported: 0 };
   const records = await admin.from("bank_transactions").select("id,connection_id,content_hash,payload_ciphertext,pending,removed,ledger_id", { count: "exact" })
     .eq("user_id", userId).in("connection_id", items.map(i => i.id)).order("occurred_on", { ascending: false }).order("id").range(offset, offset + 49);
   databaseError(records.error);
+  const importedCount = await admin.from("bank_transactions").select("id", { count: "exact", head: true })
+    .eq("user_id", userId).in("connection_id", items.map(i => i.id)).not("ledger_id", "is", null);
+  databaseError(importedCount.error);
   const transactions = await Promise.all(((records.data || []) as BankRow[]).map(async row => {
     const transaction = JSON.parse(decryptText(row.payload_ciphertext)) as PlaidTransaction;
     const { candidate, issue } = normalizeBankTransaction(transaction);
@@ -249,7 +253,7 @@ export async function bankOverview(userId: string, offset = 0) {
       date: transaction.date, name: transaction.merchant_name || transaction.name, amount: transaction.amount, currency: transaction.iso_currency_code,
       pending: row.pending, removed: row.removed, saved: Boolean(row.ledger_id) };
   }));
-  return { environment, items: items.map(({ accounts, ...row }) => ({ ...row, accounts: accounts.map(a => ({ name: a.name, mask: a.mask })) })), transactions, total: records.count || 0 };
+  return { environment, items: items.map(({ accounts, ...row }) => ({ ...row, accounts: accounts.map(a => ({ name: a.name, mask: a.mask })) })), transactions, total: records.count || 0, imported: importedCount.count || 0 };
 }
 
 export async function importBankRecord(userId: string, id: string, hash: string, match?: string) {

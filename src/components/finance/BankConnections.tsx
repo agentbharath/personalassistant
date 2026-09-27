@@ -82,7 +82,8 @@ export function BankConnections() {
   return <div className={styles.page}>
     <Script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js" strategy="afterInteractive" onReady={() => setReady(true)} onError={() => setError("Could not load Plaid. Check your connection and try again.")} />
     <ButtonLink href="/settings" variant="ghost">← Settings</ButtonLink>
-    <div className={styles.header}><div><h1>Your bank connections</h1><p className={styles.muted}>Review up to 90 days of bank history. Save records to use them in Daylark’s spending answers.</p></div>
+    <div className={styles.header}><div><h1>Your bank connections</h1><p className={styles.muted}>Up to 730 days of bank history on a new connection (the bank may return less). Transactions save to Daylark automatically.</p>
+      {data && data.total > 0 && <p className={styles.muted}><strong>{data.imported}</strong> of {data.total} bank transactions imported into your spending records.</p>}</div>
       <Button variant="primary" disabled={busy || !ready || !data} onClick={() => connect()}>Connect bank</Button></div>
     <p className={styles.muted}>Connecting saves a private transaction preview. Daylark cannot move money. Gmail remains available for receipts, bills, and payment reminders.</p>
     {data?.environment === "sandbox" && <p className={styles.notice}><strong>Sandbox · test data only.</strong> Bank credentials and transactions are simulated. These records cannot be saved to your real spending totals.</p>}
