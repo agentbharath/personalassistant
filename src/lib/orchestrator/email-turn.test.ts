@@ -22,7 +22,7 @@ vi.mock("@/lib/agents/email", () => ({ answerEmail: (...args: unknown[]) => mock
 vi.mock("@/lib/agents/email-finance-import", () => ({ prepareEmailFinanceImport: vi.fn(), prepareImportForMessage: (...args: unknown[]) => mocks.importForMessage(...args) }));
 vi.mock("@/lib/runtime/query-budget", () => ({ prepareAgentStage: () => undefined }));
 
-import { handleEmailConversationTurn } from "./email-turn";
+import { EMAIL_IMPORT_RETIRED, handleEmailConversationTurn } from "./email-turn";
 
 const request = (over: Partial<EmailRequest>): EmailRequest => ({ action: "list", topic: "receipt", sender: "iherb", days: 365, calendar: null, unread: false, humansOnly: false, exclusion: "", ...over });
 const interpreted = (over: Partial<EmailRequest>, extra: Record<string, unknown> = {}) => ({ domain: "email", request: request(over), confidence: 1, clarification: null, reading: "", pick: null, correction: false, plainList: false, source: "model", ...extra });
@@ -109,12 +109,12 @@ describe("picking one order from an import card (R13, R20.5)", () => {
     updatedAt: Date.now(),
   };
 
-  it("imports exactly the email the model says the person pointed at, as a new approval", async () => {
+  it("no longer imports from email — points at bank sync instead, without touching Gmail", async () => {
     mocks.state = card;
     mocks.interpretation = interpreted({ action: "import_all" }, { pick: { index: 1, action: "import" } });
     const turn = await handleEmailConversationTurn("actually import only the second one", "u1", "c1", []);
-    expect(mocks.importForMessage).toHaveBeenCalledWith("u1", "c1", "m2");
-    expect(turn).toMatchObject({ answer: "IMPORT PREVIEW", status: "waiting_for_user", agents: ["email", "finance"] });
+    expect(mocks.importForMessage).not.toHaveBeenCalled();
+    expect(turn).toMatchObject({ answer: EMAIL_IMPORT_RETIRED, status: "completed", agents: ["email"] });
   });
 
   it("asks which one, with numbered choices, when the model is unsure which was meant", async () => {
@@ -147,21 +147,13 @@ it("passes structured scope to search without asking again after yes", async () 
   expect(turn?.answer).toBe("ANSWER");
   expect(mocks.answerEmail.mock.calls[0][2].request).toMatchObject({ topic: "general", sender: null, searchTerms: ["maintenance", "work order"], excludedTerms: ["renewal"] });
 });
-it("imports the selected original email after a later search replaces the current list", async () => {
+it("does not import a selected original email after a later search replaces the current list — points at bank sync instead", async () => {
  const { withRequestContext } = await import("@/lib/runtime/request-context");
  const old = stateWith({});
  old.results.push({...old.results[0], id: "old-second"});
  mocks.state = {...old, results: [{...old.results[0], id: "new-first"}]};
  mocks.interpretation = interpreted({}, {pick: {index: 1, action: "import", referenceId: "old-list"}});
- await withRequestContext({userId: "u1", requestId: "r", recalledReferences: [{id: "old-list", kind: "email_results", createdAt: "2026-08-01", state: old}]}, () => handleEmailConversationTurn("import the second from the older list", "u1", "c1", []));
- expect(mocks.importForMessage).toHaveBeenCalledWith("u1", "c1", "old-second");
-});
-it("explains when a saved reference outlives the original Gmail message", async () => {
- const { GoogleGmailAccessError } = await import("@/lib/tools/email/gmail-transport");
- mocks.state = stateWith({});
- mocks.interpretation = interpreted({}, {pick: {index: 0, action: "import"}});
- mocks.importForMessage.mockRejectedValue(new GoogleGmailAccessError("not_found", 404));
- const result = await handleEmailConversationTurn("import that email", "u1", "c1", []);
- expect(result?.answer).toContain("saved conversation");
- expect(result?.answer).toContain("no longer available in Gmail");
+ const turn = await withRequestContext({userId: "u1", requestId: "r", recalledReferences: [{id: "old-list", kind: "email_results", createdAt: "2026-08-01", state: old}]}, () => handleEmailConversationTurn("import the second from the older list", "u1", "c1", []));
+ expect(mocks.importForMessage).not.toHaveBeenCalled();
+ expect(turn?.answer).toBe(EMAIL_IMPORT_RETIRED);
 });

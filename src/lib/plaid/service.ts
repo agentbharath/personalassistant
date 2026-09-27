@@ -75,6 +75,8 @@ export async function completeBankLink(userId: string, sessionId: string, public
     if (checked.item.error) throw new PlaidError("ITEM_LOGIN_REQUIRED");
     const update = await admin.from("bank_connections").update({ status: "connected", last_error: null }).eq("user_id", userId).eq("id", item.id);
     databaseError(update.error);
+    // Best effort: the connection is already live, so a failed first sync doesn't fail the relink. "Check transactions" remains available.
+    await syncBank(userId, item.id).catch(() => undefined);
     return item.id;
   }
   if (!publicToken) throw new PlaidError("LINK_EXPIRED");
@@ -95,6 +97,8 @@ export async function completeBankLink(userId: string, sessionId: string, public
       await admin.from("bank_connections").update({ institution_name: institution.institution.name }).eq("user_id", userId).eq("id", id);
     }
   } catch { /* Linking succeeded; metadata can be retried independently. */ }
+  // Best effort: the connection is already live, so a failed first sync doesn't fail the link. "Check transactions" remains available.
+  await syncBank(userId, id).catch(() => undefined);
   return id;
 }
 

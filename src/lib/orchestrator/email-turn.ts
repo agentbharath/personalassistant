@@ -1,7 +1,6 @@
 import { GoogleGmailAccessError, gmailFailureMessage } from "@/lib/tools/email/gmail-transport";
 import { getRequestContext } from "@/lib/runtime/request-context";
 import { answerEmail, invoiceFactsForMessage, showEmailMessage } from "@/lib/agents/email";
-import { prepareEmailFinanceImport, prepareImportForMessage } from "@/lib/agents/email-finance-import";
 import { CONFIDENCE_THRESHOLD } from "@/lib/agents/email-interpreter";
 import { interpretEmailForUser } from "@/lib/agents/email-interpreter-runtime";
 import { renderEmailRequest, type EmailRequest } from "@/lib/agents/email-request";
@@ -13,6 +12,9 @@ import { prepareAgentStage } from "@/lib/runtime/query-budget";
 
 type ContextMessage = { role: "user" | "assistant"; content: string; choices?: string[] };
 export type EmailTurn = { answer: string; agents: Array<"email" | "finance">; status: "completed" | "waiting_for_user"; choices?: string[] };
+
+/** Transactions now come from the linked bank (Plaid), not Gmail. Email stays available for receipts/lookup, not ledger entries. */
+export const EMAIL_IMPORT_RETIRED = "Transactions now come from your linked bank, not Gmail — connect one in Settings → Bank connections to have them synced automatically. I can still show you this email if that helps.";
 
 /** "1", "2", ... for a short list of results, so the person can tap instead of typing. Longer lists are not offered as buttons. */
 const numberChoices = (count: number) => (count >= 2 && count <= 8 ? Array.from({ length: count }, (_, index) => String(index + 1)) : undefined);
@@ -26,8 +28,8 @@ async function handleOrdinal(ref: OrdinalReference, state: EmailState, userId: s
   const target = state.results[ref.index];
   try {
     if (ref.action === "import") {
-      prepareAgentStage(["email", "finance"], "balanced");
-      return { answer: await prepareImportForMessage(userId, conversationId, target.id), agents: ["email", "finance"], status: "waiting_for_user" };
+      prepareAgentStage(["email"], "fast");
+      return { answer: EMAIL_IMPORT_RETIRED, agents: ["email"], status: "completed" };
     }
     prepareAgentStage(["email"], "fast");
     const answer = ref.action === "facts" ? (await invoiceFactsForMessage(userId, target.id, TIME_ZONE)).text : await showEmailMessage(userId, target.id);
@@ -46,8 +48,8 @@ async function run(requested: EmailRequest, userId: string, conversationId: stri
   const { request, applied } = applyLearnedAction(requested, plainList, learnings);
   const text = renderEmailRequest(request);
   if (request.action === "import" || request.action === "import_all") {
-    prepareAgentStage(["email", "finance"], "balanced");
-    return { answer: await prepareEmailFinanceImport(text, userId, conversationId, request), agents: ["email", "finance"], status: "waiting_for_user" };
+    prepareAgentStage(["email"], "fast");
+    return { answer: EMAIL_IMPORT_RETIRED, agents: ["email"], status: "completed" };
   }
   prepareAgentStage(["email"], "fast");
   const answer = await answerEmail(text, userId, { conversationId, learnings, request });
