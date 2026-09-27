@@ -17,7 +17,7 @@ export function plaidConfigured() {
 }
 
 // Only these read/link endpoints are available; never accept a URL from the browser.
-type Endpoint = "/link/token/create" | "/item/public_token/exchange" | "/item/get" | "/institutions/get_by_id" | "/transactions/sync" | "/item/remove";
+type Endpoint = "/link/token/create" | "/item/public_token/exchange" | "/item/get" | "/institutions/get_by_id" | "/transactions/sync" | "/item/remove" | "/liabilities/get";
 export async function plaidRequest<T>(endpoint: Endpoint, body: Record<string, unknown>, environment?: PlaidEnvironment): Promise<T> {
   const config = plaidConfig();
   if (environment && config.environment !== environment) throw new PlaidError("PLAID_ENV_MISMATCH");
@@ -51,6 +51,18 @@ export const syncSchema = z.object({
   accounts: z.array(z.object({ account_id: z.string(), name: z.string(), mask: z.string().nullable(), type: z.string(), subtype: z.string().nullable() })),
   next_cursor: z.string(), has_more: z.boolean(), transactions_update_status: z.string().optional(),
 });
+
+// Only credit-card liabilities for now (the common "dues" case). Mortgage/student loan entries follow the same
+// shape under liabilities.mortgage / liabilities.student if that's ever wanted.
+export const liabilitiesSchema = z.object({
+  accounts: z.array(z.object({ account_id: z.string(), name: z.string(), mask: z.string().nullable() })),
+  liabilities: z.object({ credit: z.array(z.object({
+    account_id: z.string(), is_overdue: z.boolean().nullable().optional(),
+    last_statement_balance: z.number().nullable().optional(), last_statement_issue_date: z.string().nullable().optional(),
+    minimum_payment_amount: z.number().nullable().optional(), next_payment_due_date: z.string().nullable().optional(),
+  })).optional() }),
+});
+export type PlaidLiabilities = z.infer<typeof liabilitiesSchema>;
 
 export function bankErrorMessage(error: unknown) {
   const code = error instanceof PlaidError ? error.code : "BANK_UNAVAILABLE";

@@ -2,8 +2,9 @@ import { randomUUID } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { encryptText, decryptText } from "@/lib/security/encryption";
 import { piiHmac } from "@/lib/security/pii-hmac";
-import { PlaidError, plaidConfig, plaidRequest, syncSchema, type PlaidEnvironment, type PlaidTransaction } from "./client";
+import { PlaidError, plaidConfig, plaidRequest, syncSchema, liabilitiesSchema, type PlaidEnvironment, type PlaidTransaction } from "./client";
 import { comparableMerchant, normalizeBankTransaction } from "./normalize";
+import { createBill } from "@/lib/tools/finance/bills";
 
 type BankConnection = {
   id: string; user_id: string; environment: PlaidEnvironment; item_id: string; institution_name: string;
@@ -54,7 +55,9 @@ export async function createBankLink(userId: string, connectionId?: string) {
   const result = await plaidRequest<{ link_token: string; expiration: string }>("/link/token/create", {
     user: { client_user_id: userId }, client_name: "Daylark", language: "en", country_codes: ["US"],
     // Plaid's documented ceiling for the Transactions product; actual history returned still depends on what the institution has.
-    ...(item ? { access_token: decryptText(item.access_token_ciphertext) } : { products: ["transactions"], transactions: { days_requested: 730 } }),
+    // Liabilities (due dates/minimum payments) alongside Transactions. An existing connection made before this
+    // must go through Link again (update mode, not a fresh Item) to actually grant the new product.
+    ...(item ? { access_token: decryptText(item.access_token_ciphertext) } : { products: ["transactions"], required_if_supported_products: ["liabilities"], transactions: { days_requested: 730 } }),
     ...(redirectUri ? { redirect_uri: redirectUri } : {}),
   });
   const { data, error } = await admin.from("bank_link_sessions").insert({ user_id: userId, environment: config.environment,
@@ -141,6 +144,30 @@ export async function collectBankSync(accessToken: string, cursor: string | unde
 }
 
 /**
+ * Credit card dues (minimum payment + due date) straight from the bank, no email parsing. Not every institution
+ * or Item supports Liabilities (it's request_if_supported, and an existing connection made before this shipped
+ * never asked for it) -- a rejection here just means nothing to add this sync, not a failure. createBill's own
+ * dedupe fingerprint (merchant + statement date + amount + account) makes re-running this every sync a no-op
+ * until the next statement actually posts, so it never re-announces the same due bill twice.
+ */
+async function syncLiabilities(userId: string, id: string) {
+  const item = await connection(userId, id);
+  const data = await plaidRequest("/liabilities/get", { access_token: decryptText(item.access_token_ciphertext) }, item.environment)
+    .then(raw => liabilitiesSchema.parse(raw)).catch(() => null);
+  if (!data) return;
+  const accounts = new Map(data.accounts.map(a => [a.account_id, a]));
+  for (const credit of data.liabilities.credit ?? []) {
+    if (!credit.next_payment_due_date || !credit.minimum_payment_amount) continue;
+    const account = accounts.get(credit.account_id);
+    await createBill(userId, {
+      merchant: account?.name || item.institution_name, amountMinor: Math.round(credit.minimum_payment_amount * 100), currency: "USD",
+      category: "other", statementDate: credit.last_statement_issue_date ?? credit.next_payment_due_date, dueDate: credit.next_payment_due_date,
+      accountLastFour: account?.mask ?? null,
+    }).catch(() => undefined);
+  }
+}
+
+/**
  * Every posted, non-removed preview not yet in the ledger gets saved automatically -- no per-transaction click.
  * A preview matching exactly one existing record (same amount/currency/direction, +/-3 days) is linked to it
  * instead of creating a duplicate; zero or multiple candidates fall back to a new record, the same as a person
@@ -186,6 +213,7 @@ export async function syncBank(userId: string, id: string) {
       p_cursor: encryptText(result.cursor), p_accounts: encryptText(JSON.stringify(result.accounts)), p_status: result.status });
     databaseError(error);
     const imported = await autoImportBank(userId, id, item.environment).catch(() => 0);
+    await syncLiabilities(userId, id).catch(() => undefined);
     return { changed: result.transactions.length, removed: result.removed.length, status: result.status, imported };
   } catch (error) {
     await release(userId, id, lease, error instanceof PlaidError ? error.code : "BANK_SYNC_FAILED").catch(() => undefined);

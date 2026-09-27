@@ -20,35 +20,43 @@ widening this later means disconnecting and connecting that bank again.
    URI in the Plaid Dashboard's allowed redirect URIs. Register/enable the OAuth
    institutions requested by Plaid. Production bank OAuth needs an HTTPS app URL;
    a local HTTPS tunnel is also suitable if both Daylark and the callback use it.
-4. Open Settings → Bank connections. Connect one bank, then check its transactions.
-   Plaid can need additional time to prepare historical data; check again later.
-5. Review a posted transaction and choose **Save and keep synced**. Where a similar
-   saved record exists, explicitly choose that record or a separate purchase.
-   Matching uses amount/currency/direction and a three-day date window; similarity
-   alone never silently merges bank transactions. Saved records enter the existing
-   Supabase ledger used by Daylark's spending questions.
+4. Open Settings → Bank connections. Connect one bank. Every posted, non-removed
+   preview is saved into the ledger automatically (`autoImportBank`, in `syncBank`) --
+   no per-transaction click. A preview matching exactly one existing record (same
+   amount/currency/direction, three-day window) links to it instead of creating a
+   duplicate; zero or multiple candidates fall back to a new record. Plaid can need
+   additional time to prepare historical data; check again later if the first sync
+   comes back empty.
 
-Sandbox previews cannot be imported into real spending totals. This avoids demo
-data contaminating a personal account. Only USD records can currently enter the
-existing cents-based ledger. Pending, removed, zero-value or unsupported amounts
-remain visible but cannot be imported. Incoming credits retain the existing
-income direction; this does not automatically subtract refunds from gross spending.
+Sandbox previews cannot be imported into real spending totals (`import_bank_transaction`
+enforces this) -- this avoids demo data contaminating a personal account. Only USD
+records can currently enter the existing cents-based ledger; pending, removed,
+zero-value or unsupported-amount previews stay visible in the review table but are
+left for manual attention rather than auto-imported. Incoming credits retain the
+existing income direction; this does not automatically subtract refunds from gross
+spending.
 
-Saving a record authorizes subsequent bank corrections to its fields/status.
-Records newly discovered later still need approval. A withdrawn or newly pending
-saved record remains stored for history but is excluded from totals. Disconnecting
-revokes the Plaid Item, deletes previews/tokens and retains already saved records.
-Deleting spending data first disconnects banks, so sync cannot repopulate it.
+A saved record authorizes subsequent bank corrections to its fields/status.
+A withdrawn or newly pending saved record remains stored for history but is
+excluded from totals. Disconnecting revokes the Plaid Item, deletes previews/tokens
+and retains already saved records. Deleting spending data first disconnects banks,
+so sync cannot repopulate it.
 
 ## Background updates
 
 Manual **Check transactions** works without a scheduler. The optional workflow
-`.github/workflows/bank-sync.yml` calls `/api/ops/bank-sync` every four hours after
+`.github/workflows/bank-sync.yml` calls `/api/ops/bank-sync` once a day (the same
+PST/PDT-safe double-fire as morning-digest, not every few hours) after
 `BANK_SYNC_SCHEDULE_ENABLED=true` is set as a repository variable. It also needs
 the repository variable `APP_ORIGIN` and secret `CRON_SECRET`, matching the deployed
 app. The workflow must be on the default branch. It processes the four least
 recently synced connections each invocation. GitHub schedules are best effort.
 No scheduler is activated by adding environment keys locally.
+
+The rest of the day's freshness comes from `syncIfStale()`, called from
+`answerFinanceQuery` before it reads transactions: any finance question syncs
+connections not refreshed in the last 5 minutes, best-effort, never blocking or
+failing the chat answer.
 
 Sync consumes Plaid's regular updates; it does not invoke the separately billed
 `/transactions/refresh` endpoint. A leased worker collects all pagination results,
@@ -60,8 +68,27 @@ to users do not include provider bodies or credentials.
 
 Chase, Amex, Discover and Capital One access depends on the app's Plaid approval and
 institution support. Apple Card automatic sync is not implemented: it requires an
-iPhone/FinanceKit integration, separate from this browser flow. Gmail continues to
-provide receipt and bill evidence; no automatic Gmail-to-bank matching is claimed.
+iPhone/FinanceKit integration, separate from this browser flow. Gmail's own
+background finance scanner is off (`FINANCE_SYNC_ENABLED`/`FINANCE_SYNC_SCHEDULE_ENABLED`);
+Gmail is available for receipts and lookup, not for creating ledger entries.
+
+## Dues (Liabilities)
+
+`syncBank` also calls `syncLiabilities`, which reads `/liabilities/get` for the
+connection and, for each credit card account with a minimum payment and due date,
+creates a `finance_bills` row via the existing `createBill` (same table `bills_list`
+already reads, same dedupe-by-fingerprint behavior -- re-running every sync is a
+no-op until the next statement actually posts). Not every institution or Item
+supports Liabilities; a rejection is silently skipped, not a sync failure. Only
+credit-card dues are read for now, though mortgage/student loan entries are
+available from the same endpoint under `liabilities.mortgage` / `liabilities.student`
+if that's ever wanted. Liabilities-sourced bills are not auto-marked paid -- say
+"I paid `<merchant>`" as usual.
+
+Liabilities is requested via `required_if_supported_products` at Link time, so it
+never blocks a connection to an institution that doesn't support it. A connection
+made **before** this shipped was never asked for the product and needs a Reconnect
+(same Item, not a fresh one) before dues start appearing for it.
 
 ## Validation
 
