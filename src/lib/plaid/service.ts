@@ -154,6 +154,22 @@ export async function syncBank(userId: string, id: string) {
   }
 }
 
+/**
+ * Best-effort freshness sync for a finance question: with no recurring intraday cron, a stale connection would
+ * otherwise only refresh once a day. A connection synced within maxAgeMs is left alone so a back-and-forth
+ * conversation doesn't re-sync on every message. Never throws -- a failed or slow sync falls back to whatever
+ * data is already saved, since the chat answer must not hang on Plaid.
+ */
+export async function syncIfStale(userId: string, maxAgeMs = 5 * 60 * 1000) {
+  let environment;
+  try { environment = plaidConfig().environment; } catch { return; }
+  const { data, error } = await createAdminClient().from("bank_connections").select("id,last_synced_at")
+    .eq("user_id", userId).eq("environment", environment).eq("status", "connected");
+  if (error || !data?.length) return;
+  const stale = data.filter(c => !c.last_synced_at || Date.now() - Date.parse(c.last_synced_at) > maxAgeMs);
+  await Promise.all(stale.map(c => syncBank(userId, c.id).catch(() => undefined)));
+}
+
 export async function disconnectBank(userId: string, id: string) {
   const { item, lease } = await claim(userId, id);
   try {

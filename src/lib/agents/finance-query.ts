@@ -3,6 +3,7 @@ import { Temporal } from "@js-temporal/polyfill";
 import { z } from "zod";
 import { callClaude } from "@/lib/runtime/model-runtime";
 import { listTransactions } from "@/lib/tools/finance/transactions";
+import { syncIfStale } from "@/lib/plaid/service";
 import { followupContext, FOLLOWUP_RULES } from "@/lib/conversations/followup";
 import { recentContext, type ContextTurn } from "@/lib/conversations/context";
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(value => {try {return Temporal.PlainDate.from(value).toString() === value;} catch {return false;}});
@@ -33,6 +34,9 @@ export async function answerFinanceQuery(input:string,userId:string,context:Cont
   plan=financeQuerySchema.parse(JSON.parse(block.text));
  } catch {return "I couldn’t resolve the requested transaction filters right now. I haven’t changed any records. Please try again.";}
  if(plan.clarification) return plan.clarification;
+ // No intraday cron runs the Plaid sync, so a finance question is the other trigger (besides once-daily) that keeps
+ // balances current. Best-effort and bounded to stale connections -- never blocks the answer on a failed sync.
+ await syncIfStale(userId).catch(()=>undefined);
  const from=plan.ranges.reduce((a,r)=>r.from<a?r.from:a,plan.ranges[0].from);
  const to=plan.ranges.reduce((a,r)=>r.to>a?r.to:a,plan.ranges[0].to);
  const normalize=(s:string)=>s.normalize("NFKC").toLowerCase().replace(/[^\p{L}\p{N}]+/gu," ").trim();

@@ -1,7 +1,10 @@
 name: Sync connected banks
 on:
   schedule:
-    - cron: '17 */4 * * *'
+    # Once at the start of the day, same PST/PDT-safe double-fire as morning-digest (vercel.json). Freshness the
+    # rest of the day comes from syncIfStale() when a finance question is actually asked, not from a tighter cron.
+    - cron: '10 14 * * *'
+    - cron: '10 15 * * *'
   workflow_dispatch:
 permissions: {}
 concurrency:
