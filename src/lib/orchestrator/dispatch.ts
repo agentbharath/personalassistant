@@ -193,7 +193,7 @@ export async function dispatchDecision(decision: RouterDecision, ctx: DispatchCo
       return done(await answerCalendar(input, userId, context), ["calendar"]);
     case "calendar_create":
       prepareAgentStage(["general", "calendar"], "balanced");
-      return done(await prepareCalendarCreate(input, userId, conversationId), ["calendar"], "waiting_for_user");
+      return done(await prepareCalendarCreate(input, userId, conversationId, context), ["calendar"], "waiting_for_user");
     case "calendar_delete":
       if (!conversationId) return done(NEEDS_CONVERSATION, ["calendar"], "waiting_for_user");
       prepareAgentStage(["calendar"], "fast");

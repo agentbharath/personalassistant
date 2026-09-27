@@ -7,12 +7,18 @@ import { extractCalendarEvent } from "@/lib/model/claude";
 import { createCalendarApproval } from "@/lib/workflows/calendar-create";
 import { DEFAULT_EVENT_MINUTES, normalizeTimeFromEvidence } from "./calendar-time";
 import { reportFailure } from "@/lib/observability/report";
+import { followupContext } from "@/lib/conversations/followup";
+import type { ContextTurn } from "@/lib/conversations/context";
 
 const TIME_ZONE = process.env.DEFAULT_USER_TIMEZONE ?? "America/Los_Angeles";
 const candidateSchema = z.object({ summary: z.string().min(1), start: z.string().datetime({ offset: true }), end: z.string().datetime({ offset: true }), timeZone: z.string().min(1).nullable(), location: z.string().nullable(), attendees: z.array(z.string().email()).max(20), description: z.string().nullable() });
 
-export async function prepareCalendarCreate(input: string, userId: string, conversationId?: string) {
+export async function prepareCalendarCreate(input: string, userId: string, conversationId?: string, context: ContextTurn[] = []) {
   if (!conversationId) return "I need a saved conversation before I can create an approval preview.";
+  // A correction to a just-proposed, not-yet-confirmed event ("make it one hour") has no title/date of its own --
+  // the prior "### Review calendar event" reply is the only place those fields exist (found live, R33).
+  const priorProposal = followupContext(context, input)?.assistantReply;
+  const priorEvent = priorProposal?.startsWith("### Review calendar event") ? priorProposal : null;
   const needsResearch = /\b(find|look up|concert|show|game|public event)\b/i.test(input);
   const isTicketedEvent = /\b(concert|show|game|festival|tour)\b/i.test(input);
   const focusedResearch = needsResearch ? await searchPublicWeb(buildEventResearchQuery(input), isTicketedEvent ? { domains: ["ticketmaster.com", "seatgeek.com", "axs.com"] } : {}) : { sources: [] };
@@ -25,7 +31,7 @@ export async function prepareCalendarCreate(input: string, userId: string, conve
   // event (found live, R32), rather than crashing the request.
   let extracted: Awaited<ReturnType<typeof extractCalendarEvent>>;
   try {
-    extracted = await extractCalendarEvent(input, evidence, today, TIME_ZONE);
+    extracted = await extractCalendarEvent(input, evidence, today, TIME_ZONE, priorEvent);
   } catch (error) {
     reportFailure("calendar_event_extraction_failed", error);
     return "I need a reliable date, time, or title before I can prepare the calendar event. Nothing was created. Please try again.";
