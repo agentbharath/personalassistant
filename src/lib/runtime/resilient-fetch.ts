@@ -1,7 +1,7 @@
 import { reportFailure } from "../observability/report";
 import { getRequestContext, remainingRequestMs } from "./request-context";
 
-type ProviderName = "tavily" | "google_calendar" | "google_gmail" | "google_maps" | "google_oauth";
+type ProviderName = "tavily" | "google_calendar" | "google_gmail" | "google_maps" | "google_oauth" | "google_places" | "serpapi_flights";
 
 type Circuit = { failures: number; openUntil: number };
 const circuits = new Map<string, Circuit>();

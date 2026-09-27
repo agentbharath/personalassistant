@@ -1,0 +1,25 @@
+name: Sync connected banks
+on:
+  schedule:
+    - cron: '17 */4 * * *'
+  workflow_dispatch:
+permissions: {}
+concurrency:
+  group: bank-sync-worker
+  cancel-in-progress: false
+jobs:
+  sync:
+    if: vars.BANK_SYNC_SCHEDULE_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Sync bank connections
+        env:
+          BANK_APP_ORIGIN: ${{ vars.APP_ORIGIN }}
+          BANK_CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          test -n "$BANK_APP_ORIGIN"
+          test -n "$BANK_CRON_SECRET"
+          curl --proto '=https' --fail --silent --show-error --max-time 290 \
+            --header "Authorization: Bearer $BANK_CRON_SECRET" \
+            "${BANK_APP_ORIGIN%/}/api/ops/bank-sync"

@@ -85,6 +85,18 @@ describe("a web search answer (free)", () => {
     expect(mocks.synthesize.mock.calls[0][3]).toBe("2026-09-24");
   });
 
+  it("passes the person's home region to synthesis, so a foreign source's pricing is never led with (found live, R32)", async () => {
+    mocks.synthesize.mockResolvedValue({ kind: "answer", intro: "", items: [], answer: "x", caveat: "" });
+    await answerPublicSearch("best protein powder", undefined, "", "2026-09-24", "Sunnyvale, CA");
+    expect(mocks.synthesize.mock.calls[0][4]).toBe("Sunnyvale, CA");
+  });
+
+  it("falls back to the raw search answer instead of crashing when synthesis returns null (a malformed or truncated model response, R32)", async () => {
+    mocks.synthesize.mockResolvedValue(null);
+    mocks.search.mockResolvedValue({ answer: "Ginger Cafe and Ramen Nagi are both well reviewed.", sources: [source(1)] });
+    expect(await answerPublicSearch("sushi and ramen near me")).toContain("Ginger Cafe and Ramen Nagi are both well reviewed.");
+  });
+
   it("reads a saved answer whether the cache gave back text, an object or an old plain string, and still remembers its places", async () => {
     const saved = { text: "Saved answer [1]", places: [{ name: "Ginger Cafe", address: "", note: "" }] };
     const remember = vi.fn().mockResolvedValue(undefined);

@@ -18,6 +18,7 @@ afterEach(() => {
   delete process.env.MODEL_MAX_TOKENS_PER_CALL;
   delete process.env.QUERY_MAX_COST_USD;
   delete process.env.MODEL_DAILY_TOKEN_BUDGET;
+  delete process.env.ANTHROPIC_HIGH_MODEL;
 });
 
 describe("model runtime budget", () => {
@@ -28,6 +29,34 @@ describe("model runtime budget", () => {
       max_tokens: 20,
       messages: [{ role: "user", content: "hello" }],
     })).rejects.toBeInstanceOf(ModelBudgetExceededError);
+  });
+
+  it("never sends `temperature` to a model that rejects it, once the model the tier resolves to actually changes (R32)", async () => {
+    // Confirmed directly against the API: claude-sonnet-5 and claude-opus-5 both 400 on any request that sets `temperature` at all.
+    // A caller always asks with `temperature: 0` for determinism; whether that field survives depends only on which model the tier
+    // resolved to, decided here, not by each of the many call sites remembering to check for themselves.
+    process.env.ANTHROPIC_HIGH_MODEL = "claude-opus-5";
+    mocks.create.mockResolvedValue({ usage: { input_tokens: 10, output_tokens: 1 }, content: [] });
+    await withRequestContext({ requestId: "r", userId: "u", modelPreference: "high" }, () => callClaude("test", {
+      model: "claude-haiku-4-5-20251001", max_tokens: 10, temperature: 0, messages: [{ role: "user", content: "hi" }],
+    }));
+    expect(mocks.create.mock.calls[0][0].model).toBe("claude-opus-5");
+    expect(mocks.create.mock.calls[0][0]).not.toHaveProperty("temperature");
+  });
+
+  it("gives a model that isn't Haiku a longer default timeout, without a caller having to ask (found live, R32, twice)", async () => {
+    // The default itself follows the model, not a flat number: found live once in the trip planner's own calls, then again in ordinary
+    // web search — two unrelated call sites forgetting to raise it individually was the actual defect, not either call site itself.
+    process.env.ANTHROPIC_HIGH_MODEL = "claude-opus-5";
+    mocks.create.mockResolvedValue({ usage: { input_tokens: 10, output_tokens: 1 }, content: [] });
+    await withRequestContext({ requestId: "r", userId: "u", modelPreference: "high" }, () => callClaude("test", {
+      model: "claude-haiku-4-5-20251001", max_tokens: 10, messages: [{ role: "user", content: "hi" }],
+    }));
+    expect(mocks.create.mock.calls[0][1].timeout).toBe(30_000);
+
+    mocks.create.mockClear();
+    await callClaude("test", { model: "claude-haiku-4-5-20251001", max_tokens: 10, messages: [{ role: "user", content: "hi" }] });
+    expect(mocks.create.mock.calls[0][1].timeout).toBe(10_000);
   });
 
   it("rejects a model call before the provider when the per-query dollar ceiling would be exceeded", async () => {

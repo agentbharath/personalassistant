@@ -9,7 +9,10 @@ import { reportFailure } from "@/lib/observability/report";
  * R20.5: which day, range or time a message means is read by a model, never by patterns. The model returns concrete local date-times; the
  * code below only checks their form (valid, ordered, a sensible length, a sensible year) and asks when the model says it is unsure (R22).
  */
-export const TIME_INTERPRETER_VERSION = "time-v5";
+// v6: a holiday-named weekend (Thanksgiving, Labor Day, Memorial Day) spans the holiday's own day through the nearest weekend, inclusive —
+// found live (R32): "this upcoming Thanksgiving weekend" was resolving to the Friday after through the following Monday, excluding
+// Thanksgiving Thursday itself and running a day past Sunday.
+export const TIME_INTERPRETER_VERSION = "time-v6";
 
 export type CalendarWindow = { start: Temporal.ZonedDateTime; end: Temporal.ZonedDateTime; label: string };
 
@@ -29,7 +32,7 @@ export const TIME_SYSTEM = `${FOLLOWUP_RULES}\n\nYou read what day, date range o
 You are given today's date and weekday. Work out the dates yourself.
 - kind "none": the message names no time at all. Use it only then; the assistant will show today.
 - kind "day": one day, or part of a day. start and end are local date-times. A whole day runs from 00:00 that day to 00:00 the next day. "Afternoon" is 12:00 to 18:00, "morning" 05:00 to 12:00, "evening" 17:00 to 23:00, "tonight" 17:00 to 24:00.
-- kind "range": several days, such as "this week", "next week", "the next 10 days", "in March". Use whole days, ending at 00:00 on the day after the last one. "This week" is today through Sunday. "Next week" is the coming Monday through Sunday. "The weekend" is Saturday and Sunday. "Last month" means the last 30 days.
+- kind "range": several days, such as "this week", "next week", "the next 10 days", "in March". Use whole days, ending at 00:00 on the day after the last one. "This week" is today through Sunday. "Next week" is the coming Monday through Sunday. "The weekend" is Saturday and Sunday. "Last month" means the last 30 days. A weekend named for a holiday ("Thanksgiving weekend", "Labor Day weekend", "Memorial Day weekend") spans from the holiday's own day through the nearest Saturday and Sunday, inclusive of the holiday itself: Thanksgiving (always a Thursday) through the following Sunday is four days (Thu–Sun), never starting the day after Thanksgiving and never running into the following Monday; Labor Day and Memorial Day (always a Monday) from the preceding Saturday is three days (Sat–Mon). Never exclude the holiday's own day from its own named weekend.
 - kind "moment": the message names a start time ("Saturday at 2pm"). start is that time and end is one hour later.
 - kind "ambiguous": the message could reasonably mean two or more different times and the difference matters, for example an hour with no am or pm where both are plausible, a date that has already passed this year, or a weekday that could be this or next week. Put a short question in "question" and two to four short tappable answers in "choices". Never guess when in doubt; ask.
 A bare weekday ("Monday", "on Friday") always means its next occurrence, counting today, and is never ambiguous: "Monday" said on a Monday is today. "Next Friday" means the Friday of the coming week. Years: a month and day with no year is in the current year and is NOT ambiguous when it is today or later ("10/15", "October 15", "oct 3rd"), so never ask "this year or next year" about a date that is still ahead; only when it has already passed this year is it ambiguous. Ask only when the difference really matters, not to be careful. "Morning" is always 05:00 to 12:00 of the named day, so "Saturday morning" is kind day, 05:00 to 12:00, not the whole day.

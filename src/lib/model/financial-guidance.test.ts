@@ -34,6 +34,10 @@ it("tells synthesis today's date and warns against presenting a differently-date
   await synthesizeSearchResults("Thanksgiving in Colorado",[{title:"x",url:"https://x",snippet:"x"}]);
   expect(complete.mock.calls[0][1].system).not.toContain("Today is");
 });
+it("degrades to null instead of throwing when the response is malformed or truncated (found live, R32: a stronger tier can overrun a token budget tuned for a terser model)",async()=>{
+  complete.mockResolvedValue({content:[{type:"text",text:"{\"kind\": \"places\", \"items\": [ not valid json"}]});
+  await expect(synthesizeSearchResults("best ramen",[{title:"x",url:"https://x",snippet:"x"}])).resolves.toBeNull();
+});
 it("requires requested advice, preserves uncertainty, and never authorizes money movement",()=>{
   expect(DAYLARK_PERSONA).toContain("only when the user asks");
   expect(FINANCIAL_GUIDANCE).toContain("Do not use a blanket");

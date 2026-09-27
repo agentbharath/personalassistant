@@ -1,10 +1,11 @@
 import { createHash } from "node:crypto";
 import { Temporal } from "@js-temporal/polyfill";
-import { extractTransactionFromEvidence } from "@/lib/model/claude";
+import { extractTransactionFromEvidence, type ExtractedTransaction } from "@/lib/model/claude";
 import { NO_LEARNINGS } from "@/lib/learning/learnings";
 import { applyMerchantLearnings } from "@/lib/learning/preferences";
 import { loadLearnings } from "@/lib/learning/store";
 import { createFinanceImportApproval } from "@/lib/workflows/finance-import";
+import { reportFailure } from "@/lib/observability/report";
 
 const TIME_ZONE = process.env.DEFAULT_USER_TIMEZONE ?? "America/Los_Angeles";
 const SUPPORTED_TYPES = new Set(["application/pdf", "image/jpeg", "image/png", "image/webp"]);
@@ -15,11 +16,19 @@ export async function prepareReceiptImport(file: File, userId: string, conversat
   const bytes = Buffer.from(await file.arrayBuffer());
   const digest = createHash("sha256").update(bytes).digest("base64url");
   const today = Temporal.Now.zonedDateTimeISO(TIME_ZONE).toPlainDate().toString();
-  const extracted = await extractTransactionFromEvidence(
-    `Uploaded receipt filename: ${file.name}`,
-    today,
-    { data: bytes.toString("base64"), mediaType: file.type as "application/pdf" | "image/jpeg" | "image/png" | "image/webp" },
-  );
+  // A malformed or truncated model response degrades to "couldn't identify" (found live, R32), the same wording already used for a
+  // genuinely unreadable receipt, rather than crashing the request.
+  let extracted: ExtractedTransaction;
+  try {
+    extracted = await extractTransactionFromEvidence(
+      `Uploaded receipt filename: ${file.name}`,
+      today,
+      { data: bytes.toString("base64"), mediaType: file.type as "application/pdf" | "image/jpeg" | "image/png" | "image/webp" },
+    );
+  } catch (error) {
+    reportFailure("receipt_extraction_failed", error);
+    return "I couldn’t reliably identify the receipt details. The file was not stored and nothing was imported. Please try again.";
+  }
   const missing = [!extracted.amountMinor && "total", !extracted.merchant && "merchant", !extracted.occurredOn && "date"].filter(Boolean) as string[];
   if (!extracted.isTransaction || missing.length) {
     return `I couldn’t reliably identify the ${joinWords(missing.length ? missing : ["receipt details"])}. The file was not stored and nothing was imported.`;

@@ -43,7 +43,7 @@ function nearbyDates(date: string) {
 }
 
 type DuplicateHit = { row: Record<string, unknown>; kind: "source" | "order" | "exact" | "probable" };
-const COLUMNS = "id, occurred_on, amount_minor, currency, direction, merchant_ciphertext, category, note_ciphertext";
+const COLUMNS = "*";
 
 /** Does this transaction already exist? Looks by the email it came from, by an identical record, then by the same merchant and amount on nearby dates. Reads only. */
 async function findDuplicate(supabase: ReturnType<typeof createAdminClient>, userId: string, candidate: TransactionCandidate, source: TransactionSource): Promise<DuplicateHit | null> {
@@ -60,7 +60,8 @@ async function findDuplicate(supabase: ReturnType<typeof createAdminClient>, use
     if (linkedSource) {
       const { data: linkedTransaction, error: linkedError } = await supabase.from("finance_transactions").select(COLUMNS).eq("id", linkedSource.transaction_id).eq("user_id", userId).single();
       if (linkedError) throw linkedError;
-      return { row: linkedTransaction, kind: "source" };
+      if (!linkedTransaction.bank_voided) return { row: linkedTransaction, kind: "source" };
+      return null;
     }
   }
   if (source.orderId) {
@@ -70,13 +71,13 @@ async function findDuplicate(supabase: ReturnType<typeof createAdminClient>, use
     if (orderIds.length === 1) {
       const {data: order, error} = await supabase.from("finance_transactions").select(COLUMNS).eq("user_id", userId).eq("id", orderIds[0]).single();
       if (error) throw error;
-      if (order.amount_minor === candidate.amountMinor && order.currency === candidate.currency.toUpperCase() && order.direction === candidate.direction) return {row: order, kind: "order"};
+      if (!order.bank_voided && order.amount_minor === candidate.amountMinor && order.currency === candidate.currency.toUpperCase() && order.direction === candidate.direction) return {row: order, kind: "order"};
     }
   }
   const currency = candidate.currency.toUpperCase();
   const { data: exact, error: exactError } = await supabase.from("finance_transactions").select(COLUMNS).eq("user_id", userId).eq("dedupe_fingerprint", fingerprint({ ...candidate, currency }, source.orderId)).maybeSingle();
   if (exactError) throw exactError;
-  if (exact) return { row: exact, kind: "exact" };
+  if (exact && !exact.bank_voided) return { row: exact, kind: "exact" };
 
   assertToolAllowed("finance", "finance.find_similar_transactions");
   const dates = nearbyDates(candidate.occurredOn);
@@ -92,7 +93,7 @@ async function findDuplicate(supabase: ReturnType<typeof createAdminClient>, use
     .limit(20);
   if (nearbyError) throw nearbyError;
   const merchant = normalizeMerchant(candidate.merchant);
-  let matches = (nearby ?? []).filter((row) => normalizeMerchant(decryptText(row.merchant_ciphertext as string)) === merchant);
+  let matches = (nearby ?? []).filter((row) => !row.bank_voided && normalizeMerchant(decryptText(row.merchant_ciphertext as string)) === merchant);
   if (source.orderId && matches.length) {
     const {data: evidence, error} = await supabase.from("finance_transaction_sources").select("transaction_id,order_ref_hmac").eq("user_id", userId).in("transaction_id", matches.map(row => row.id)).not("order_ref_hmac", "is", null);
     if (error) throw error;
@@ -165,12 +166,12 @@ export async function listTransactions(userId: string, from: string, to: string)
   for (let offset = 0; ; offset += pageSize) {
     const { data, error } = await createAdminClient()
       .from("finance_transactions")
-      .select("id, occurred_on, amount_minor, currency, direction, merchant_ciphertext, category, note_ciphertext")
+      .select("*")
       .eq("user_id", userId).gte("occurred_on", from).lte("occurred_on", to)
       .order("occurred_on", { ascending: false }).order("id", { ascending: false })
       .range(offset, offset + pageSize - 1);
     if (error) throw error;
-    rows.push(...(data ?? []).map(decode));
+    rows.push(...(data ?? []).filter(row => !row.bank_voided).map(decode));
     if (!data || data.length < pageSize) return rows;
   }
 }

@@ -19,7 +19,7 @@ vi.mock("@/lib/agents/email-interpreter-runtime", () => ({ createInterpretationC
 vi.mock("@/lib/workflows/email-scan", () => ({ acquireEmailScan: mocks.acquire, saveEmailScan: mocks.saveScan, ScanBusyError: class extends Error {}, ScanStoppedError: class extends Error {} }));
 import { NO_LEARNINGS } from "@/lib/learning/learnings";
 vi.mock("./bill-statement", async (original) => ({ ...await original<typeof import("./bill-statement")>(), extractBillStatement: mocks.statement }));
-import { prepareEmailFinanceImport, prepareEmailDuesImport, continueEmailFinanceImport } from "./email-finance-import";
+import { prepareEmailFinanceImport, prepareEmailDuesImport, continueEmailFinanceImport, prepareImportForMessage } from "./email-finance-import";
 
 const mail = (index: number) => ({
   id: `m${index}`, threadId: `t${index}`, from: `Shop ${index} <orders@shop${index}.example>`, subject: `Order confirmation #${100000 + index}`,
@@ -284,5 +284,14 @@ it("acknowledges a saved server pause without creating a partial approval", asyn
   mocks.saveScan.mockImplementationOnce(async handle => { handle.stopped = true; throw new ScanStoppedError(); });
   const answer = await prepareEmailFinanceImport("import all spending last 30 days", "u", "c");
   expect(answer).toContain("Scan paused and progress saved");
+  expect(mocks.approve).not.toHaveBeenCalled();
+});
+
+it("degrades a single explicit import to a plain message instead of crashing when extraction throws (found live, R32)", async () => {
+  // A EUR amount skips deterministic order-extraction (see deterministicOrderExtraction), forcing the model path this test exercises.
+  mocks.read.mockResolvedValueOnce({ ...mail(0), snippet: "Total: €10.00", text: "Total: €10.00" });
+  mocks.extract.mockRejectedValue(new SyntaxError("Unterminated string in JSON"));
+  const answer = await prepareImportForMessage("u", "c", "m0");
+  expect(answer).toMatch(/couldn’t reliably read that email/);
   expect(mocks.approve).not.toHaveBeenCalled();
 });

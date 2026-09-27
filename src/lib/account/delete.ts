@@ -8,6 +8,8 @@ async function remove(table: string, userId: string) {
 
 /** Spending records only: expenses, income, bills and where they came from. Conversations and preferences are kept. */
 export async function deleteSpendingData(userId: string) {
+  // Revoke before removing tokens so a failed remote disconnect can be retried.
+  await (await import("@/lib/plaid/service")).removeUserBanks(userId);
   // Bills point at the transaction that paid them and sources point at transactions, so those go first.
   await remove("finance_bills", userId);
   await remove("finance_transaction_sources", userId);

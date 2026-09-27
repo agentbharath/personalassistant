@@ -18,6 +18,7 @@ ui-shots/
 supabase/.temp/
 .vercel/
 .sentryclirc
+.project-backups/
 
 # Private working transcript (contains personal details and pasted images)
 /# Build personal assistant agent.md

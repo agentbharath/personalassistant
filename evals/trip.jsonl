@@ -1,0 +1,3 @@
+{"id": "colorado-thanksgiving", "destination": "Colorado", "dateText": "this upcoming Thanksgiving weekend", "today": "2026-09-24", "expect": {"minDays": 2, "maxDays": 4, "minSources": 1}}
+{"id": "austin-explicit-range", "destination": "Austin", "dateText": "March 12 to March 15", "today": "2026-09-24", "expect": {"minDays": 3, "maxDays": 4, "minSources": 1}}
+{"id": "seattle-weekend-after-next", "destination": "Seattle", "dateText": "the weekend after next", "today": "2026-09-24", "expect": {"minDays": 2, "maxDays": 2, "minSources": 1}}

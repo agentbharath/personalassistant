@@ -36,6 +36,17 @@ describe("what the router is asked (R19.2, R19.7)", () => {
   it("tells the model that it, and nothing else, reads dates, places and typos", () => {
     expect(ROUTER_SYSTEM).toMatch(/You interpret the user's words yourself, including typos, shorthand, dates and places; nothing else does/);
   });
+  it("routes a real trip plan to `plan`, not `multi` or `web_search` (R32)", () => {
+    expect(ROUTER_SYSTEM).toContain("Never use multi for a trip or visit being planned");
+    expect(ROUTER_SYSTEM).toContain("plan: the person wants a real trip or visit PLANNED");
+  });
+  it("splits distinct options joined by \"or\" into their own answers, same as \"and\" (found live, R32)", () => {
+    expect(ROUTER_SYSTEM).toContain("real, comparable options named with \"or\"");
+    expect(ROUTER_SYSTEM).not.toContain("cheap flights to Denver or Boulder");
+  });
+  it("does not split a pick-one decision between two things into two disconnected write-ups (found live, R32)", () => {
+    expect(ROUTER_SYSTEM).toContain("should I get an iPad or a Kindle for reading");
+  });
 });
 
 describe("the same input resolves the same way (R19.7)", () => {
@@ -84,10 +95,20 @@ describe("code checks structure and never judges the message (R19.5)", () => {
     expect(canon({ operation: "multi", agents: ["email"] }).operation).toBe("clarify");
     expect(canon({ operation: "multi", agents: ["calendar", "email", "email"] })).toMatchObject({ operation: "multi", agents: ["calendar", "email"] });
   });
+  it("plan needs a destination and a date phrase, and never falls back to multi or web_search for a trip being planned (R32)", () => {
+    expect(canon({ operation: "plan", destination: "Colorado", dateText: "this upcoming Thanksgiving weekend" })).toMatchObject({ operation: "plan", destination: "Colorado", dateText: "this upcoming Thanksgiving weekend" });
+    expect(canon({ operation: "plan", destination: null, dateText: "next week" }).operation).toBe("clarify");
+    expect(canon({ operation: "plan", destination: "Austin", dateText: null }).operation).toBe("clarify");
+  });
   it("keeps a date only in the ISO form the model was asked for", () => {
     expect(canon({ operation: "bills_paid", merchant: "PG&E", paidOn: "2026-09-20" }).paidOn).toBe("2026-09-20");
     expect(canon({ operation: "bills_paid", merchant: "PG&E", paidOn: "last Sunday" }).paidOn).toBeNull();
     expect(canon({ operation: "bills_paid", merchant: "PG&E", paidOn: null }).paidOn).toBeNull();
+  });
+  it("resolves finance_sender_review's since date as a plain ISO date, never through the shared time interpreter (found live, R32: that produced an unrecoverable \"Did you mean January 1, 2022?\" loop)", () => {
+    expect(canon({ operation: "finance_sender_review", sinceDate: "2022-01-01" }).sinceDate).toBe("2022-01-01");
+    expect(canon({ operation: "finance_sender_review", sinceDate: "since 2022" }).sinceDate).toBeNull(); // form only, not real text
+    expect(canon({ operation: "finance_sender_review", sinceDate: null })).toMatchObject({ operation: "finance_sender_review", sinceDate: null }); // a bare "continue" needs none
   });
   it("forgetting may or may not name a thing", () => {
     expect(canon({ operation: "learning_forget", term: "adobee" }).term).toBe("adobee");
@@ -166,7 +187,7 @@ describe("router v14: drafts, redirects and choices (R22, R23, R25)", () => {
   });
 
   it("is version 14, asks when in doubt, and teaches drafting, redirecting and choices", () => {
-    expect(ROUTER_VERSION).toBe("router-v29");
+    expect(ROUTER_VERSION).toBe("router-v35");
     expect(ROUTER_SYSTEM).toMatch(/When in doubt, ask/);
     expect(ROUTER_SYSTEM).toMatch(/email_draft/);
     expect(ROUTER_SYSTEM).toMatch(/Never just "I can't answer that"/);

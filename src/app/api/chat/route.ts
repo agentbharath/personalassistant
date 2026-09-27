@@ -72,6 +72,8 @@ async function handle(request: Request, onProgress?: (agents: string[], scan?: R
   const requestId = randomUUID();
   const queryStartedAt = Date.now();
   let queryContext: RequestContext | undefined;
+  let effectiveMessage = parsed.data.message;
+  let writeBackgroundMemory = false;
 
   try {
     if (conversationId) {
@@ -94,10 +96,13 @@ async function handle(request: Request, onProgress?: (agents: string[], scan?: R
   }
 
   try {
-    const effectiveMessage = resolveRetryMessage(parsed.data.message, parsed.data.isRetry, context);
+    effectiveMessage = resolveRetryMessage(parsed.data.message, parsed.data.isRetry, context);
     // R.memory: the background writer only ever sees the person's own typed words, on a real message (never a button click or an
     // automatic scan ping), and runs after the response is already on its way, so it adds no latency and a failure never surfaces here.
-    if (!parsed.data.uiAction && !parsed.data.automaticContinuation) after(() => writeMemoriesFromMessage(userId, effectiveMessage));
+    // Scheduled once we know the router's own operation, below — never for memory_remember/memory_forget: an explicit "remember that..."
+    // already handled memory deliberately in the same turn, and independently re-reading the same message here had been inferring an
+    // extra, unwanted fact from it (found live) — a duplicate the person never asked for, not a second opinion worth having.
+    writeBackgroundMemory = !parsed.data.uiAction && !parsed.data.automaticContinuation;
     const controller = new AbortController();
     const deadlineAt = Date.now() + QUERY_TIMEOUT_MS;
     // One timer that follows the request's deadline, which a long job (an import sweep) may extend while it runs.
@@ -125,6 +130,7 @@ async function handle(request: Request, onProgress?: (agents: string[], scan?: R
       if (progressTimer) clearInterval(progressTimer);
     }
     const { result, budget } = execution;
+    if (writeBackgroundMemory && result.operation !== "memory_remember" && result.operation !== "memory_forget") after(() => writeMemoriesFromMessage(userId, effectiveMessage));
     if (queryContext?.contextPersistenceFailed) result.answer += "\n\nI couldn’t save this result list’s references. The answer remains in chat, but referring to its items later may require another search.";
     console.info("query_complete", JSON.stringify({ requestId, durationMs: Date.now() - queryStartedAt, reservedCostUsd: budget.reservedCostUsd, actualCostUsd: budget.actualCostUsd, agents: result.agents, status: result.status }));
     await recordQueryTelemetry({ userId, requestId, conversationId, agents: result.agents, status: result.status, outcome: "success", durationMs: Date.now() - queryStartedAt, reservedCostUsd: budget.reservedCostUsd, actualCostUsd: budget.actualCostUsd, cacheHits: queryContext?.cacheHits, cacheMisses: queryContext?.cacheMisses });
@@ -140,6 +146,9 @@ async function handle(request: Request, onProgress?: (agents: string[], scan?: R
     const sequence = conversationId && !persistenceWarning ? await latestSequence(userId, conversationId).catch(() => undefined) : undefined;
     return Response.json({ ...result, conversationId, persistenceWarning, sequence, scan: queryContext?.scanProgress });
   } catch (error) {
+    // The operation was never decided (or never reached), so there is no memory_remember/memory_forget to defer to: fall back to the old,
+    // unconditional behavior rather than losing a real message's memory write to an unrelated failure elsewhere in the request.
+    if (writeBackgroundMemory) after(() => writeMemoriesFromMessage(userId, effectiveMessage));
     logFailure("orchestrator", error);
     Sentry.withScope((scope) => {
       scope.setTag("component", "agent_orchestrator");

@@ -4,25 +4,45 @@ import { z } from "zod";
  * A web search answer as structured data. The model fills it in from the search evidence; code turns it into the reply, so the shape of the
  * reply and every link in it are decided here, not by text from the web.
  */
+const fareRowSchema = z.object({
+  airline: z.string(), price: z.string(),
+  priceBasis: z.enum(["one_way", "round_trip", "unspecified"]),
+  stops: z.enum(["nonstop", "one_stop", "two_plus_stops", "unspecified"]),
+  note: z.string(), source: z.number(),
+});
 export const searchAnswerSchema = z.object({
-  kind: z.enum(["places", "answer"]),
+  kind: z.enum(["places", "answer", "fares"]),
   intro: z.string(),
   items: z.array(z.object({ name: z.string(), address: z.string(), note: z.string(), source: z.number() })),
+  /** kind "fares" only. A flat sibling field, not nested per kind, for the same reason `items` already is: the API's structured-output
+   * schema is one fixed shape, so every kind's fields are always present and simply empty when unused. */
+  fares: z.array(fareRowSchema),
   answer: z.string(),
   caveat: z.string(),
 });
 export type SearchAnswer = z.infer<typeof searchAnswerSchema>;
+export type FareRow = z.infer<typeof fareRowSchema>;
 
 export const SEARCH_ANSWER_JSON_SCHEMA = {
   type: "object",
   properties: {
-    kind: { type: "string", enum: ["places", "answer"] },
+    kind: { type: "string", enum: ["places", "answer", "fares"] },
     intro: { type: "string" },
     items: { type: "array", items: { type: "object", properties: { name: { type: "string" }, address: { type: "string" }, note: { type: "string" }, source: { type: "number" } }, required: ["name", "address", "note", "source"], additionalProperties: false } },
+    fares: { type: "array", items: {
+      type: "object", additionalProperties: false,
+      required: ["airline", "price", "priceBasis", "stops", "note", "source"],
+      properties: {
+        airline: { type: "string" }, price: { type: "string" },
+        priceBasis: { type: "string", enum: ["one_way", "round_trip", "unspecified"] },
+        stops: { type: "string", enum: ["nonstop", "one_stop", "two_plus_stops", "unspecified"] },
+        note: { type: "string" }, source: { type: "number" },
+      },
+    } },
     answer: { type: "string" },
     caveat: { type: "string" },
   },
-  required: ["kind", "intro", "items", "answer", "caveat"],
+  required: ["kind", "intro", "items", "fares", "answer", "caveat"],
   additionalProperties: false,
 } as const;
 
@@ -50,7 +70,11 @@ export function cleanModelText(value: string) {
 
 const cite = (source: number, count: number) => (Number.isInteger(source) && source >= 1 && source <= count ? ` [${source}]` : "");
 
-/** Markdown for the reply. Place lists use the card shape the chat draws as cards, and read fine as a plain list anywhere else. */
+const PRICE_BASIS_LABEL: Record<FareRow["priceBasis"], string> = { one_way: "one-way", round_trip: "round-trip", unspecified: "basis not stated" };
+const STOPS_LABEL: Record<FareRow["stops"], string> = { nonstop: "nonstop", one_stop: "1 stop", two_plus_stops: "2+ stops", unspecified: "stops not stated" };
+
+/** Markdown for the reply. Place lists use the card shape the chat draws as cards, fares use a table, and read fine as a plain list or
+ * table anywhere else (WhatsApp, history). */
 export function renderSearchAnswer(result: SearchAnswer, query: string, sourceCount: number) {
   const intro = plain(result.intro, 200);
   const caveat = plain(result.caveat, 200);
@@ -63,6 +87,18 @@ export function renderSearchAnswer(result: SearchAnswer, query: string, sourceCo
       return `- **${name}**${note ? ` — ${note}` : ""}${cite(item.source, sourceCount)}  \n  ${address ? `${address} · ` : ""}[Open in Maps](${mapsLink(name, address, query)})`;
     }).filter(Boolean);
     if (cards.length) return [intro, cards.join("\n"), caveat && `*${caveat}*`].filter(Boolean).join("\n\n");
+  }
+  if (result.kind === "fares") {
+    const rows = result.fares.slice(0, 8).map((row) => {
+      const price = plain(row.price, 20);
+      if (!price) return "";
+      // A bare dash reads like the render dropped something; "not listed" says plainly that the source itself didn't name a carrier for
+      // this fare (found live, R32) — honest per the prompt's "'' only if truly not given" rule, just not communicated clearly to the reader.
+      const airline = plain(row.airline, 40) || "airline not listed";
+      const note = plain(row.note, 100);
+      return `| ${airline} | ${price} (${PRICE_BASIS_LABEL[row.priceBasis]}) | ${STOPS_LABEL[row.stops]} | ${note}${cite(row.source, sourceCount)} |`;
+    }).filter(Boolean);
+    if (rows.length) return [intro, ["| Airline | Price | Stops | Note |", "|---|---|---|---|", ...rows].join("\n"), caveat && `*${caveat}*`].filter(Boolean).join("\n\n");
   }
   // A plain answer keeps the model's own markdown (lists, bold), without headings, and with any link turned into plain text: this text came from the web.
   return [intro, cleanModelText(result.answer), caveat && `*${caveat}*`].filter(Boolean).join("\n\n");

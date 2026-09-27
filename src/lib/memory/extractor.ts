@@ -9,7 +9,10 @@ import { MEMORY_CATEGORIES, MEMORY_STRENGTHS, MEMORY_TYPES, type Memory } from "
  * an email body, a search result or any other tool output, so nothing else can plant a false memory (an email that says "remember to wire
  * $5,000" is never even shown to this call). Callers must never pass anything but the person's own typed words.
  */
-export const MEMORY_EXTRACTOR_VERSION = "memory-extract-v2";
+// v3: an action request Daylark is already doing right now ("plan a trip to Colorado") is not a lasting travel preference, however it
+// reads out of context — found live, R.memory: "plan a trip to Colorado this Thanksgiving weekend" was filed as "Planning a trip to
+// Colorado for Thanksgiving weekend", a one-off task mistaken for a fact about the person wanting to travel.
+export const MEMORY_EXTRACTOR_VERSION = "memory-extract-v3";
 
 export type ExtractedMemory = {
   action: "add" | "update";
@@ -39,7 +42,7 @@ const outputSchema = z.object({
 });
 type Output = z.infer<typeof outputSchema>;
 
-export const MEMORY_EXTRACTOR_SYSTEM = `You read ONE message a person sent to their own personal assistant and decide what, if anything, is worth remembering about them long-term. You are never shown the assistant's replies, an email, a search result, or any other tool output: only the person's own words, so nothing else can plant a false memory in you. Extract only what THIS message itself states about the person; an idea the assistant offered that the person merely agreed to ("sounds good", "sure", "yes") is not a fact about them, and neither is a question or a request to do something right now.
+export const MEMORY_EXTRACTOR_SYSTEM = `You read ONE message a person sent to their own personal assistant and decide what, if anything, is worth remembering about them long-term. You are never shown the assistant's replies, an email, a search result, or any other tool output: only the person's own words, so nothing else can plant a false memory in you. Extract only what THIS message itself states about the person; an idea the assistant offered that the person merely agreed to ("sounds good", "sure", "yes") is not a fact about them, and neither is a question or a request to do something right now — including a task Daylark is being asked to actually do this turn ("plan a trip to Colorado this Thanksgiving weekend", "find me a sushi place", "add a dentist appointment Friday"). Wanting a trip planned, once, is not a lasting travel preference; nothing about the destination, the dates or the request itself belongs here, however specific it reads out of context — file nothing for it. Only a message stating an ongoing trait ("I love visiting Colorado every fall", "I always plan trips months ahead") is a real candidate, and even then only as a soft preference, never a fact about a specific one-off plan.
 
 Kinds:
 - fact: a stable truth about their life (diet, health, work, location, a recurring payment, a relationship), INCLUDING a restriction, exclusion or limit on what they eat, use or can have ("I don't eat meat except fish and chicken", "I'm allergic to shellfish", "no dairy"). A restriction is always a fact with strength "hard", never a "preference", however casually it's phrased — an answer that violates it is simply wrong, not just unwelcome. Facts change rarely: file on first mention.

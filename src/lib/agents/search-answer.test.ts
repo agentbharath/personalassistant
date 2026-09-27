@@ -24,13 +24,27 @@ describe("the search answer (free)", () => {
 
   it("uses at most five cards, skips a nameless one, and cites only real sources", () => {
     const items = Array.from({ length: 7 }, (_, index) => ({ name: index === 1 ? "" : `Place ${index}`, address: "", note: "n", source: index === 0 ? 9 : 2 }));
-    const text = renderSearchAnswer({ kind: "places", intro: "List:", items, answer: "", caveat: "Hours vary." }, "q in Town", 3);
+    const text = renderSearchAnswer({ kind: "places", intro: "List:", items, fares: [], answer: "", caveat: "Hours vary." }, "q in Town", 3);
     expect(text.match(/^- \*\*/gm)).toHaveLength(4);
     expect(text).not.toContain("[9]");
     expect(text).toContain("*Hours vary.*");
   });
 
   it("falls back to a plain answer when a places answer has no usable places", () => {
-    expect(renderSearchAnswer({ kind: "places", intro: "Nothing.", items: [], answer: "No results.", caveat: "" }, "q", 3)).toBe("Nothing.\n\nNo results.");
+    expect(renderSearchAnswer({ kind: "places", intro: "Nothing.", items: [], fares: [], answer: "No results.", caveat: "" }, "q", 3)).toBe("Nothing.\n\nNo results.");
+  });
+
+  it("renders fares as a table, always labeling price basis and stops instead of leaving them ambiguous (R32)", () => {
+    const fares = [
+      { airline: "Frontier", price: "$104", priceBasis: "round_trip" as const, stops: "nonstop" as const, note: "cheapest overall", source: 3 },
+      { airline: "", price: "$40", priceBasis: "unspecified" as const, stops: "unspecified" as const, note: "", source: 9 },
+    ];
+    const text = renderSearchAnswer({ kind: "fares", intro: "Cheapest flights, San Jose to Las Vegas:", items: [], fares, answer: "", caveat: "" }, "q", 3);
+    expect(text).toContain("| Frontier | $104 (round-trip) | nonstop | cheapest overall [3] |");
+    expect(text).toContain("| airline not listed | $40 (basis not stated) | stops not stated |"); // no citation: source 9 isn't a real source
+  });
+
+  it("falls back to a plain answer when a fares answer has no usable rows", () => {
+    expect(renderSearchAnswer({ kind: "fares", intro: "", items: [], fares: [], answer: "No fares found.", caveat: "" }, "q", 3)).toBe("No fares found.");
   });
 });

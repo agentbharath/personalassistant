@@ -1,12 +1,17 @@
 import { Temporal } from "@js-temporal/polyfill";
+import { loadLearnings } from "@/lib/learning/store";
+import { NO_LEARNINGS } from "@/lib/learning/learnings";
 import { financeFreshness } from "@/lib/finance-sync/review";
 import { answerDraftHistory } from "@/lib/agents/draft-history";
 import { continueEmailFinanceImport } from "@/lib/agents/email-finance-import";
 import { cancelEmailScan } from "@/lib/workflows/email-scan";
 import { answerCalendar } from "@/lib/agents/calendar";
+import { advanceSenderInventory, classifySenders, hasSenderInventoryInProgress, renderSenderInventory } from "@/lib/finance-sync/sender-inventory";
 import { prepareCalendarCreate } from "@/lib/agents/calendar-create";
 import { answerFinance } from "@/lib/agents/finance";
 import { answerPublicSearch, type RememberSearch } from "@/lib/agents/general";
+import { answerPlacesSearch } from "@/lib/agents/places-search";
+import { answerFlightFares } from "@/lib/agents/fares";
 import { runBillsCommand } from "@/lib/agents/bills-agent";
 import { answerStatusLookup } from "@/lib/agents/status-lookup";
 import { acknowledgeLearning } from "@/lib/learning/commands";
@@ -26,6 +31,7 @@ import { createMemory, forgetMemory, listMemories, supersedeMemory } from "@/lib
 import { answerDailyView } from "@/lib/today/answer";
 import { runLearningCommand } from "./learning-turn";
 import { composeMultiAgentAnswer, executeReadOnlyAgentPlan, planClauseInstructions } from "./multi-agent";
+import { runTripPlanForUser } from "@/lib/agents/trip-planner-runtime";
 import { ROUTER_CONFIDENCE_THRESHOLD, type ContextMessage, type Lesson, type RouterDecision } from "./router";
 import { CRISIS_RESPONSE } from "./scope";
 import { UNSAFE_REFUSAL } from "./safety";
@@ -212,15 +218,23 @@ export async function dispatchDecision(decision: RouterDecision, ctx: DispatchCo
       if (!decision.searchQuery?.trim()) return done("What place should I search? Say a city, neighborhood, or ZIP code.", [], "waiting_for_user");
       prepareAgentStage(["general"], "balanced");
       const searchMemory = buildMemoryContext(await listMemories(userId).catch(() => []));
+      const homeRegion = (await loadLearnings(userId).catch(() => NO_LEARNINGS)).homeLocation;
       const remember = conversationId ? (state: Parameters<RememberSearch>[0]) => saveSearchState(userId, conversationId, state) : undefined;
+      // Which real source actually has the answer, decided before research runs (R32): a place or a fare needs a structured API, not a
+      // Tavily snippet no formatting can turn into real hours or a real price.
+      const runOne = (query: string, index: number) => {
+        if (decision.searchKind === "places") return answerPlacesSearch(query, index === 0 ? remember : undefined, searchMemory);
+        if (decision.searchKind === "fares") return answerFlightFares(query, today, userId);
+        return answerPublicSearch(query, index === 0 ? remember : undefined, searchMemory, today, homeRegion);
+      };
       // Two or three genuinely separate subjects each get their own search and their own real answer, instead of one being shortchanged
       // by a single blended query ("protein bars and collagen" is two answers, not a compromise between them).
       if (decision.searchQueries && decision.searchQueries.length >= 2) {
-        const answers = await Promise.all(decision.searchQueries.map((query, index) => answerPublicSearch(query, index === 0 ? remember : undefined, searchMemory, today)));
+        const answers = await Promise.all(decision.searchQueries.map(runOne));
         return done(answers.join("\n\n---\n\n"), ["general"]);
       }
       // Remember what was shown, so "the second one" or "which is open now?" can be read next turn.
-      return done(await answerPublicSearch(decision.searchQuery, remember, searchMemory, today), ["general"]);
+      return done(await runOne(decision.searchQuery, 0), ["general"]);
     }
     case "multi": {
       const plan = planClauseInstructions(input, decision.agents);
@@ -228,6 +242,29 @@ export async function dispatchDecision(decision: RouterDecision, ctx: DispatchCo
       const outcomes = await executeReadOnlyAgentPlan(plan.tasks, input, userId, context, decision.searchQuery, multiMemory, today);
       const completed = outcomes.filter((outcome) => outcome.ok).length;
       return done([composeMultiAgentAnswer(outcomes), ...plan.notes.map((note) => `> ${note}`)].join("\n\n"), decision.agents, completed === outcomes.length ? "completed" : "partially_completed");
+    }
+    case "plan": {
+      // R32: a real pipeline (research fan-out, extraction, a stronger composer, a deterministic critic), not the single-shot
+      // search-and-summarize path — see agents/trip-planner.ts for why a plan is a different job, not a longer web_search. Each
+      // stage picks its own model tier internally (fast for extraction, high for composition), same as multi-agent.ts's per-task calls.
+      if (!decision.destination?.trim() || !decision.dateText?.trim()) return done("Where are you thinking, and for which dates?", ["general", "calendar"], "waiting_for_user");
+      return done(await runTripPlanForUser(decision.destination, decision.dateText, userId, context), ["general", "calendar"]);
+    }
+    case "finance_sender_review": {
+      // R32: the first step of a real historical import is reviewing which senders are in scope, not importing blind. sinceDate is a
+      // plain ISO date the router resolves itself (like paidOn), never through the shared time interpreter — found live: that interpreter's
+      // "more than 2 years away needs confirming" rule is right for a calendar event and produced an unrecoverable "Did you mean January
+      // 1, 2022?" loop for a backfill boundary, which is supposed to go years back. A bare "continue" resumes the in-progress scan
+      // regardless of sinceDate; only a fresh start with no date is real doubt worth asking about.
+      if (!conversationId) return done("I need a saved conversation to track this scan. Please start a new chat and try again.", ["finance", "email"], "waiting_for_user");
+      const resuming = await hasSenderInventoryInProgress(userId, conversationId).catch(() => false);
+      if (!resuming && !decision.sinceDate) return done("Since when? For example, \"since 2022-01-01\" or \"the last 4 years.\"", ["finance", "email"], "waiting_for_user");
+      // Ignored by advanceSenderInventory when resuming an existing checkpoint; only used to start a new one.
+      const since = decision.sinceDate ?? today;
+      prepareAgentStage(["email", "finance"], "fast");
+      const { done: scanDone, senders, scannedCount } = await advanceSenderInventory(userId, conversationId, since);
+      const classified = await classifySenders(senders, userId);
+      return done(renderSenderInventory(classified, scanDone, scannedCount), ["email", "finance"], scanDone ? "completed" : "waiting_for_user");
     }
     case "email_write_declined":
       return done(EMAIL_READ_ONLY_NOTICE, ["email"]);

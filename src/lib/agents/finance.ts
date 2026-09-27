@@ -1,19 +1,28 @@
 import { answerFinanceQuery } from "./finance-query";
 import type { ContextTurn } from "@/lib/conversations/context";
 import { Temporal } from "@js-temporal/polyfill";
-import { extractTransaction } from "@/lib/model/claude";
+import { extractTransaction, type ExtractedTransaction } from "@/lib/model/claude";
 import { recencyDays } from "@/lib/agents/email-query";
 import { NO_LEARNINGS } from "@/lib/learning/learnings";
 import { applyMerchantLearnings, toKnownCategory } from "@/lib/learning/preferences";
 import { loadLearnings } from "@/lib/learning/store";
 import { createTransactionCandidate, type StoredTransaction } from "@/lib/tools/finance/transactions";
+import { reportFailure } from "@/lib/observability/report";
 
 const TIME_ZONE = process.env.DEFAULT_USER_TIMEZONE ?? "America/Los_Angeles";
 
 export async function answerFinance(input: string, userId: string, mode: "read" | "record" = "read", context: ContextTurn[] = []) {
   if (mode === "read") return answerFinanceQuery(input, userId, context);
   const today = Temporal.Now.zonedDateTimeISO(TIME_ZONE).toPlainDate().toString();
-  const extracted = await extractTransaction(input, today);
+  // A malformed or truncated model response degrades to the same "try again" wording as a genuinely unclear message (found live, R32),
+  // rather than crashing the request.
+  let extracted: ExtractedTransaction;
+  try {
+    extracted = await extractTransaction(input, today);
+  } catch (error) {
+    reportFailure("transaction_extraction_failed", error);
+    return "I couldn’t process that right now. Please try again, or phrase it like “I spent $24.50 at Curry Point today.”";
+  }
   if (!extracted.isTransaction) {
     return "I’m not sure what you’d like to do. I can record a spend (for example, `I spent $24.50 at Curry Point today`), answer a spending question, or import receipts from your email. Which did you mean?";
   }

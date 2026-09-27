@@ -33,7 +33,7 @@ beforeEach(() => {
 describe("deleting spending records", () => {
   it("removes bills and sources before the transactions they point at, and touches nothing else", async () => {
     await deleteSpendingData("u1");
-    expect(db.calls).toEqual(["delete:finance_bills:u1", "delete:finance_transaction_sources:u1", "delete:finance_transactions:u1"]);
+    expect(db.calls).toEqual(["delete:bank_link_sessions:u1", "delete:finance_bills:u1", "delete:finance_transaction_sources:u1", "delete:finance_transactions:u1"]);
   });
 });
 

@@ -4,9 +4,10 @@ import type { Learning } from "@/lib/learning/learnings";
 import type { RouterDecision } from "./router";
 
 const mocks = vi.hoisted(() => ({
-  answerCalendar: vi.fn(), prepareCalendarCreate: vi.fn(), answerFinance: vi.fn(), answerPublicSearch: vi.fn(), runBillsCommand: vi.fn(), answerStatusLookup: vi.fn(),
+  answerCalendar: vi.fn(), prepareCalendarCreate: vi.fn(), answerFinance: vi.fn(), answerPublicSearch: vi.fn(), answerPlacesSearch: vi.fn(), answerFlightFares: vi.fn(), runBillsCommand: vi.fn(), answerStatusLookup: vi.fn(),
   answerGeneral: vi.fn(), draftHistory: vi.fn(), answerCasual: vi.fn(), prepareCalendarAttendeeUpdate: vi.fn(), prepareCalendarDelete: vi.fn(), handleEmailConversationTurn: vi.fn(), answerScheduleFeasibility: vi.fn(), answerDailyView: vi.fn(), saveSearchState: vi.fn(), loadRecentSearchStates: vi.fn(), renderSearchHistory: vi.fn(), prepareEmailDraft: vi.fn(), resolveEmailDraft: vi.fn(), ownerIdentity: vi.fn(), loadEmailState: vi.fn(),
-  runLearningCommand: vi.fn(), executeReadOnlyAgentPlan: vi.fn(), saveLearning: vi.fn(),
+  runLearningCommand: vi.fn(), executeReadOnlyAgentPlan: vi.fn(), saveLearning: vi.fn(), runTripPlan: vi.fn(), loadLearnings: vi.fn(),
+  interpretTime: vi.fn(), advanceSenderInventory: vi.fn(), classifySenders: vi.fn(), hasSenderInventoryInProgress: vi.fn(), renderSenderInventory: vi.fn(),
   resolveDelete: vi.fn(), resolveAttendees: vi.fn(), resolveCreate: vi.fn(), resolveFinance: vi.fn(),
   listMemories: vi.fn(), createMemory: vi.fn(), forgetMemory: vi.fn(), supersedeMemory: vi.fn(),
   extractMemoriesForUser: vi.fn(), findMatchingMemories: vi.fn(), renderMemories: vi.fn(),
@@ -15,13 +16,21 @@ vi.mock("@/lib/memory/store", () => ({ listMemories: mocks.listMemories, createM
 vi.mock("@/lib/memory/context", () => ({ buildMemoryContext: () => "" }));
 vi.mock("@/lib/memory/commands", () => ({ findMatchingMemories: mocks.findMatchingMemories, renderMemories: mocks.renderMemories }));
 vi.mock("@/lib/memory/extractor-runtime", () => ({ extractMemoriesForUser: mocks.extractMemoriesForUser }));
-vi.mock("@/lib/agents/calendar", () => ({ answerCalendar: mocks.answerCalendar }));
+vi.mock("@/lib/agents/calendar", () => ({ answerCalendar: mocks.answerCalendar, askAboutTime: (question: string, choices: string[]) => (choices.length ? `${question} (${choices.join(" / ")})` : question) }));
+vi.mock("@/lib/agents/time-interpreter", () => ({ TIME_UNAVAILABLE: "TIME_UNAVAILABLE" }));
+vi.mock("@/lib/agents/time-interpreter-runtime", () => ({ interpretTimeForUser: mocks.interpretTime }));
+vi.mock("@/lib/finance-sync/sender-inventory", () => ({
+  advanceSenderInventory: mocks.advanceSenderInventory, classifySenders: mocks.classifySenders,
+  hasSenderInventoryInProgress: mocks.hasSenderInventoryInProgress, renderSenderInventory: mocks.renderSenderInventory,
+}));
 vi.mock("@/lib/agents/calendar-create", () => ({ prepareCalendarCreate: mocks.prepareCalendarCreate }));
 vi.mock("@/lib/agents/finance", () => ({ answerFinance: mocks.answerFinance }));
 vi.mock("@/lib/agents/general", () => ({ answerPublicSearch: mocks.answerPublicSearch }));
+vi.mock("@/lib/agents/places-search", () => ({ answerPlacesSearch: mocks.answerPlacesSearch }));
+vi.mock("@/lib/agents/fares", () => ({ answerFlightFares: mocks.answerFlightFares }));
 vi.mock("@/lib/agents/bills-agent", () => ({ runBillsCommand: mocks.runBillsCommand }));
 vi.mock("@/lib/agents/status-lookup", () => ({ answerStatusLookup: mocks.answerStatusLookup }));
-vi.mock("@/lib/learning/store", () => ({ saveLearning: mocks.saveLearning }));
+vi.mock("@/lib/learning/store", () => ({ saveLearning: mocks.saveLearning, loadLearnings: mocks.loadLearnings }));
 vi.mock("@/lib/model/claude", () => ({ answerGeneral: mocks.answerGeneral, answerCasual: mocks.answerCasual }));
 vi.mock("@/lib/agents/draft-history", () => ({answerDraftHistory: mocks.draftHistory}));
 vi.mock("@/lib/runtime/query-budget", () => ({ prepareAgentStage: () => undefined }));
@@ -39,6 +48,7 @@ vi.mock("@/lib/today/answer", () => ({ answerDailyView: mocks.answerDailyView })
 vi.mock("./feasibility", () => ({ answerScheduleFeasibility: mocks.answerScheduleFeasibility }));
 vi.mock("./learning-turn", () => ({ runLearningCommand: mocks.runLearningCommand }));
 vi.mock("./multi-agent", () => ({ composeMultiAgentAnswer: () => "COMPOSED", executeReadOnlyAgentPlan: mocks.executeReadOnlyAgentPlan, planClauseInstructions: () => ({ tasks: [], notes: [] }) }));
+vi.mock("@/lib/agents/trip-planner-runtime", () => ({ runTripPlanForUser: mocks.runTripPlan }));
 
 import { dispatchDecision } from "./dispatch";
 import { CRISIS_RESPONSE } from "./scope";
@@ -52,6 +62,12 @@ beforeEach(() => {
   mocks.answerGeneral.mockResolvedValue(CRISIS_RESPONSE);
   mocks.answerFinance.mockResolvedValue("FINANCE"); mocks.runBillsCommand.mockResolvedValue("BILLS"); mocks.answerDailyView.mockResolvedValue("DAILY"); mocks.answerStatusLookup.mockResolvedValue("STATUS");
   mocks.answerCalendar.mockResolvedValue("CALENDAR"); mocks.answerPublicSearch.mockResolvedValue("WEB"); mocks.answerCasual.mockResolvedValue("CASUAL");
+  mocks.answerPlacesSearch.mockReset().mockResolvedValue("PLACES"); mocks.answerFlightFares.mockReset().mockResolvedValue("FARES");
+  mocks.loadLearnings.mockReset().mockResolvedValue({ homeLocation: undefined });
+  mocks.interpretTime.mockReset(); mocks.hasSenderInventoryInProgress.mockReset().mockResolvedValue(false);
+  mocks.advanceSenderInventory.mockReset().mockResolvedValue({ done: true, senders: [], scannedCount: 0 });
+  mocks.classifySenders.mockReset().mockResolvedValue([]);
+  mocks.renderSenderInventory.mockReset().mockReturnValue("SENDER REVIEW");
   mocks.prepareCalendarCreate.mockResolvedValue("CREATE"); mocks.prepareCalendarDelete.mockResolvedValue("DELETE"); mocks.prepareCalendarAttendeeUpdate.mockResolvedValue("ATTENDEES");
   mocks.runLearningCommand.mockResolvedValue({ answer: "LEARNING", agents: [], status: "completed" }); mocks.executeReadOnlyAgentPlan.mockResolvedValue([{ agent: "email", ok: true, answer: "x" }]);
   mocks.saveLearning.mockResolvedValue(undefined);
@@ -80,14 +96,14 @@ describe("a web search uses the search the router wrote (free)", () => {
   });
   it("passes the router's query, so the saved home place is in it", async () => {
     await dispatchDecision(decision({ operation: "web_search", searchQuery: "Indian restaurants in Sunnyvale, CA" } as never), ctx);
-    expect(mocks.answerPublicSearch).toHaveBeenCalledWith("Indian restaurants in Sunnyvale, CA", expect.any(Function), "", expect.any(String));
+    expect(mocks.answerPublicSearch).toHaveBeenCalledWith("Indian restaurants in Sunnyvale, CA", expect.any(Function), "", expect.any(String), undefined);
   });
   it("runs two genuinely separate subjects as two searches and joins both real answers, instead of shortchanging one (R29)", async () => {
     mocks.answerPublicSearch.mockResolvedValueOnce("Protein bars: go with RXBAR.").mockResolvedValueOnce("Collagen: go with marine collagen.");
     const result = await dispatchDecision(decision({ operation: "web_search", searchQuery: "best protein bars", searchQueries: ["best protein bars", "best collagen supplements"] } as never), ctx);
     expect(mocks.answerPublicSearch).toHaveBeenCalledTimes(2);
-    expect(mocks.answerPublicSearch).toHaveBeenNthCalledWith(1, "best protein bars", expect.any(Function), "", expect.any(String));
-    expect(mocks.answerPublicSearch).toHaveBeenNthCalledWith(2, "best collagen supplements", undefined, "", expect.any(String));
+    expect(mocks.answerPublicSearch).toHaveBeenNthCalledWith(1, "best protein bars", expect.any(Function), "", expect.any(String), undefined);
+    expect(mocks.answerPublicSearch).toHaveBeenNthCalledWith(2, "best collagen supplements", undefined, "", expect.any(String), undefined);
     expect(result?.answer).toContain("Protein bars: go with RXBAR.");
     expect(result?.answer).toContain("Collagen: go with marine collagen.");
   });
@@ -96,6 +112,66 @@ describe("a web search uses the search the router wrote (free)", () => {
     expect(mocks.answerPublicSearch).not.toHaveBeenCalled();
     expect(result?.answer).toMatch(/what place should i search/i);
     expect(result?.status).toBe("waiting_for_user");
+  });
+});
+
+describe("a real historical import starts by reviewing which senders are in scope, not importing blind (R32)", () => {
+  it("uses the router's own resolved ISO date directly, never the shared time interpreter (found live: that produced an unrecoverable \"Did you mean January 1, 2022?\" loop for a backfill boundary years in the past, which is the expected case here, not doubt)", async () => {
+    mocks.advanceSenderInventory.mockResolvedValue({ done: false, senders: [{ domain: "pge.com" }], scannedCount: 50 });
+    const result = await dispatchDecision(decision({ operation: "finance_sender_review", sinceDate: "2022-01-01" } as never), ctx);
+    expect(mocks.advanceSenderInventory).toHaveBeenCalledWith("u1", "c1", "2022-01-01");
+    expect(mocks.interpretTime).not.toHaveBeenCalled();
+    expect(result?.answer).toBe("SENDER REVIEW");
+    expect(result?.status).toBe("waiting_for_user"); // not done yet
+  });
+
+  it("resumes an in-progress scan on a bare \"continue\", never asking for the date again", async () => {
+    mocks.hasSenderInventoryInProgress.mockResolvedValue(true);
+    await dispatchDecision(decision({ operation: "finance_sender_review" } as never), ctx);
+    expect(mocks.advanceSenderInventory).toHaveBeenCalled();
+  });
+
+  it("asks \"since when\" rather than guessing a window, only for a genuinely fresh start with no date", async () => {
+    const result = await dispatchDecision(decision({ operation: "finance_sender_review" } as never), ctx);
+    expect(result?.answer).toMatch(/since when/i);
+    expect(mocks.advanceSenderInventory).not.toHaveBeenCalled();
+  });
+
+  it("marks the turn completed once the scan itself is done", async () => {
+    mocks.advanceSenderInventory.mockResolvedValue({ done: true, senders: [], scannedCount: 500 });
+    const result = await dispatchDecision(decision({ operation: "finance_sender_review", sinceDate: "2022-01-01" } as never), ctx);
+    expect(result?.status).toBe("completed");
+  });
+});
+
+describe("a web search routes to a real structured source before any research runs, decided by the router's searchKind (R32)", () => {
+  it("uses the real Places API path for a places-shaped request", async () => {
+    const result = await dispatchDecision(decision({ operation: "web_search", searchQuery: "sushi in Sunnyvale, CA", searchKind: "places" } as never), ctx);
+    expect(mocks.answerPlacesSearch).toHaveBeenCalledWith("sushi in Sunnyvale, CA", expect.any(Function), "");
+    expect(mocks.answerPublicSearch).not.toHaveBeenCalled();
+    expect(result?.answer).toBe("PLACES");
+  });
+
+  it("uses the real SerpApi flights path for a fares-shaped request", async () => {
+    const result = await dispatchDecision(decision({ operation: "web_search", searchQuery: "cheapest flights to Vegas", searchKind: "fares" } as never), ctx);
+    expect(mocks.answerFlightFares).toHaveBeenCalledWith("cheapest flights to Vegas", expect.any(String), "u1");
+    expect(mocks.answerPublicSearch).not.toHaveBeenCalled();
+    expect(result?.answer).toBe("FARES");
+  });
+
+  it("still uses the existing Tavily path when searchKind is general or missing (no regression for everything else)", async () => {
+    await dispatchDecision(decision({ operation: "web_search", searchQuery: "q", searchKind: "general" } as never), ctx);
+    await dispatchDecision(decision({ operation: "web_search", searchQuery: "q" } as never), ctx);
+    expect(mocks.answerPublicSearch).toHaveBeenCalledTimes(2);
+    expect(mocks.answerPlacesSearch).not.toHaveBeenCalled();
+    expect(mocks.answerFlightFares).not.toHaveBeenCalled();
+  });
+
+  it("applies the same searchKind to every subject in a compound search (\"LA or Vegas\" both need real fares)", async () => {
+    await dispatchDecision(decision({ operation: "web_search", searchQuery: "flights to LA", searchQueries: ["flights to LA", "flights to Vegas"], searchKind: "fares" } as never), ctx);
+    expect(mocks.answerFlightFares).toHaveBeenCalledTimes(2);
+    expect(mocks.answerFlightFares).toHaveBeenNthCalledWith(1, "flights to LA", expect.any(String), "u1");
+    expect(mocks.answerFlightFares).toHaveBeenNthCalledWith(2, "flights to Vegas", expect.any(String), "u1");
   });
 });
 
@@ -188,6 +264,18 @@ describe("each operation calls its own handler (R19.4)", () => {
     const result = await dispatchDecision(decision({ operation: "multi", agents: ["calendar", "email"] }), ctx);
     expect(result?.answer).toContain("COMPOSED");
     expect(result?.agents).toEqual(["calendar", "email"]);
+  });
+  it("runs the real trip-planner pipeline for `plan`, never the multi/web_search path (R32)", async () => {
+    mocks.runTripPlan.mockResolvedValue("ITINERARY");
+    const result = await dispatchDecision(decision({ operation: "plan", destination: "Colorado", dateText: "this upcoming Thanksgiving weekend" }), ctx);
+    expect(mocks.runTripPlan).toHaveBeenCalledWith("Colorado", "this upcoming Thanksgiving weekend", "u1", []);
+    expect(result?.answer).toBe("ITINERARY");
+    expect(result?.agents).toEqual(["general", "calendar"]);
+  });
+  it("asks for what's missing rather than guessing when plan's destination or dates weren't resolved", async () => {
+    const result = await dispatchDecision(decision({ operation: "plan", destination: "", dateText: "next week" }), ctx);
+    expect(result?.status).toBe("waiting_for_user");
+    expect(mocks.runTripPlan).not.toHaveBeenCalled();
   });
 });
 

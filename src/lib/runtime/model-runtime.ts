@@ -25,10 +25,28 @@ const actorFor = (userId?: string): Actor | undefined => {
   return userId ? { userId, requestId: randomUUID() } : undefined;
 };
 
+/** Confirmed directly against the API (2026-09-24): `claude-sonnet-5` and `claude-opus-5` both reject a request that sets `temperature` at
+ * all ("`temperature` is deprecated for this model", HTTP 400) — only the Haiku family still accepts it. Every call in this codebase sets
+ * `temperature: 0` for determinism, so turning on real balanced/high tiers (R32) would have 400'd every one of them the moment a request
+ * actually resolved to Sonnet or Opus, not only the trip planner's calls. Fixed once, here, for every call site at once. */
+export function supportsTemperature(model: string) {
+  return /haiku/i.test(model);
+}
+
+/** Found live (R32), twice, in two unrelated call sites (the trip planner's own calls, then ordinary web search) before being fixed here
+ * once: every caller's default timeout was a flat 10 seconds, sized for Haiku. Sonnet and Opus are a genuinely slower, more verbose model
+ * family for the same prompt, and a caller has to actively remember to pass a longer `timeoutMs` to avoid it — which is exactly the kind of
+ * thing that keeps getting forgotten, one call site at a time. The default itself now depends on which model actually got selected, so
+ * every caller gets the right headroom automatically; an explicit `timeoutMs` (still clamped to 30s below) still wins when given. */
+function defaultTimeoutMsFor(model: string) {
+  return supportsTemperature(model) ? 10_000 : 30_000;
+}
+
 export async function callClaude(operation: string, params: Anthropic.MessageCreateParamsNonStreaming, options: { userId?: string; timeoutMs?: number } = {}) {
   const actor = actorFor(options.userId);
   const estimatedInputTokens = Math.ceil(JSON.stringify(params.messages).length / 4);
   params = { ...params, model: selectQueryModel(estimatedInputTokens, params.max_tokens) };
+  if (!supportsTemperature(params.model)) delete params.temperature;
   const tokenCap = positiveInteger(process.env.MODEL_MAX_TOKENS_PER_CALL, DEFAULT_TOKEN_CAP);
   if (estimatedInputTokens + params.max_tokens > tokenCap) throw new ModelBudgetExceededError();
   reserveQueryModelCost(params.model, estimatedInputTokens, params.max_tokens);
@@ -38,7 +56,7 @@ export async function callClaude(operation: string, params: Anthropic.MessageCre
   for (let attempt = 1; attempt <= 2; attempt += 1) {
     const startedAt = performance.now();
     try {
-      const requestedTimeout = Number.isFinite(options.timeoutMs) ? Math.max(1000, Math.min(30000, options.timeoutMs!)) : 10000;
+      const requestedTimeout = Number.isFinite(options.timeoutMs) ? Math.max(1000, Math.min(30000, options.timeoutMs!)) : defaultTimeoutMsFor(params.model);
       const timeout = remainingRequestMs(requestedTimeout);
       const signal = getRequestContext()?.signal;
       if (timeout <= 0 || signal?.aborted) throw new DOMException("Query deadline exceeded", "AbortError");

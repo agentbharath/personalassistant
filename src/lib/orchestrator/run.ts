@@ -17,6 +17,11 @@ export interface OrchestratorResult {
   status: "completed" | "waiting_for_user" | "partially_completed";
   /** When the answer is a question with a few possible answers, they are offered as tap-to-answer choices (free text is still accepted). */
   choices?: string[];
+  /** The router's own operation, when one was actually decided (undefined for a UI action or when the router itself was unavailable) — so
+   * the caller can tell an explicit memory_remember/memory_forget turn apart from an ordinary one (R.memory, found live: the background
+   * extractor was independently re-reading the same message an explicit "remember that..." had already handled deliberately, sometimes
+   * inferring an extra, unwanted fact from it — a duplicate write the person never asked for). */
+  operation?: string;
 }
 
 type ContextMessage = { role: "user" | "assistant"; content: string; choices?: string[] };
@@ -84,7 +89,7 @@ export async function runOrchestrator(input: string, userId: string, context: Co
   }
 
   console.info("router", JSON.stringify({ requestId, operation: routed.operation, confidence: routed.confidence, source: routed.source }));
-  if (routed.continuityBlocked) return { requestId, answer: routed.clarification!, agents: [], confidence: 0, status: "partially_completed" };
+  if (routed.continuityBlocked) return { requestId, answer: routed.clarification!, agents: [], confidence: 0, status: "partially_completed", operation: routed.operation };
   const result = await dispatchDecision(routed, { requestId, input: routed.resolvedInput || input, userId, context, conversationId });
-  return result ?? { requestId, answer: NOT_SURE, agents: [], confidence: routed.confidence, status: "waiting_for_user" };
+  return { ...(result ?? { requestId, answer: NOT_SURE, agents: [], confidence: routed.confidence, status: "waiting_for_user" as const }), operation: routed.operation };
 }

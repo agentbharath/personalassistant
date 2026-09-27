@@ -65,7 +65,11 @@ export async function prepareImportForMessage(userId: string, conversationId: st
   } catch (error) {
     if (error instanceof GoogleConnectionRequiredError) return "Gmail read access is not connected. Reconnect Google and approve read-only Gmail access.";
     if (error instanceof GoogleGmailAccessError) return `Nothing was imported: ${gmailFailureMessage(error)}.`;
-    throw error;
+    // A malformed or truncated model response degrades the same way as a genuinely unreadable email (found live, R32), instead of
+    // crashing the request; the bulk scan already isolates and retries this per email (Promise.allSettled below), but a single explicit
+    // import has only this one attempt, so it needs its own fallback.
+    reportFailure("single_message_import_failed", error);
+    return "I couldn’t reliably read that email right now. Nothing was imported. Please try again.";
   }
 }
 

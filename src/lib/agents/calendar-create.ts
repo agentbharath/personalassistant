@@ -6,6 +6,7 @@ import { searchPublicWeb } from "@/lib/tools/general/tavily-search";
 import { extractCalendarEvent } from "@/lib/model/claude";
 import { createCalendarApproval } from "@/lib/workflows/calendar-create";
 import { DEFAULT_EVENT_MINUTES, normalizeTimeFromEvidence } from "./calendar-time";
+import { reportFailure } from "@/lib/observability/report";
 
 const TIME_ZONE = process.env.DEFAULT_USER_TIMEZONE ?? "America/Los_Angeles";
 const candidateSchema = z.object({ summary: z.string().min(1), start: z.string().datetime({ offset: true }), end: z.string().datetime({ offset: true }), timeZone: z.string().min(1).nullable(), location: z.string().nullable(), attendees: z.array(z.string().email()).max(20), description: z.string().nullable() });
@@ -20,7 +21,15 @@ export async function prepareCalendarCreate(input: string, userId: string, conve
     : focusedResearch;
   const evidence = research.sources.map((source, index) => `[${index + 1}] ${source.title}\n${source.snippet}\n${source.url}`).join("\n\n");
   const today = Temporal.Now.zonedDateTimeISO(TIME_ZONE).toPlainDate().toString();
-  const extracted = await extractCalendarEvent(input, evidence, today, TIME_ZONE);
+  // A malformed or truncated model response degrades to the same "nothing was created" wording already used for a genuinely underspecified
+  // event (found live, R32), rather than crashing the request.
+  let extracted: Awaited<ReturnType<typeof extractCalendarEvent>>;
+  try {
+    extracted = await extractCalendarEvent(input, evidence, today, TIME_ZONE);
+  } catch (error) {
+    reportFailure("calendar_event_extraction_failed", error);
+    return "I need a reliable date, time, or title before I can prepare the calendar event. Nothing was created. Please try again.";
+  }
   // R14.1: a learned default length applies only when the event has no end or length of its own.
   const learnings = await loadLearnings(userId).catch(() => NO_LEARNINGS);
   const learnedMinutes = learnings.calendar.durationMinutes;

@@ -294,6 +294,8 @@
 {"id": "memory-neg-learning-1", "rule": "R.memory", "input": "iherb is health", "expect": {"operation": "learning_teach"}}
 {"id": "memory-neg-casual-1", "rule": "R.memory", "input": "had pizza tonight, it was pretty good", "expect": {"operation": "casual"}}
 {"id": "compound-search-split-1", "rule": "R29", "input": "can you suggest some best protein bars and collagen", "expect": {"operation": "web_search", "splitsIntoSeparateSearches": true}}
+{"id": "compound-search-split-2", "rule": "R32", "input": "cheapest flights to LA or Vegas", "expect": {"operation": "web_search", "splitsIntoSeparateSearches": true}}
+{"id": "compound-search-no-split-decision", "rule": "R32", "input": "should I get an iPad or a Kindle for reading", "expect": {"operation": "web_search", "splitsIntoSeparateSearches": false}}
 {"id": "compound-search-split-2", "rule": "R29", "input": "best laptop and a case for it", "expect": {"operation": "web_search", "splitsIntoSeparateSearches": false}}
 {"id": "compound-search-split-3", "rule": "R29", "input": "what's the weather in Denver and how much are flights from SJC to Denver", "expect": {"operation": "web_search", "splitsIntoSeparateSearches": true}}
 {"id": "multi-general-query-1", "rule": "R19.5", "input": "plan a trip to colorado this upcoming thanksgiving weekend", "expect": {"operation": "multi", "searchQueryIncludes": "colorado"}}

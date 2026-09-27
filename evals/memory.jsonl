@@ -10,6 +10,7 @@
 {"id": "behavioral-rule-category", "message": "categorize Costco as groceries, not shopping", "existing": [], "expect": {"count": 1, "type": "rule", "strength": "hard", "stated": true, "statementIncludes": "costco"}}
 {"id": "tool-answerable-not-memorized", "message": "my dentist appointment is this Friday", "existing": [], "expect": {"count": 0}}
 {"id": "commitment-not-a-memory", "message": "remind me to reply to the landlord by Friday", "existing": [], "expect": {"count": 0}}
+{"id": "plan-request-not-a-memory", "message": "plan a trip to colorado this upcoming thanksgiving weekend", "existing": [], "expect": {"count": 0}}
 {"id": "agreement-not-a-preference", "message": "sounds good, let's go with that", "existing": [], "expect": {"count": 0}}
 {"id": "weather-unrelated", "message": "will it rain tomorrow", "existing": [], "expect": {"count": 0}}
 {"id": "household-fact", "message": "my landlord's name is Alex Chen", "existing": [], "expect": {"count": 1, "type": "fact", "statementIncludes": "alex chen"}}

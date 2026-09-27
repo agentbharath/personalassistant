@@ -75,11 +75,14 @@ export function estimateModelCostUsd(model: string, inputTokens: number, outputT
   return (inputTokens * rates.input + outputTokens * rates.output) / 1_000_000;
 }
 
-function configured(tier: "fast" | "balanced" | "high"): string {
-  if (tier === "high") return process.env.ANTHROPIC_HIGH_MODEL ?? process.env.ANTHROPIC_BALANCED_MODEL ?? configured("fast");
-  if (tier === "balanced") return process.env.ANTHROPIC_BALANCED_MODEL ?? configured("fast");
+/** Exported so a call that is going through a raw client instead of `callClaude` (a live eval's spend-metered `complete`, which never
+ * reselects `params.model` the way `callClaude` itself does below) can still ask for the model a tier actually means today. */
+export function configuredModel(tier: "fast" | "balanced" | "high"): string {
+  if (tier === "high") return process.env.ANTHROPIC_HIGH_MODEL ?? process.env.ANTHROPIC_BALANCED_MODEL ?? configuredModel("fast");
+  if (tier === "balanced") return process.env.ANTHROPIC_BALANCED_MODEL ?? configuredModel("fast");
   return process.env.ANTHROPIC_FAST_MODEL ?? "claude-haiku-4-5-20251001";
 }
+const configured = configuredModel;
 
 function modelRatesPerMillion(model: string) {
   if (/haiku/i.test(model)) return { input: 1, output: 5 };

@@ -36,6 +36,22 @@ it("passes previous periods and the current reply to the query interpreter",asyn
  expect(mocks.model.mock.calls[0][1].messages[0].content).toContain("August 2025");
 });
 
+it("shows \"All time\" instead of the code's own 1970-01-01 sentinel for \"so far\" (found live: it read like a bug, not an all-time answer)", async () => {
+ mocks.model.mockResolvedValue({content:[{type:"text",text:JSON.stringify({...plan,mode:"spending",ranges:[{from:"1970-01-01",to:"2026-09-25"}]})}]});
+ const answer=await answerFinanceQuery("how much have I spent so far","u");
+ expect(answer).toContain("All time through 2026-09-25");
+ expect(answer).not.toContain("1970-01-01");
+});
+
+it("shows the same canonical category in the transaction list as the breakdown already uses, not the raw stored casing (found live: \"Shopping\" vs \"shopping\" read like inconsistent data)", async () => {
+ mocks.list.mockResolvedValue([{ ...row("iHerb order","2026-09-15"), category: "Shopping" }, { ...row("PG&E","2026-09-17"), category: "Utilities" }]);
+ const answer=await answerFinanceQuery("show all transactions","u");
+ expect(answer).toContain("| shopping |");
+ expect(answer).toContain("| utilities |");
+ expect(answer).not.toContain("| Shopping |");
+ expect(answer).not.toContain("| Utilities |");
+});
+
 it("its JSON schema never uses minItems/maxItems on an array (Anthropic's structured output rejects that keyword, which silently broke every finance question until this was caught live)", () => {
   const walk = (node: unknown): string[] => {
     if (!node || typeof node !== "object") return [];

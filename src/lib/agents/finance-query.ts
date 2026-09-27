@@ -40,13 +40,18 @@ export async function answerFinanceQuery(input:string,userId:string,context:Cont
   .filter(row=>plan.mode!=="spending"||row.direction==="expense")
   .filter(row=>!plan.merchant||normalize(row.merchant).includes(normalize(plan.merchant)))
   .filter(row=>!plan.category||toKnownCategory(row.category)===toKnownCategory(plan.category));
- const label=plan.ranges.map(r=>`${r.from}–${r.to}`).join(", ");
+ // "1970-01-01" is the code's own sentinel for "all time"/"so far" (per the prompt above), never a real transaction date — showing it
+ // literally reads like a bug, not a deliberate "everything" answer (found live).
+ const rangeLabel=(r:{from:string;to:string})=>r.from==="1970-01-01"?`All time through ${r.to}`:`${r.from}–${r.to}`;
+ const label=plan.ranges.map(rangeLabel).join(", ");
  if(!rows.length) return `No saved ${plan.mode==="transactions"?"transactions":"spending records"} match ${label}. This does not include email records still being scanned or awaiting review.`;
  const totals=new Map<string,number>();
  for(const row of rows) {const key=`${row.currency} ${row.direction}`;totals.set(key,(totals.get(key)??0)+row.amountMinor);}
  const money=(amount:number,currency:string)=>new Intl.NumberFormat("en-US",{style:"currency",currency}).format(amount/100);
  const summary=[...totals].map(([key,amount])=>{const [currency,direction]=key.split(" ");return `- ${direction==="expense"?"Spending":direction==="transfer"?"Transfers/card repayments":"Income/refunds"}: **${money(amount,currency)}**`;}).join("\n");
- const entries=rows.map(row=>`| ${row.occurredOn} | ${safe(row.merchant)} | ${money(row.amountMinor,row.currency)} | ${row.direction} | ${safe(row.category)} |`).join("\n");
+ // The same canonical category the breakdown below already uses (found live: raw stored casing is inconsistent across write paths —
+ // "Shopping" from one importer, "shopping" from another — reading like a data bug rather than the same category shown two ways).
+ const entries=rows.map(row=>`| ${row.occurredOn} | ${safe(row.merchant)} | ${money(row.amountMinor,row.currency)} | ${row.direction} | ${safe(toKnownCategory(row.category))} |`).join("\n");
  const categories=new Map<string,number>();
  for(const row of rows){const key=`${row.currency} ${toKnownCategory(row.category)}`;categories.set(key,(categories.get(key)??0)+row.amountMinor);}
  const breakdown=[...categories].map(([key,amount])=>{const split=key.indexOf(" ");return `- ${safe(key.slice(split+1))}: ${money(amount,key.slice(0,split))}`;}).join("\n");

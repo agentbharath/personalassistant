@@ -16,6 +16,7 @@ import { ConnectionsFallback, ConnectionsSection } from "./ConnectionsSection";
 import { CalendarIcon, EditIcon, LocateIcon, MailIcon, SettingsIcon, SunIcon, WalletIcon } from "@/components/ui/icons";
 import { SettingsGroup, SettingsSection } from "./SettingsSection";
 import styles from "./settings.module.css";
+import { ButtonLink } from "@/components/ui/Button";
 
 
 export default async function SettingsPage() {
@@ -36,6 +37,12 @@ export default async function SettingsPage() {
       <SettingsGroup label="Google">
         <SettingsSection id="connections" title="Connections" help="What Daylark can reach in your Google account." icon={<MailIcon />} tone="green">
           <Suspense fallback={<ConnectionsFallback />}><ConnectionsSection userId={userId} /></Suspense>
+        </SettingsSection>
+      </SettingsGroup>
+
+      <SettingsGroup label="Finances">
+        <SettingsSection id="banks" title="Bank connections" help="Connect your bank or credit card with Plaid, review transactions, and save them to Daylark. Gmail supplies receipts and bill reminders separately." icon={<WalletIcon />} tone="green">
+          <ButtonLink href="/settings/banks">Manage bank connections</ButtonLink>
         </SettingsSection>
       </SettingsGroup>
 
