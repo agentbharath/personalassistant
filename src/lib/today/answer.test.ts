@@ -1,5 +1,7 @@
-import { describe, expect, it } from "vitest";
-import { renderDailyView } from "./answer";
+import { describe, expect, it, vi } from "vitest";
+const mocks = vi.hoisted(() => ({ loadDailyView: vi.fn() }));
+vi.mock("./load", async (importOriginal) => ({ ...(await importOriginal<object>()), loadDailyView: mocks.loadDailyView }));
+import { answerDailyView, renderDailyView } from "./answer";
 import type { DailyView } from "./load";
 
 const bill = (merchant: string, amountMinor: number, dueDate: string | null) => ({ id: merchant, merchant, amountMinor, currency: "USD", category: "utilities", statementDate: "2026-09-01", dueDate, status: "outstanding" as const, paidOn: null });
@@ -43,5 +45,37 @@ describe("the daily view as a chat answer (free)", () => {
     for (const heading of ["**Meetings**", "**Bills to pay**", "**Spending, last 7 days**"]) expect(text).toContain(`${heading}\n\n`);
     expect(text).toMatch(/\n\nBiggest: /);
     expect(text).toMatch(/\n\nTotal to pay \(USD\): /);
+  });
+
+  it("drops the Meetings section and the date heading when a day card already covers them, keeping Bills/Spending", () => {
+    const text = renderDailyView(view, { includeMeetings: false });
+    expect(text).not.toContain("Monday, September 21");
+    expect(text).not.toContain("**Meetings**");
+    expect(text).not.toContain("Dentist");
+    expect(text).toContain("**Bills to pay**");
+    expect(text).toContain("Comcast");
+    expect(text).not.toMatch(/^\n/); // no leading blank line from the dropped heading
+  });
+});
+
+describe("answerDailyView (free)", () => {
+  it("embeds a day card and shows only Bills/Spending as the visible markdown underneath it", async () => {
+    mocks.loadDailyView.mockResolvedValue(view);
+    const answer = await answerDailyView("u1");
+    expect(answer).toContain("```daylark-card");
+    const card = JSON.parse(answer.match(/```daylark-card\n([\s\S]*?)\n```/)![1]);
+    expect(card.kind).toBe("day");
+    expect(card.timeline.some((row: { label: string }) => row.label === "Dentist")).toBe(true);
+    const [text] = answer.split("\n\n```daylark-card");
+    expect(text).not.toContain("**Meetings**");
+    expect(text).toContain("**Bills to pay**");
+  });
+
+  it("falls back to the full markdown, no card, when meetings can't load", async () => {
+    mocks.loadDailyView.mockResolvedValue({ ...view, meetingsToday: { state: "needs_connection" } });
+    const answer = await answerDailyView("u1");
+    expect(answer).not.toContain("daylark-card");
+    expect(answer).toContain("**Meetings**");
+    expect(answer).toContain("Google isn't connected");
   });
 });

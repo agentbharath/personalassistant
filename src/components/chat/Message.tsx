@@ -7,6 +7,7 @@ import { Markdown } from "./Markdown";
 import { extractCard } from "@/lib/chat/card-payload";
 import { SpendingCard } from "./cards/SpendingCard";
 import { BillsCard } from "./cards/BillsCard";
+import { DayCard } from "./cards/DayCard";
 import styles from "./Message.module.css";
 
 /** Your own message, with Copy and Ask again underneath. Ask again sends the same words as a new message. */
@@ -81,7 +82,10 @@ export function AssistantMessage({ children, id, highlight, approval, resumable,
   return <article id={id} className={`${styles.assistant} ${highlight ? styles[highlight] : ""}`} aria-label={notice ? "Daylark notice" : "Daylark replied"}>
     <header className={styles.head}>Daylark</header>
     <div className={notice ? styles.notice : undefined}>{card?.kind === "spending" ? <SpendingCard payload={card} onFollowUp={onFollowUp} busy={busy} />
-      : card?.kind === "bills" ? <BillsCard payload={card} onFollowUp={onFollowUp} busy={busy} /> : <Markdown>{text}</Markdown>}</div>
+      : card?.kind === "bills" ? <BillsCard payload={card} onFollowUp={onFollowUp} busy={busy} />
+      // The day card only covers Meetings; Bills/Spending still come from the markdown below it, not a fallback duplicate.
+      : card?.kind === "day" ? <div style={{ display: "grid", gap: "var(--s-4)" }}><DayCard payload={card} /><Markdown>{text}</Markdown></div>
+      : <Markdown>{text}</Markdown>}</div>
     {(approval || resumable) && <div className={styles.actions}>
       {resumable && <Button variant="primary" disabled={busy} onClick={onContinue}>Continue scan</Button>}
       {approval && <Button variant={resumable ? "secondary" : "primary"} disabled={busy} onClick={onConfirm}><CheckIcon width={16} height={16} />{resumable ? "Import reviewed items" : "Confirm"}</Button>}

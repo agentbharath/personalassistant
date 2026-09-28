@@ -3,6 +3,9 @@ import { Chat } from "@/components/chat/Chat";
 import { AppShell } from "@/components/layout/AppShell";
 import { signOut } from "@/app/auth/actions";
 import { embedCard } from "@/lib/chat/card-payload";
+import { renderDailyView } from "@/lib/today/answer";
+import { buildDayCard } from "@/lib/today/day-card";
+import type { DailyView } from "@/lib/today/load";
 import { MOCK_RECENT, MOCK_THREAD } from "../mock";
 
 /** Development-only signed-in view with mock data, so the chat can be screenshotted and accessibility-checked without a real account. */
@@ -13,6 +16,7 @@ export default async function DesignAppPage({ searchParams }: { searchParams: Pr
   const scan = view === "scan";
   const spending = view === "spending";
   const bills = view === "bills";
+  const day = view === "day";
   const scanMessages = [
     { role: "user" as const, content: "Import my spending from the last 30 days" },
     { role: "assistant" as const, status: "waiting_for_user", content: "### Review 2 imports\n\n1. **iHerb** — $35.53 · Sep 16\n2. **Discover** — $250.00 · Sep 11 · card payment\n\n500 email summaries checked. **Scan paused** in Primary and Updates. Progress is saved for 7 days. 62 known emails remain; more pages may follow. Choose **Continue scan** to resume where this scan stopped. Continuing does not import anything.\n\nChoose **Confirm** to import the reviewed items or **Cancel**." },
@@ -55,7 +59,23 @@ export default async function DesignAppPage({ searchParams }: { searchParams: Pr
       moreCount: 0, actions: [{ label: "Mark Chase card paid", query: "I paid the Chase card bill" }],
     }) },
   ];
+  const dailyView: DailyView = {
+    today: "2026-09-28",
+    meetingsToday: { state: "ok", value: [
+      { id: "1", summary: "Standup", start: "2026-09-28T16:30:00Z", end: "2026-09-28T16:45:00Z", allDay: false },
+      { id: "2", summary: "Design review", start: "2026-09-28T18:00:00Z", end: "2026-09-28T19:00:00Z", allDay: false },
+      { id: "3", summary: "1:1", start: "2026-09-28T20:00:00Z", end: "2026-09-28T20:30:00Z", allDay: false },
+      { id: "4", summary: "Sprint planning", start: "2026-09-28T23:00:00Z", end: "2026-09-29T00:00:00Z", allDay: false },
+    ] },
+    meetingsAhead: { state: "ok", value: [] },
+    bills: { state: "ok", value: { overdue: [], dueToday: [], dueThisWeek: [{ id: "b1", merchant: "Chase card", amountMinor: 84600, currency: "USD", category: "other", statementDate: "2026-09-01", dueDate: "2026-09-29", status: "outstanding", paidOn: null }], dueLater: [], noDueDate: [] } },
+    spending: { state: "ok", value: { currency: "USD", from: "2026-09-21", to: "2026-09-27", total: 32506, count: 8, previousTotal: 89000, changePercent: -63, dailyAverage: 4644, categories: [{ category: "groceries", amountMinor: 15000, sharePercent: 46, entries: [] }], biggest: { merchant: "Trader Joe's", amountMinor: 8000, occurredOn: "2026-09-24" }, otherCurrencyCount: 0 } },
+  };
+  const dayMessages = [
+    { role: "user" as const, content: "what does my day look like?" },
+    { role: "assistant" as const, content: embedCard(renderDailyView(dailyView, { includeMeetings: false }), buildDayCard(dailyView, "2026-09-28T17:40:00Z")!) },
+  ];
   return <AppShell title={thread ? "iHerb receipts" : "New conversation"} email="you@example.com" signOutAction={signOut} recent={MOCK_RECENT} activeConversationId={thread ? MOCK_RECENT[0].id : undefined}>
-    <Chat key={view ?? "empty"} title={thread ? "iHerb receipts" : undefined} conversationId={thread ? MOCK_RECENT[0].id : undefined} initialMessages={scan ? scanMessages : thread ? MOCK_THREAD : spending ? spendingMessages : bills ? billsMessages : []} />
+    <Chat key={view ?? "empty"} title={thread ? "iHerb receipts" : undefined} conversationId={thread ? MOCK_RECENT[0].id : undefined} initialMessages={scan ? scanMessages : thread ? MOCK_THREAD : spending ? spendingMessages : bills ? billsMessages : day ? dayMessages : []} />
   </AppShell>;
 }

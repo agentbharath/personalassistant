@@ -1,6 +1,8 @@
 import { Temporal } from "@js-temporal/polyfill";
 import type { CalendarEvent } from "@/lib/tools/calendar/google-calendar";
+import { embedCard } from "@/lib/chat/card-payload";
 import { billTotalsByCurrency, money } from "./brief";
+import { buildDayCard } from "./day-card";
 import { loadDailyView, type DailyView, type Section } from "./load";
 
 const TIME_ZONE = process.env.DEFAULT_USER_TIMEZONE ?? "America/Los_Angeles";
@@ -18,15 +20,26 @@ const problem = (part: Section<unknown>, what: string) => part.state === "needs_
   ? `I can't see ${what} because Google isn't connected. Connect it in Settings.`
   : `I couldn't load ${what} just now. Nothing was changed.`;
 
-/** R26: the daily view as a chat answer. It is the same data as the Perch page, written out, and no model reads or writes any of it. */
-export function renderDailyView(view: DailyView) {
-  const lines: string[] = [`### ${Temporal.PlainDate.from(view.today).toLocaleString("en-US", { weekday: "long", month: "long", day: "numeric" })}`];
+/**
+ * R26: the daily view as a chat answer. It is the same data as the Perch page, written out, and no model reads or writes any of it.
+ * `includeMeetings: false` drops the Meetings section -- used when a day card already covers it visually, so the
+ * markdown underneath adds Bills/Spending rather than repeating the same meetings twice. The full text (this
+ * default) is still what a non-card client or "Copy answer" without the card ever sees, so it's never optional
+ * when there is no card to cover the gap.
+ */
+export function renderDailyView(view: DailyView, options?: { includeMeetings?: boolean }) {
+  const includeMeetings = options?.includeMeetings ?? true;
+  // The heading names the day, which the day card's own eyebrow already shows -- skip it here too, so the
+  // remainder shown under that card doesn't repeat "Monday, September 28" right above "Bills to pay".
+  const lines: string[] = includeMeetings ? [`### ${Temporal.PlainDate.from(view.today).toLocaleString("en-US", { weekday: "long", month: "long", day: "numeric" })}`] : [];
 
-  lines.push("", "**Meetings**", "");
-  if (view.meetingsToday.state !== "ok") lines.push(problem(view.meetingsToday, "your meetings"));
-  else {
-    lines.push(...(view.meetingsToday.value.length ? view.meetingsToday.value.map((event) => `- ${when(event, false)} · ${event.summary}${event.location ? ` (${event.location})` : ""}`) : ["Nothing on your calendar today."]));
-    if (view.meetingsAhead.state === "ok" && view.meetingsAhead.value.length) lines.push("", "_Coming up this week_", "", ...view.meetingsAhead.value.slice(0, 6).map((event) => `- ${when(event, true)} · ${event.summary}`));
+  if (includeMeetings) {
+    lines.push("", "**Meetings**", "");
+    if (view.meetingsToday.state !== "ok") lines.push(problem(view.meetingsToday, "your meetings"));
+    else {
+      lines.push(...(view.meetingsToday.value.length ? view.meetingsToday.value.map((event) => `- ${when(event, false)} · ${event.summary}${event.location ? ` (${event.location})` : ""}`) : ["Nothing on your calendar today."]));
+      if (view.meetingsAhead.state === "ok" && view.meetingsAhead.value.length) lines.push("", "_Coming up this week_", "", ...view.meetingsAhead.value.slice(0, 6).map((event) => `- ${when(event, true)} · ${event.summary}`));
+    }
   }
 
   lines.push("", "**Bills to pay**", "");
@@ -53,9 +66,14 @@ export function renderDailyView(view: DailyView) {
       "", ...week.categories.slice(0, 4).map((item) => `- ${titleCase(item.category)}, ${money(item.amountMinor, week.currency)} (${item.sharePercent}%)`));
     if (week.biggest) lines.push("", `Biggest: ${week.biggest.merchant}, ${money(week.biggest.amountMinor, week.currency)} on ${shortDate(week.biggest.occurredOn)}.`);
   }
-  return lines.join("\n");
+  return lines.join("\n").replace(/^\n+/, "");
 }
 
 export async function answerDailyView(userId: string) {
-  return renderDailyView(await loadDailyView(userId));
+  const view = await loadDailyView(userId);
+  const card = buildDayCard(view);
+  // When there's a card, it fully covers Meetings, so the markdown underneath (also shown, not just a copy
+  // fallback) adds only what the card doesn't: Bills and Spending. Without one, the markdown is the whole answer.
+  const text = renderDailyView(view, { includeMeetings: !card });
+  return card ? embedCard(text, card) : text;
 }

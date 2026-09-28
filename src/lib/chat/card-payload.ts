@@ -40,13 +40,24 @@ export type BillsCardPayload = {
   moreCount: number;
   actions: { label: string; query: string }[];
 };
-export type CardPayload = SpendingCardPayload | BillsCardPayload;
+export type DayCardPayload = {
+  kind: "day";
+  dateLabel: string;
+  count: number;
+  insight: string;
+  /** Today's timed meetings in order, with a "Free" row inserted for any gap of an hour or more between two of
+   * them (no row before the first meeting or after the last -- there is no fixed workday boundary to measure
+   * against). `past`/`startingSoon` are computed once, at answer time; like the rest of a chat message, this
+   * reads as a snapshot of that moment, not a live view. */
+  timeline: { time: string; label: string; duration: string | null; kind: "meeting" | "free" | "allday"; startingIn: string | null; past: boolean; location: string | null }[];
+};
+export type CardPayload = SpendingCardPayload | BillsCardPayload | DayCardPayload;
 
 export function embedCard(text: string, payload: CardPayload): string {
   return `${text}\n\n\`\`\`daylark-card\n${JSON.stringify(payload)}\n\`\`\``;
 }
 
-const KNOWN_KINDS = new Set(["spending", "bills"]);
+const KNOWN_KINDS = new Set(["spending", "bills", "day"]);
 
 /** Never throws: a malformed or unrecognized payload just means no card, the prose (unstripped) stands alone. */
 export function extractCard(content: string): { text: string; card: CardPayload | null } {
