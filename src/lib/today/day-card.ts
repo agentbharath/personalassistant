@@ -29,20 +29,28 @@ function overlapsHours(event: CalendarEvent, fromHour: number, toHour: number): 
   return Temporal.ZonedDateTime.compare(start, windowEnd) < 0 && Temporal.ZonedDateTime.compare(end, windowStart) > 0;
 }
 
-function dayInsight(timed: CalendarEvent[], longestGap: { from: string; to: string; minutes: number } | null): string {
-  if (!timed.length) return "Nothing on your calendar today.";
+/** `dayWord` names the day in a sentence ("today", "tomorrow", "Friday evening", ...) -- "today" for the
+ * daily_view card, whatever the resolved window's own label says for an arbitrary calendar_query day. */
+function dayInsight(timed: CalendarEvent[], longestGap: { from: string; to: string; minutes: number } | null, dayWord: string): string {
+  if (!timed.length) return `Nothing on your calendar ${dayWord}.`;
   const morning = timed.some((event) => overlapsHours(event, 0, 12));
   const afternoon = timed.some((event) => overlapsHours(event, 12, 18));
-  const lead = morning && afternoon ? "Busy most of the day." : morning ? "Busy morning, open afternoon." : afternoon ? "Open morning, busy afternoon." : "Mostly open today.";
+  const lead = morning && afternoon ? "Busy most of the day." : morning ? "Busy morning, open afternoon." : afternoon ? "Open morning, busy afternoon." : `Mostly open ${dayWord}.`;
   const focus = longestGap ? ` Your longest focus block is ${clock(longestGap.from)} to ${clock(longestGap.to)}.` : timed.length > 1 ? " Back-to-back most of the day." : "";
   return `${lead}${focus}`;
 }
 
-/** Null when meetings couldn't load (needs_connection/unavailable) -- the surrounding markdown already explains why, so the card just doesn't add a broken one on top. */
-export function buildDayCard(view: DailyView, now: string = Temporal.Now.instant().toString()): DayCardPayload | null {
-  if (view.meetingsToday.state !== "ok") return null;
-  const timed = view.meetingsToday.value.filter((event) => !event.allDay).sort((a, b) => (a.start < b.start ? -1 : 1));
-  const allDay = view.meetingsToday.value.filter((event) => event.allDay);
+/**
+ * The shared timeline builder behind both the daily_view day card (today's meetings specifically) and the
+ * calendar_query day card (any single day the person asks about) -- one visual language for "what does a day of
+ * meetings look like," regardless of which day or which operation asked. `dateLabel` is the caller's own display
+ * label (e.g. "Monday, September 28" or a resolved window's own label), since only the caller knows which day
+ * this is and how it should read in its own context.
+ */
+export function buildTimelineCard(events: CalendarEvent[], dateLabel: string, now: string = Temporal.Now.instant().toString(), options: { dayWord?: string; standalone?: boolean } = {}): DayCardPayload {
+  const { dayWord = "today", standalone = false } = options;
+  const timed = events.filter((event) => !event.allDay).sort((a, b) => (a.start < b.start ? -1 : 1));
+  const allDay = events.filter((event) => event.allDay);
 
   const timeline: DayCardPayload["timeline"] = allDay.map((event) => ({ time: "", label: event.summary, duration: null, kind: "allday", startingIn: null, past: false, location: event.location ?? null }));
 
@@ -59,11 +67,12 @@ export function buildDayCard(view: DailyView, now: string = Temporal.Now.instant
     if (!longestGap || gapMinutes > longestGap.minutes) longestGap = { from: event.end, to: next.start, minutes: gapMinutes };
   });
 
-  return {
-    kind: "day",
-    dateLabel: Temporal.PlainDate.from(view.today).toLocaleString("en-US", { weekday: "long", month: "long", day: "numeric" }),
-    count: view.meetingsToday.value.length,
-    insight: dayInsight(timed, longestGap),
-    timeline,
-  };
+  return { kind: "day", dateLabel, count: events.length, insight: dayInsight(timed, longestGap, dayWord), timeline, standalone };
+}
+
+/** Null when meetings couldn't load (needs_connection/unavailable) -- the surrounding markdown already explains why, so the card just doesn't add a broken one on top. */
+export function buildDayCard(view: DailyView, now: string = Temporal.Now.instant().toString()): DayCardPayload | null {
+  if (view.meetingsToday.state !== "ok") return null;
+  const dateLabel = Temporal.PlainDate.from(view.today).toLocaleString("en-US", { weekday: "long", month: "long", day: "numeric" });
+  return buildTimelineCard(view.meetingsToday.value, dateLabel, now);
 }

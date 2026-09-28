@@ -28,6 +28,7 @@ describe("the day card's timeline (free)", () => {
     ] });
     const card = buildDayCard(view, "2026-09-28T15:00:00Z");
     expect(card!.count).toBe(4);
+    expect(card!.standalone).toBe(false); // daily_view's card only covers Meetings; the markdown below it adds Bills/Spending
     const kinds = card!.timeline.map((row) => `${row.kind}:${row.label}`);
     expect(kinds).toEqual(["meeting:Standup", "free:Free", "meeting:Design review", "free:Free", "meeting:1:1", "meeting:Sprint planning"]);
     expect(card!.timeline.find((row) => row.label === "Design review")?.duration).toBe("1 hr");

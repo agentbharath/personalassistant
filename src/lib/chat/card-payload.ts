@@ -47,6 +47,10 @@ export type DayCardPayload = {
   dateLabel: string;
   count: number;
   insight: string;
+  /** True when this card is the whole answer (calendar_query, any single day asked about) -- false for daily_view,
+   * whose card only covers Meetings, with Bills/Spending still shown as markdown below it. Only daily_view's
+   * false case should also render that trailing markdown; a standalone card would just be duplicating itself. */
+  standalone: boolean;
   /** Today's timed meetings in order, with a "Free" row inserted for any gap of an hour or more between two of
    * them (no row before the first meeting or after the last -- there is no fixed workday boundary to measure
    * against). `past`/`startingSoon` are computed once, at answer time; like the rest of a chat message, this

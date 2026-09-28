@@ -85,8 +85,9 @@ export function AssistantMessage({ children, id, highlight, approval, resumable,
     <header className={styles.head}>Daylark</header>
     <div className={notice ? styles.notice : undefined}>{card?.kind === "spending" ? <SpendingCard payload={card} onFollowUp={onFollowUp} busy={busy} />
       : card?.kind === "bills" ? <BillsCard payload={card} onFollowUp={onFollowUp} busy={busy} />
-      // The day card only covers Meetings; Bills/Spending still come from the markdown below it, not a fallback duplicate.
-      : card?.kind === "day" ? <div style={{ display: "grid", gap: "var(--s-4)" }}><DayCard payload={card} /><Markdown>{text}</Markdown></div>
+      // A standalone day card (calendar_query, any single day) is the whole answer; daily_view's isn't -- its card
+      // only covers Meetings, with Bills/Spending still coming from the markdown below it, not a fallback duplicate.
+      : card?.kind === "day" ? (card.standalone ? <DayCard payload={card} /> : <div style={{ display: "grid", gap: "var(--s-4)" }}><DayCard payload={card} /><Markdown>{text}</Markdown></div>)
       : card?.kind === "email" ? <EmailCard payload={card} />
       : card?.kind === "recall-availability" ? <RecallAvailabilityCard payload={card} onFollowUp={onFollowUp} busy={busy} />
       : <Markdown>{text}</Markdown>}</div>

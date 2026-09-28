@@ -4,7 +4,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { signOut } from "@/app/auth/actions";
 import { embedCard } from "@/lib/chat/card-payload";
 import { renderDailyView } from "@/lib/today/answer";
-import { buildDayCard } from "@/lib/today/day-card";
+import { buildDayCard, buildTimelineCard } from "@/lib/today/day-card";
 import type { DailyView } from "@/lib/today/load";
 import { MOCK_RECENT, MOCK_THREAD } from "../mock";
 
@@ -20,6 +20,7 @@ export default async function DesignAppPage({ searchParams }: { searchParams: Pr
   const day = view === "day";
   const email = view === "email";
   const recall = view === "recall";
+  const calendarQuery = view === "calendar-query";
   const scanMessages = [
     { role: "user" as const, content: "Import my spending from the last 30 days" },
     { role: "assistant" as const, status: "waiting_for_user", content: "### Review 2 imports\n\n1. **iHerb** — $35.53 · Sep 16\n2. **Discover** — $250.00 · Sep 11 · card payment\n\n500 email summaries checked. **Scan paused** in Primary and Updates. Progress is saved for 7 days. 62 known emails remain; more pages may follow. Choose **Continue scan** to resume where this scan stopped. Continuing does not import anything.\n\nChoose **Confirm** to import the reviewed items or **Cancel**." },
@@ -128,7 +129,20 @@ export default async function DesignAppPage({ searchParams }: { searchParams: Pr
       planQuery: "It was {name}. Plan that for it.", noneQuery: "None of those were it.",
     }) },
   ];
+  const calendarQueryMessages = [
+    { role: "user" as const, content: "what's my calendar looking like tomorrow" },
+    { role: "assistant" as const, content: embedCard(
+      "Here’s your calendar tomorrow:\n• Discussion on Plaid integration with Daylark — Tue, Sep 29, 9:00 AM–10:00 AM\n• Discussion of Daylark's future — Tue, Sep 29, 3:00 PM–3:30 PM",
+      buildTimelineCard(
+        [
+          { id: "1", summary: "Discussion on Plaid integration with Daylark", start: "2026-09-29T16:00:00Z", end: "2026-09-29T17:00:00Z", allDay: false },
+          { id: "2", summary: "Discussion of Daylark's future", start: "2026-09-29T22:00:00Z", end: "2026-09-29T22:30:00Z", allDay: false },
+        ],
+        "Tuesday, September 29", "2026-09-28T23:00:00Z", { dayWord: "tomorrow", standalone: true },
+      ),
+    ) },
+  ];
   return <AppShell title={thread ? "iHerb receipts" : "New conversation"} email="you@example.com" signOutAction={signOut} recent={MOCK_RECENT} activeConversationId={thread ? MOCK_RECENT[0].id : undefined}>
-    <Chat key={view ?? "empty"} title={thread ? "iHerb receipts" : undefined} conversationId={thread ? MOCK_RECENT[0].id : undefined} initialMessages={scan ? scanMessages : thread ? MOCK_THREAD : spending ? spendingMessages : spendingSimple ? spendingSimpleMessages : bills ? billsMessages : day ? dayMessages : email ? emailMessages : recall ? recallMessages : []} />
+    <Chat key={view ?? "empty"} title={thread ? "iHerb receipts" : undefined} conversationId={thread ? MOCK_RECENT[0].id : undefined} initialMessages={scan ? scanMessages : thread ? MOCK_THREAD : spending ? spendingMessages : spendingSimple ? spendingSimpleMessages : bills ? billsMessages : day ? dayMessages : email ? emailMessages : recall ? recallMessages : calendarQuery ? calendarQueryMessages : []} />
   </AppShell>;
 }
