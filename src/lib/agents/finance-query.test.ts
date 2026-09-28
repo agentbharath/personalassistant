@@ -60,12 +60,12 @@ it("embeds a spending card (total, vs-prior comparison, category breakdown) for 
  expect(card.kind).toBe("spending");
  expect(card.periodLabel).toContain("2026-09-01");
  expect(card.filterLabel).toBeNull();
- expect(card.summary.total).toBe(51400);
- expect(card.summary.previousTotal).toBe(50000);
- expect(card.summary.changePercent).toBe(3);
- expect(card.summary.categories.map((c:{category:string})=>c.category)).toEqual(["groceries","restaurants"]);
- expect(card.insight).toContain("Up 3% from the prior period");
- expect(card.insight).toContain("Groceries is the largest share");
+ expect(card.total).toBe(51400);
+ expect(card.priorTotal).toBe(50000);
+ expect(card.changePercent).toBe(3);
+ expect(card.changes.map((c:{category:string})=>c.category)).toEqual(["restaurants","groceries"]);
+ expect(card.insight).toContain("Up 3% vs last month");
+ expect(card.insight).toContain("Restaurants drove most of the increase");
 });
 
 it("does not embed a card for a multi-range spending query (no single prior period to compare)", async () => {
@@ -84,7 +84,7 @@ it("labels the card with the requested category when the query is scoped to one"
  const answer=await answerFinanceQuery("how much did I spend on food this month","u");
  const card=JSON.parse(answer.match(/```daylark-card\n([\s\S]*?)\n```/)![1]);
  expect(card.filterLabel).toBe("restaurants");
- expect(card.summary.total).toBe(100);
+ expect(card.total).toBe(100);
 });
 
 it("shows the same canonical category in the transaction list as the breakdown already uses, not the raw stored casing (found live: \"Shopping\" vs \"shopping\" read like inconsistent data)", async () => {

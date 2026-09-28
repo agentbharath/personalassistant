@@ -19,10 +19,14 @@ describe("the buttons under your own message (free)", () => {
 
 describe("a message carrying a card payload (free)", () => {
   const payload: SpendingCardPayload = {
-    kind: "spending", periodLabel: "2026-09-01–2026-09-30", filterLabel: "restaurants", insight: "Up 12% from the prior period.",
-    summary: { currency: "USD", from: "2026-09-01", to: "2026-09-30", total: 19600, count: 1, previousTotal: 17500, changePercent: 12, dailyAverage: 653,
-      categories: [{ category: "restaurants", amountMinor: 19600, sharePercent: 100, entries: [{ merchant: "DoorDash", amountMinor: 19600, occurredOn: "2026-09-10" }] }],
-      biggest: { merchant: "DoorDash", amountMinor: 19600, occurredOn: "2026-09-10" }, otherCurrencyCount: 0 },
+    kind: "spending", periodLabel: "2026-09-01–2026-09-30", filterLabel: "restaurants", currency: "USD",
+    total: 19600, priorTotal: 17500, changePercent: 12, comparisonLabel: "vs last month", insight: "Up 12% from the prior period.",
+    running: [{ current: 0, prior: 0 }, { current: 19600, prior: 17500 }],
+    xTicks: [{ offset: 0, label: "Sep 1" }, { offset: 1, label: "Sep 2" }],
+    changes: [{ category: "restaurants", now: 19600, before: 17500, delta: 2100 }],
+    topMerchants: [{ merchant: "DoorDash", amountMinor: 19600, count: 1 }],
+    actions: [{ label: "Compare to last month", query: "compare this to last month" }],
+    count: 1, otherCurrencyCount: 0,
   };
 
   it("renders the rich card instead of markdown, and never leaks the raw JSON fence into the page", () => {

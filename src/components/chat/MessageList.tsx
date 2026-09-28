@@ -72,6 +72,7 @@ export function MessageList({ messages, pending, progress, takingLonger, hasEarl
         onContinue={() => onAction("continue_scan")}
         onCancel={() => onAction("cancel")}
         onRetry={() => onAction("retry")}
+        onFollowUp={onFollowUp}
       >{message.content}</AssistantMessage>;
     })}
     {pending && <PendingMessage label={progress} takingLonger={takingLonger} />}

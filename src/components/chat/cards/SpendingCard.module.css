@@ -11,12 +11,59 @@
 
 .insight { margin: 0; color: var(--muted); font-size: var(--text-sm); }
 
-.cats { display: grid; gap: var(--s-3); }
-.catRow { display: grid; gap: 6px; }
-.catHead { display: flex; align-items: center; justify-content: space-between; gap: var(--s-4); font-size: var(--text-sm); }
-.catName { color: var(--ink-2); }
-.catAmount { font-variant-numeric: tabular-nums; font-weight: 500; }
-.bar { display: block; height: 6px; border-radius: var(--r-pill); background: var(--accent-soft); overflow: hidden; }
-.fill { display: block; height: 100%; border-radius: var(--r-pill); background: var(--green); }
+.section { display: grid; gap: var(--s-2); padding-top: var(--s-3); border-top: 1px solid var(--line); }
+.sectionHead { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s-2); }
+.label { color: var(--faint); font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
+.legend { display: flex; align-items: center; gap: var(--s-1); color: var(--muted); font-size: var(--text-xs); }
+.legend i { display: inline-block; width: 10px; height: 2px; margin-left: var(--s-2); border-radius: var(--r-pill); background: currentColor; }
+.legend i:first-child { margin-left: 0; }
+.legendCurrent { background: var(--ink) !important; height: 2px !important; }
+.legendPrior { background: var(--faint) !important; height: 0 !important; border-top: 2px dashed var(--faint); }
+.legendLess { width: 8px !important; height: 8px !important; border-radius: 999px !important; background: var(--green) !important; }
+.legendMore { width: 8px !important; height: 8px !important; border-radius: 999px !important; background: var(--amber) !important; }
+
+/* Running-total chart: plain SVG line chart, no charting library -- gridlines/labels are evenly spaced by
+   construction (niceStep), so a CSS flex column with justify-content: space-between lines the y-axis labels
+   up with the SVG's gridlines without any extra positioning math. */
+.chartRow { display: flex; gap: var(--s-3); height: 8.75rem; }
+.yAxis { display: flex; flex-direction: column; justify-content: space-between; flex: none; color: var(--faint); font-size: var(--text-xs); font-variant-numeric: tabular-nums; text-align: right; }
+.chartArea { position: relative; flex: 1; min-width: 0; }
+.chart { display: block; width: 100%; height: 100%; overflow: visible; }
+.gridline { stroke: var(--line); stroke-width: 1; }
+.priorLine { fill: none; stroke: var(--faint); stroke-width: 2; stroke-dasharray: 5 4; }
+.currentLine { fill: none; stroke: var(--ink); stroke-width: 2; }
+.endLabelPrior, .endLabelCurrent { position: absolute; right: 0; transform: translateY(-50%); padding: 0 3px; border-radius: 3px; background: var(--surface); font-size: var(--text-xs); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.endLabelPrior { color: var(--faint); }
+.endLabelCurrent { color: var(--ink); font-weight: 600; z-index: 1; }
+.xAxis { position: relative; height: var(--s-4); margin-left: 3.25rem; color: var(--faint); font-size: var(--text-xs); }
+.xAxis span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
+.xAxis span:first-child { transform: none; }
+.xAxis span:last-child { transform: translateX(-100%); }
+
+.changes { display: grid; gap: var(--s-3); }
+.changeRow { display: grid; grid-template-columns: 8rem 1fr 4.5rem; align-items: center; gap: var(--s-3); }
+.changeLabel { font-size: var(--text-sm); color: var(--ink-2); }
+.changeLabel small { display: block; color: var(--faint); font-size: var(--text-xs); font-weight: 400; }
+.changeTrack { position: relative; height: 6px; border-radius: var(--r-pill); background: var(--line); }
+.changeFill { position: absolute; top: 0; bottom: 0; border-radius: var(--r-pill); }
+.changeFill.less { right: 50%; background: var(--green); }
+.changeFill.more { left: 50%; background: var(--amber); }
+.changeDelta { text-align: right; font-variant-numeric: tabular-nums; font-size: var(--text-sm); font-weight: 600; }
+.changeDelta.less { color: var(--green); }
+.changeDelta.more { color: var(--amber); }
+
+.merchants { display: grid; }
+.merchantRow { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); padding: var(--s-2) 0; border-top: 1px solid var(--line); font-size: var(--text-sm); }
+.merchantRow:first-child { border-top: 0; padding-top: 0; }
+.merchantName { color: var(--ink-2); }
+.tag { margin-left: var(--s-2); padding: 1px var(--s-2); border-radius: var(--r-pill); background: var(--accent-soft); color: var(--muted); font-size: 0.6875rem; font-weight: 600; white-space: nowrap; }
+.merchantAmount { font-variant-numeric: tabular-nums; font-weight: 500; white-space: nowrap; }
+
+.actions { display: flex; flex-wrap: wrap; gap: var(--s-2); padding-top: var(--s-1); }
 
 .foot { margin: 0; padding-top: var(--s-3); border-top: 1px solid var(--line); color: var(--muted); font-size: var(--text-sm); }
+
+@media (max-width: 420px) {
+  .changeRow { grid-template-columns: 6rem 1fr 4rem; }
+  .xAxis span:not(:first-child):not(:last-child) { display: none; }
+}

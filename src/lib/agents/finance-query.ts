@@ -6,7 +6,7 @@ import { listTransactions, type StoredTransaction } from "@/lib/tools/finance/tr
 import { syncIfStale } from "@/lib/plaid/service";
 import { followupContext, FOLLOWUP_RULES } from "@/lib/conversations/followup";
 import { recentContext, type ContextTurn } from "@/lib/conversations/context";
-import { periodSpending, type WeeklySpending } from "@/lib/today/brief";
+import { periodSpending } from "@/lib/today/brief";
 import { embedCard, type SpendingCardPayload } from "@/lib/chat/card-payload";
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(value => {try {return Temporal.PlainDate.from(value).toString() === value;} catch {return false;}});
 export const financeQuerySchema = z.object({
@@ -77,17 +77,88 @@ async function buildSpendingCard(userId:string,from:string,to:string,currentRows
  const normalize=(s:string)=>s.normalize("NFKC").toLowerCase().replace(/[^\p{L}\p{N}]+/gu," ").trim();
  const priorRows=(await listTransactions(userId,prior.from,prior.to).catch(()=>[] as StoredTransaction[]))
   .filter(row=>!merchantFilter||normalize(row.merchant).includes(normalize(merchantFilter)))
-  .filter(row=>!categoryFilter||toKnownCategory(row.category)===toKnownCategory(categoryFilter));
+  .filter(row=>!categoryFilter||toKnownCategory(row.category)===toKnownCategory(categoryFilter))
+  .filter(row=>row.direction==="expense");
  const summary=periodSpending([...currentRows,...priorRows],from,to,prior.from,prior.to);
  if(!summary) return null;
- return {kind:"spending",periodLabel,filterLabel:categoryFilter?toKnownCategory(categoryFilter):null,insight:spendingInsight(summary),summary};
+ const mine=currentRows.filter(row=>row.direction==="expense"&&row.currency===summary.currency);
+ const priorMine=priorRows.filter(row=>row.currency===summary.currency);
+ const comparisonLabel=comparisonLabelFor(from,to);
+ const changes=categoryChanges(mine,priorMine);
+ return {kind:"spending",periodLabel,filterLabel:categoryFilter?toKnownCategory(categoryFilter):null,
+  currency:summary.currency,total:summary.total,priorTotal:summary.previousTotal,changePercent:summary.changePercent,comparisonLabel,
+  insight:spendingInsight(summary.changePercent,comparisonLabel,changes),
+  running:dailyRunning(mine,priorMine,from,to),xTicks:xTicksFor(from,to),changes,
+  topMerchants:topMerchantsFor(mine),actions:actionsFor(comparisonLabel,changes),
+  count:summary.count,otherCurrencyCount:summary.otherCurrencyCount};
 }
-function spendingInsight(summary:WeeklySpending):string {
- const trend=summary.changePercent===null?"":summary.changePercent===0?"Level with the prior period.":summary.changePercent>0?`Up ${summary.changePercent}% from the prior period.`:`Down ${Math.abs(summary.changePercent)}% from the prior period.`;
- const top=summary.categories[0];
+function comparisonLabelFor(from:string,to:string):string {
+ const days=Temporal.PlainDate.from(from).until(Temporal.PlainDate.from(to)).days+1;
+ if(days<=1) return "vs yesterday";
+ if(days<=9) return "vs the week before";
+ if(days<=35) return "vs last month";
+ return "vs the period before";
+}
+function spendingInsight(changePercent:number|null,comparisonLabel:string,changes:SpendingCardPayload["changes"]):string {
+ if(changePercent===null) return "First time comparing -- there was no spending in the period before this one.";
+ const trend=changePercent===0?`Level ${comparisonLabel}.`:`${changePercent>0?"Up":"Down"} ${Math.abs(changePercent)}% ${comparisonLabel}.`;
+ const driver=changes[0];
+ if(!driver) return trend;
  const cap=(s:string)=>s.charAt(0).toUpperCase()+s.slice(1);
- const driver=top?`${cap(top.category)} is the largest share, at ${new Intl.NumberFormat("en-US",{style:"currency",currency:summary.currency}).format(top.amountMinor/100)}.`:"";
- return [trend,driver].filter(Boolean).join(" ");
+ const money=(amount:number)=>new Intl.NumberFormat("en-US",{style:"currency",currency:"USD"}).format(amount/100);
+ const drove=driver.delta>0?`${cap(driver.category)} drove most of the increase, up ${money(driver.delta)}.`:`${cap(driver.category)} is the biggest reason spending is down, off ${money(Math.abs(driver.delta))}.`;
+ return `${trend} ${drove}`;
+}
+/** Cumulative totals by day offset from the period start, for the "running total" chart -- `priorPeriod` is always
+ * the same length as [from,to], so the two series line up one-to-one without needing to carry real prior dates. */
+function dailyRunning(mine:SpendingRow[],priorMine:SpendingRow[],from:string,to:string):SpendingCardPayload["running"] {
+ const days=Temporal.PlainDate.from(from).until(Temporal.PlainDate.from(to)).days+1;
+ const start=Temporal.PlainDate.from(from);
+ const bucket=(rows:SpendingRow[])=>{
+  const daily=new Array(days).fill(0);
+  for(const row of rows){const offset=start.until(Temporal.PlainDate.from(row.occurredOn)).days;if(offset>=0&&offset<days) daily[offset]+=row.amountMinor;}
+  let running=0;
+  return daily.map(amount=>(running+=amount));
+ };
+ const currentDaily=bucket(mine),priorDaily=bucket(priorMine);
+ return currentDaily.map((current,i)=>({current,prior:priorDaily[i]}));
+}
+function xTicksFor(from:string,to:string):SpendingCardPayload["xTicks"] {
+ const days=Temporal.PlainDate.from(from).until(Temporal.PlainDate.from(to)).days+1;
+ const start=Temporal.PlainDate.from(from);
+ const label=(offset:number)=>start.add({days:offset}).toLocaleString("en-US",days<=10?{weekday:"short",day:"numeric"}:{month:"short",day:"numeric"});
+ if(days<=10) return Array.from({length:days},(_,offset)=>({offset,label:label(offset)}));
+ const count=Math.min(6,days);
+ const offsets=new Set(Array.from({length:count},(_,i)=>Math.round((i*(days-1))/(count-1))));
+ return [...offsets].sort((a,b)=>a-b).map(offset=>({offset,label:label(offset)}));
+}
+/** Top categories by absolute dollar swing vs the prior period; unchanged categories (delta 0, including ones
+ * absent from both periods) are dropped, since a flat line adds nothing to a "what changed" view. */
+function categoryChanges(mine:SpendingRow[],priorMine:SpendingRow[]):SpendingCardPayload["changes"] {
+ const now=byCurrency(mine,row=>toKnownCategory(row.category)), before=byCurrency(priorMine,row=>toKnownCategory(row.category));
+ const categories=new Set([...now.keys(),...before.keys()].map(key=>key.slice(key.indexOf(" ")+1)));
+ return [...categories].map(category=>{
+  const key=`${mine[0]?.currency??priorMine[0]?.currency??"USD"} ${category}`;
+  const n=now.get(key)??0,b=before.get(key)??0;
+  return {category,now:n,before:b,delta:n-b};
+ }).filter(change=>change.delta!==0).sort((a,b)=>Math.abs(b.delta)-Math.abs(a.delta)).slice(0,6);
+}
+function topMerchantsFor(mine:SpendingRow[]):SpendingCardPayload["topMerchants"] {
+ const totals=new Map<string,{merchant:string;amountMinor:number;count:number}>();
+ for(const row of mine) {
+  const key=normalizeMerchant(row.merchant);
+  const entry=totals.get(key)??{merchant:row.merchant,amountMinor:0,count:0};
+  entry.amountMinor+=row.amountMinor;entry.count+=1;totals.set(key,entry);
+ }
+ return [...totals.values()].sort((a,b)=>b.amountMinor-a.amountMinor).slice(0,5);
+}
+function actionsFor(comparisonLabel:string,changes:SpendingCardPayload["changes"]):SpendingCardPayload["actions"] {
+ const actions:SpendingCardPayload["actions"]=[];
+ const other=changes.find(change=>change.category==="other"&&change.now>0);
+ if(other) actions.push({label:`Categorize the ${new Intl.NumberFormat("en-US",{style:"currency",currency:"USD"}).format(other.now/100)} in Other`,query:"help me categorize my Other spending this period"});
+ const compareQuery=comparisonLabel==="vs the week before"?"compare this to last week":comparisonLabel==="vs last month"?"compare this to last month":comparisonLabel==="vs yesterday"?"compare this to yesterday":"compare this to the period before";
+ actions.push({label:`Compare to ${comparisonLabel.replace("vs ","")}`,query:compareQuery});
+ return actions;
 }
 type SpendingRow={occurredOn:string;amountMinor:number;currency:string;merchant:string;category:string};
 /** Same length immediately before `from`. Null for the "all time"/1970-01-01 sentinel -- there is no meaningful prior period to compare it to. */

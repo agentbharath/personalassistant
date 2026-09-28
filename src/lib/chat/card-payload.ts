@@ -1,5 +1,3 @@
-import type { WeeklySpending } from "@/lib/today/brief";
-
 /**
  * Some agent answers carry a rich card alongside their plain-text reply, instead of a migration adding a card
  * column: the payload rides as a trailing fenced block in the same stored/encrypted message content. Older
@@ -9,7 +7,27 @@ import type { WeeklySpending } from "@/lib/today/brief";
  */
 const FENCE = /\n*```daylark-card\n([\s\S]*?)\n```\s*$/;
 
-export type SpendingCardPayload = { kind: "spending"; periodLabel: string; filterLabel: string | null; insight: string; summary: WeeklySpending };
+export type SpendingCardPayload = {
+  kind: "spending";
+  periodLabel: string;
+  filterLabel: string | null;
+  currency: string;
+  total: number;
+  priorTotal: number;
+  changePercent: number | null;
+  comparisonLabel: string;
+  insight: string;
+  /** Cumulative running totals by day offset from the period start; `running.length` is the same for both periods (`priorPeriod` mirrors the current period's length). */
+  running: { current: number; prior: number }[];
+  /** Sparse labels for the x-axis -- one entry per tick, not one per day, so a month-long period doesn't render 30 crowded labels. */
+  xTicks: { offset: number; label: string }[];
+  /** Categories with a nonzero swing vs the prior period, largest absolute change first. */
+  changes: { category: string; now: number; before: number; delta: number }[];
+  topMerchants: { merchant: string; amountMinor: number; count: number }[];
+  actions: { label: string; query: string }[];
+  count: number;
+  otherCurrencyCount: number;
+};
 export type CardPayload = SpendingCardPayload;
 
 export function embedCard(text: string, payload: CardPayload): string {
