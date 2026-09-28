@@ -236,7 +236,7 @@ export async function dispatchDecision(decision: RouterDecision, ctx: DispatchCo
     case "multi": {
       const plan = planClauseInstructions(input, decision.agents);
       const multiMemory = decision.agents.includes("general") ? buildMemoryContext(await listMemories(userId).catch(() => [])) : "";
-      const outcomes = await executeReadOnlyAgentPlan(plan.tasks, input, userId, context, decision.searchQuery, multiMemory, today);
+      const outcomes = await executeReadOnlyAgentPlan(plan.tasks, input, userId, context, decision.searchQuery, multiMemory, today, decision.generalIsRecall);
       const completed = outcomes.filter((outcome) => outcome.ok).length;
       return done([composeMultiAgentAnswer(outcomes), ...plan.notes.map((note) => `> ${note}`)].join("\n\n"), decision.agents, completed === outcomes.length ? "completed" : "partially_completed");
     }

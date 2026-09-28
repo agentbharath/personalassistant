@@ -2,6 +2,7 @@ import { answerCalendar } from "@/lib/agents/calendar";
 import { answerEmail } from "@/lib/agents/email";
 import { answerFinance } from "@/lib/agents/finance";
 import { answerPublicSearch } from "@/lib/agents/general";
+import { answerGeneral } from "@/lib/model/claude";
 import { prepareAgentStage } from "@/lib/runtime/query-budget";
 import { isPublicSearchQuery } from "./routing";
 
@@ -12,11 +13,11 @@ export type AgentOutcome = { agent: AgentName; ok: boolean; answer?: string };
 
 /** Executes only read-only generic tasks. Mutations remain in their approval-gated workflows. `searchQuery` is the router's own, properly
  * written search for the general clause (R19.5: the raw regex-split clause is never as good a query as one a model actually wrote for it). */
-export async function executeReadOnlyAgentPlan(tasks: AgentTask[], input: string, userId: string, context: ContextMessage[], searchQuery?: string | null, memoryContext = "", today?: string) {
+export async function executeReadOnlyAgentPlan(tasks: AgentTask[], input: string, userId: string, context: ContextMessage[], searchQuery?: string | null, memoryContext = "", today?: string, generalIsRecall = false) {
   const unique = [...new Map(tasks.map((task) => [task.agent, task])).values()];
   const executions = unique.map((task) => {
     prepareAgentStage([task.agent], task.agent === "general" ? "balanced" : "fast");
-    return executeTask(task, input, userId, context, searchQuery, memoryContext, today);
+    return executeTask(task, input, userId, context, searchQuery, memoryContext, today, generalIsRecall);
   });
   const settled = await Promise.allSettled(executions);
   return settled.map<AgentOutcome>((result, index) => result.status === "fulfilled"
@@ -24,13 +25,17 @@ export async function executeReadOnlyAgentPlan(tasks: AgentTask[], input: string
     : { agent: unique[index].agent, ok: false });
 }
 
-async function executeTask(task: AgentTask, input: string, userId: string, context: ContextMessage[], searchQuery?: string | null, memoryContext = "", today?: string) {
+async function executeTask(task: AgentTask, input: string, userId: string, context: ContextMessage[], searchQuery?: string | null, memoryContext = "", today?: string, generalIsRecall = false) {
   const instruction = task.instruction.trim() || input;
   if (task.agent === "calendar") return answerCalendar(instruction, userId);
   if (task.agent === "email") return answerEmail(instruction, userId);
   if (task.agent === "finance") {
     return answerFinance(instruction, userId, "read", context);
   }
+  // R33: a recall of a prior recommendation ("find the restaurant recommendation from last week") is not a fresh
+  // search -- same distinction the router already makes between general_answer and web_search for one-topic
+  // messages, just carried into the "general" slice of a multi-part one instead of always defaulting to search.
+  if (generalIsRecall) return answerGeneral(instruction, context, "general", memoryContext);
   return answerPublicSearch(searchQuery?.trim() || instruction, undefined, memoryContext, today);
 }
 

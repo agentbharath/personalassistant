@@ -1,11 +1,13 @@
-import { describe, expect, it, vi } from "vitest";
-const mocks = vi.hoisted(() => ({ answerCalendar: vi.fn(async () => "CALENDAR"), answerPublicSearch: vi.fn(async () => "SEARCH") }));
+import { beforeEach, describe, expect, it, vi } from "vitest";
+const mocks = vi.hoisted(() => ({ answerCalendar: vi.fn(async () => "CALENDAR"), answerPublicSearch: vi.fn(async () => "SEARCH"), answerGeneral: vi.fn(async () => "RECALL") }));
 vi.mock("@/lib/agents/calendar", () => ({ answerCalendar: mocks.answerCalendar }));
 vi.mock("@/lib/agents/email", () => ({ answerEmail: vi.fn() }));
 vi.mock("@/lib/agents/finance", () => ({ answerFinance: vi.fn() }));
 vi.mock("@/lib/agents/general", () => ({ answerPublicSearch: mocks.answerPublicSearch }));
+vi.mock("@/lib/model/claude", () => ({ answerGeneral: mocks.answerGeneral }));
 vi.mock("@/lib/runtime/query-budget", () => ({ prepareAgentStage: () => undefined }));
 import { composeMultiAgentAnswer, executeReadOnlyAgentPlan } from "./multi-agent";
+beforeEach(() => { mocks.answerPublicSearch.mockClear(); mocks.answerGeneral.mockClear(); });
 
 describe("multi-agent partial results", () => {
   it("preserves successful results and clearly identifies a failed agent", () => {
@@ -39,5 +41,24 @@ describe("the general clause of a multi-part request (R19.5)", () => {
   it("passes memory context through to the general clause too", async () => {
     await executeReadOnlyAgentPlan([{ agent: "general", instruction: "x" }], "x", "u1", [], "a query", "diet fact");
     expect(mocks.answerPublicSearch).toHaveBeenCalledWith("a query", undefined, "diet fact", undefined);
+  });
+});
+
+describe("a recall clause within a multi-part request is not treated as a fresh search (R33)", () => {
+  it("answers from conversation history when the router flags the general clause as a recall, never running a new search", async () => {
+    const context = [{ role: "assistant" as const, content: "I found Rim Tanon and Zaranda for Thai/Mexican last week." }];
+    const outcomes = await executeReadOnlyAgentPlan(
+      [{ agent: "general", instruction: "find the restaurant recommendation from last week" }],
+      "find the restaurant recommendation from last week and check if Friday evening is free", "u1", context,
+      "restaurant recommendations", "", undefined, true,
+    );
+    expect(mocks.answerGeneral).toHaveBeenCalledWith("find the restaurant recommendation from last week", context, "general", "");
+    expect(mocks.answerPublicSearch).not.toHaveBeenCalled();
+    expect(outcomes).toEqual([{ agent: "general", ok: true, answer: "RECALL" }]);
+  });
+  it("still searches, as before, when the router does not flag the clause as a recall", async () => {
+    await executeReadOnlyAgentPlan([{ agent: "general", instruction: "weather this weekend" }], "weather this weekend and my calendar", "u1", [], "weather forecast this weekend");
+    expect(mocks.answerPublicSearch).toHaveBeenCalledWith("weather forecast this weekend", undefined, "", undefined);
+    expect(mocks.answerGeneral).not.toHaveBeenCalled();
   });
 });
