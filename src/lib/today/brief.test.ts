@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Bill } from "@/lib/agents/bills";
-import { billBuckets, billsTotal, money, spendingWindow, weeklySpending, type SpendingRecord } from "./brief";
+import { billBuckets, billsTotal, money, periodSpending, spendingWindow, weeklySpending, type SpendingRecord } from "./brief";
 
 const today = "2026-09-21";
 const bill = (over: Partial<Bill>): Bill => ({ id: "b", merchant: "PG&E", amountMinor: 15000, currency: "USD", category: "utilities", statementDate: "2026-09-01", dueDate: today, status: "outstanding", paidOn: null, ...over });
@@ -73,6 +73,32 @@ describe("this week's spending habit (free)", () => {
   it("lists every category, not only the top three", () => {
     const week = weeklySpending(["groceries", "restaurants", "transport", "shopping", "health"].map((category, index) => spend({ category, amountMinor: 1000 + index })), today)!;
     expect(week.categories).toHaveLength(5);
+  });
+});
+
+describe("spending over an arbitrary period (free), the same computation weeklySpending wraps for a fixed week", () => {
+  it("totals a 30-day period against the 30 days before it, not a week", () => {
+    const summary = periodSpending([
+      spend({ occurredOn: "2026-09-05", amountMinor: 31800, category: "groceries", merchant: "Trader Joe's" }),
+      spend({ occurredOn: "2026-09-10", amountMinor: 19600, category: "restaurants", merchant: "DoorDash" }),
+      spend({ occurredOn: "2026-08-20", amountMinor: 50000, category: "groceries", merchant: "Costco" }), // in the prior period
+      spend({ occurredOn: "2026-07-01", amountMinor: 99999 }), // outside both windows
+    ], "2026-09-01", "2026-09-30", "2026-08-02", "2026-08-31")!;
+    expect(summary.total).toBe(51400);
+    expect(summary.previousTotal).toBe(50000);
+    expect(summary.changePercent).toBe(3);
+    expect(summary.dailyAverage).toBe(Math.round(51400 / 30));
+    expect(summary.categories.map((item) => item.category)).toEqual(["groceries", "restaurants"]);
+  });
+
+  it("weeklySpending's fixed-week answer is unchanged by going through the general function", () => {
+    expect(weeklySpending([
+      spend({ occurredOn: "2026-09-21", amountMinor: 4000, category: "groceries" }),
+      spend({ occurredOn: "2026-09-14", amountMinor: 6000 }),
+    ], today)).toEqual(periodSpending([
+      spend({ occurredOn: "2026-09-21", amountMinor: 4000, category: "groceries" }),
+      spend({ occurredOn: "2026-09-14", amountMinor: 6000 }),
+    ], "2026-09-15", "2026-09-21", "2026-09-08", "2026-09-14"));
   });
 
   it("has no percentage change when the earlier week had no spending", () => {

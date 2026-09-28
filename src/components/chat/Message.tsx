@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, IconButton } from "@/components/ui/Button";
 import { CheckIcon, CopyIcon, RetryIcon, ThumbDownIcon, ThumbUpIcon } from "@/components/ui/icons";
 import { Markdown } from "./Markdown";
+import { extractCard } from "@/lib/chat/card-payload";
+import { SpendingCard } from "./cards/SpendingCard";
 import styles from "./Message.module.css";
 
 /** Your own message, with Copy and Ask again underneath. Ask again sends the same words as a new message. */
@@ -62,9 +64,13 @@ export function AssistantMessage({ children, id, highlight, approval, resumable,
     if (ok) setNoteOpen(false);
   }
 
+  // The card payload rides as a trailing fence in the same stored text (no schema migration); the prose before
+  // it is what gets copied, so a client that never learns about cards still gets a complete plain-text answer.
+  const { text, card } = useMemo(() => extractCard(children), [children]);
+
   async function copy() {
     try {
-      await navigator.clipboard.writeText(children);
+      await navigator.clipboard.writeText(text);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1_800);
     } catch { /* clipboard blocked: nothing to do */ }
@@ -72,7 +78,7 @@ export function AssistantMessage({ children, id, highlight, approval, resumable,
 
   return <article id={id} className={`${styles.assistant} ${highlight ? styles[highlight] : ""}`} aria-label={notice ? "Daylark notice" : "Daylark replied"}>
     <header className={styles.head}>Daylark</header>
-    <div className={notice ? styles.notice : undefined}><Markdown>{children}</Markdown></div>
+    <div className={notice ? styles.notice : undefined}>{card?.kind === "spending" ? <SpendingCard payload={card} /> : <Markdown>{text}</Markdown>}</div>
     {(approval || resumable) && <div className={styles.actions}>
       {resumable && <Button variant="primary" disabled={busy} onClick={onContinue}>Continue scan</Button>}
       {approval && <Button variant={resumable ? "secondary" : "primary"} disabled={busy} onClick={onConfirm}><CheckIcon width={16} height={16} />{resumable ? "Import reviewed items" : "Confirm"}</Button>}

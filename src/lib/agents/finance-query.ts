@@ -2,10 +2,12 @@ import { toKnownCategory } from "@/lib/learning/preferences";
 import { Temporal } from "@js-temporal/polyfill";
 import { z } from "zod";
 import { callClaude } from "@/lib/runtime/model-runtime";
-import { listTransactions } from "@/lib/tools/finance/transactions";
+import { listTransactions, type StoredTransaction } from "@/lib/tools/finance/transactions";
 import { syncIfStale } from "@/lib/plaid/service";
 import { followupContext, FOLLOWUP_RULES } from "@/lib/conversations/followup";
 import { recentContext, type ContextTurn } from "@/lib/conversations/context";
+import { periodSpending, type WeeklySpending } from "@/lib/today/brief";
+import { embedCard, type SpendingCardPayload } from "@/lib/chat/card-payload";
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(value => {try {return Temporal.PlainDate.from(value).toString() === value;} catch {return false;}});
 export const financeQuerySchema = z.object({
  mode:z.enum(["transactions","spending","analysis"]), ranges:z.array(z.object({from:date,to:date}).refine(r=>r.from<=r.to)).min(1).max(24),
@@ -60,7 +62,32 @@ export async function answerFinanceQuery(input:string,userId:string,context:Cont
  const categories=new Map<string,number>();
  for(const row of rows){const key=`${row.currency} ${toKnownCategory(row.category)}`;categories.set(key,(categories.get(key)??0)+row.amountMinor);}
  const breakdown=[...categories].map(([key,amount])=>{const split=key.indexOf(" ");return `- ${safe(key.slice(split+1))}: ${money(amount,key.slice(0,split))}`;}).join("\n");
- return `### ${plan.mode==="transactions"?"Transactions":"Spending"} · ${label}\n\n${rows.length} saved records.\n\n${summary}\n\n${plan.mode==="transactions"?`| Date | Merchant | Amount | Type | Category |\n| --- | --- | --- | --- | --- |\n${entries}`:`**By category**\n${breakdown}`}\n\nTransfers/card repayments are separate from spending. Currencies are kept separate.`;
+ const markdown=`### ${plan.mode==="transactions"?"Transactions":"Spending"} · ${label}\n\n${rows.length} saved records.\n\n${summary}\n\n${plan.mode==="transactions"?`| Date | Merchant | Amount | Type | Category |\n| --- | --- | --- | --- | --- |\n${entries}`:`**By category**\n${breakdown}`}\n\nTransfers/card repayments are separate from spending. Currencies are kept separate.`;
+ // A card needs one real period to compare against; "all time" (the 1970 sentinel) and a multi-range request
+ // ("August and October") have no single equal-length prior period, so they stay plain markdown.
+ if(plan.mode==="spending" && plan.ranges.length===1 && from!=="1970-01-01"){
+  const card=await buildSpendingCard(userId,from,to,rows,label,plan.category,plan.merchant);
+  if(card) return embedCard(markdown,card);
+ }
+ return markdown;
+}
+async function buildSpendingCard(userId:string,from:string,to:string,currentRows:StoredTransaction[],periodLabel:string,categoryFilter:string|null,merchantFilter:string|null):Promise<SpendingCardPayload|null> {
+ const prior=priorPeriod(from,to);
+ if(!prior) return null;
+ const normalize=(s:string)=>s.normalize("NFKC").toLowerCase().replace(/[^\p{L}\p{N}]+/gu," ").trim();
+ const priorRows=(await listTransactions(userId,prior.from,prior.to).catch(()=>[] as StoredTransaction[]))
+  .filter(row=>!merchantFilter||normalize(row.merchant).includes(normalize(merchantFilter)))
+  .filter(row=>!categoryFilter||toKnownCategory(row.category)===toKnownCategory(categoryFilter));
+ const summary=periodSpending([...currentRows,...priorRows],from,to,prior.from,prior.to);
+ if(!summary) return null;
+ return {kind:"spending",periodLabel,filterLabel:categoryFilter?toKnownCategory(categoryFilter):null,insight:spendingInsight(summary),summary};
+}
+function spendingInsight(summary:WeeklySpending):string {
+ const trend=summary.changePercent===null?"":summary.changePercent===0?"Level with the prior period.":summary.changePercent>0?`Up ${summary.changePercent}% from the prior period.`:`Down ${Math.abs(summary.changePercent)}% from the prior period.`;
+ const top=summary.categories[0];
+ const cap=(s:string)=>s.charAt(0).toUpperCase()+s.slice(1);
+ const driver=top?`${cap(top.category)} is the largest share, at ${new Intl.NumberFormat("en-US",{style:"currency",currency:summary.currency}).format(top.amountMinor/100)}.`:"";
+ return [trend,driver].filter(Boolean).join(" ");
 }
 type SpendingRow={occurredOn:string;amountMinor:number;currency:string;merchant:string;category:string};
 /** Same length immediately before `from`. Null for the "all time"/1970-01-01 sentinel -- there is no meaningful prior period to compare it to. */

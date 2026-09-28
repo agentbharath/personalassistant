@@ -62,22 +62,25 @@ export function spendingWindow(today: string) {
   return { from: to.subtract({ days: WEEK_DAYS * 2 - 1 }).toString(), to: to.toString() };
 }
 
-/** R26: this week's spending habit, from expenses only. Null when nothing was spent in the last seven days. */
-export function weeklySpending(records: SpendingRecord[], today: string): WeeklySpending | null {
-  const to = Temporal.PlainDate.from(today);
-  const from = to.subtract({ days: WEEK_DAYS - 1 }).toString();
-  const previousFrom = to.subtract({ days: WEEK_DAYS * 2 - 1 }).toString();
+/**
+ * The same spending-habit shape as weeklySpending, for an arbitrary period instead of a fixed week -- one source
+ * of truth for both the Today card (via weeklySpending, unchanged) and a chat spending-analysis card. Null when
+ * nothing was spent in the period. previousFrom/previousTo need not be the same length as from/to; the caller
+ * decides what "previous" means (weeklySpending uses the equal week before, a chat card the equal period before).
+ */
+export function periodSpending(records: SpendingRecord[], from: string, to: string, previousFrom: string, previousTo: string): WeeklySpending | null {
+  const periodDays = Temporal.PlainDate.from(from).until(Temporal.PlainDate.from(to)).days + 1;
   const expenses = records.filter((record) => record.direction === "expense");
-  const thisWeek = expenses.filter((record) => record.occurredOn >= from && record.occurredOn <= today);
-  if (!thisWeek.length) return null;
+  const period = expenses.filter((record) => record.occurredOn >= from && record.occurredOn <= to);
+  if (!period.length) return null;
 
   // The main currency is the one with the most spending; the others are counted, not converted (no silent conversion, FN-013).
   const totals = new Map<string, number>();
-  for (const record of thisWeek) totals.set(record.currency, (totals.get(record.currency) ?? 0) + record.amountMinor);
+  for (const record of period) totals.set(record.currency, (totals.get(record.currency) ?? 0) + record.amountMinor);
   const currency = [...totals.entries()].sort((left, right) => right[1] - left[1])[0][0];
-  const mine = thisWeek.filter((record) => record.currency === currency);
+  const mine = period.filter((record) => record.currency === currency);
   const total = mine.reduce((sum, record) => sum + record.amountMinor, 0);
-  const previousTotal = expenses.filter((record) => record.currency === currency && record.occurredOn >= previousFrom && record.occurredOn < from).reduce((sum, record) => sum + record.amountMinor, 0);
+  const previousTotal = expenses.filter((record) => record.currency === currency && record.occurredOn >= previousFrom && record.occurredOn <= previousTo).reduce((sum, record) => sum + record.amountMinor, 0);
 
   const groups = new Map<string, SpendingRecord[]>();
   for (const record of mine) {
@@ -102,16 +105,25 @@ export function weeklySpending(records: SpendingRecord[], today: string): Weekly
   return {
     currency,
     from,
-    to: today,
+    to,
     total,
     count: mine.length,
     previousTotal,
     changePercent: previousTotal > 0 ? Math.round(((total - previousTotal) / previousTotal) * 100) : null,
-    dailyAverage: Math.round(total / WEEK_DAYS),
+    dailyAverage: Math.round(total / periodDays),
     categories,
     biggest: { merchant: biggest.merchant, amountMinor: biggest.amountMinor, occurredOn: biggest.occurredOn },
-    otherCurrencyCount: thisWeek.length - mine.length,
+    otherCurrencyCount: period.length - mine.length,
   };
+}
+
+/** R26: this week's spending habit, from expenses only. Null when nothing was spent in the last seven days. */
+export function weeklySpending(records: SpendingRecord[], today: string): WeeklySpending | null {
+  const to = Temporal.PlainDate.from(today);
+  const from = to.subtract({ days: WEEK_DAYS - 1 }).toString();
+  const previousFrom = to.subtract({ days: WEEK_DAYS * 2 - 1 }).toString();
+  const previousTo = to.subtract({ days: WEEK_DAYS }).toString();
+  return periodSpending(records, from, today, previousFrom, previousTo);
 }
 
 export const money = (amountMinor: number, currency: string) => new Intl.NumberFormat("en-US", { style: "currency", currency }).format(amountMinor / 100);

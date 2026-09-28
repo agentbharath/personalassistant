@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { UserMessage } from "./Message";
+import { AssistantMessage, UserMessage } from "./Message";
+import { embedCard, type SpendingCardPayload } from "@/lib/chat/card-payload";
 
 describe("the buttons under your own message (free)", () => {
   it("offers Copy and Ask again", () => {
@@ -13,5 +14,35 @@ describe("the buttons under your own message (free)", () => {
   it("leaves out Ask again when there is nothing to send it with, and disables it while Daylark is busy", () => {
     expect(renderToStaticMarkup(<UserMessage>hi</UserMessage>)).not.toContain("Ask again");
     expect(renderToStaticMarkup(<UserMessage busy onResend={() => undefined}>hi</UserMessage>)).toMatch(/aria-label="Ask again"[^>]*disabled|disabled[^>]*aria-label="Ask again"/);
+  });
+});
+
+describe("a message carrying a card payload (free)", () => {
+  const payload: SpendingCardPayload = {
+    kind: "spending", periodLabel: "2026-09-01–2026-09-30", filterLabel: "restaurants", insight: "Up 12% from the prior period.",
+    summary: { currency: "USD", from: "2026-09-01", to: "2026-09-30", total: 19600, count: 1, previousTotal: 17500, changePercent: 12, dailyAverage: 653,
+      categories: [{ category: "restaurants", amountMinor: 19600, sharePercent: 100, entries: [{ merchant: "DoorDash", amountMinor: 19600, occurredOn: "2026-09-10" }] }],
+      biggest: { merchant: "DoorDash", amountMinor: 19600, occurredOn: "2026-09-10" }, otherCurrencyCount: 0 },
+  };
+
+  it("renders the rich card instead of markdown, and never leaks the raw JSON fence into the page", () => {
+    const content = embedCard("### Spending · 2026-09-01–2026-09-30\n\n$196.00", payload);
+    const html = renderToStaticMarkup(<AssistantMessage>{content}</AssistantMessage>);
+    expect(html).toContain("$196.00");
+    expect(html).toContain("Up 12% from the prior period");
+    expect(html).toContain("Restaurants");
+    expect(html).not.toContain("daylark-card");
+    expect(html).not.toContain("```");
+  });
+
+  it("falls back to plain markdown when the content has no card fence", () => {
+    const html = renderToStaticMarkup(<AssistantMessage>Just a plain answer.</AssistantMessage>);
+    expect(html).toContain("Just a plain answer.");
+  });
+
+  it("falls back to plain markdown, fence and all, when the payload doesn't parse as a recognized card", () => {
+    const broken = "An answer.\n\n```daylark-card\nnot valid json\n```";
+    const html = renderToStaticMarkup(<AssistantMessage>{broken}</AssistantMessage>);
+    expect(html).toContain("An answer.");
   });
 });
