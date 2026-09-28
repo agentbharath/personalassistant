@@ -10,6 +10,7 @@ import { BillsCard } from "./cards/BillsCard";
 import { DayCard } from "./cards/DayCard";
 import { EmailCard } from "./cards/EmailCard";
 import { RecallAvailabilityCard } from "./cards/RecallAvailabilityCard";
+import { WeatherCard } from "./cards/WeatherCard";
 import styles from "./Message.module.css";
 
 /** Your own message, with Copy and Ask again underneath. Ask again sends the same words as a new message. */
@@ -90,6 +91,7 @@ export function AssistantMessage({ children, id, highlight, approval, resumable,
       : card?.kind === "day" ? (card.standalone ? <DayCard payload={card} /> : <div style={{ display: "grid", gap: "var(--s-4)" }}><DayCard payload={card} /><Markdown>{text}</Markdown></div>)
       : card?.kind === "email" ? <EmailCard payload={card} />
       : card?.kind === "recall-availability" ? <RecallAvailabilityCard payload={card} onFollowUp={onFollowUp} busy={busy} />
+      : card?.kind === "weather" ? <WeatherCard payload={card} />
       : <Markdown>{text}</Markdown>}</div>
     {(approval || resumable) && <div className={styles.actions}>
       {resumable && <Button variant="primary" disabled={busy} onClick={onContinue}>Continue scan</Button>}

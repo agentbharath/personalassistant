@@ -21,6 +21,7 @@ export default async function DesignAppPage({ searchParams }: { searchParams: Pr
   const email = view === "email";
   const recall = view === "recall";
   const calendarQuery = view === "calendar-query";
+  const weather = view === "weather";
   const scanMessages = [
     { role: "user" as const, content: "Import my spending from the last 30 days" },
     { role: "assistant" as const, status: "waiting_for_user", content: "### Review 2 imports\n\n1. **iHerb** — $35.53 · Sep 16\n2. **Discover** — $250.00 · Sep 11 · card payment\n\n500 email summaries checked. **Scan paused** in Primary and Updates. Progress is saved for 7 days. 62 known emails remain; more pages may follow. Choose **Continue scan** to resume where this scan stopped. Continuing does not import anything.\n\nChoose **Confirm** to import the reviewed items or **Cancel**." },
@@ -142,7 +143,49 @@ export default async function DesignAppPage({ searchParams }: { searchParams: Pr
       ),
     ) },
   ];
+  const weatherMessages = [
+    { role: "user" as const, content: "what's the weather outside" },
+    { role: "assistant" as const, content: embedCard("### Now · Sunnyvale\n\n77° Sunny", {
+      kind: "weather", eyebrow: "Now · Sunnyvale", headline: "77°", condition: "Sunny",
+      insight: "Warm and clear. Peaks at 79° around 3 PM, then cools fast after sunset.",
+      rangeLow: 54, rangeHigh: 79, current: 77,
+      hourly: [{ label: "Now", value: 77, highlighted: true }, { label: "1PM", value: 78, highlighted: false }, { label: "2PM", value: 79, highlighted: false }, { label: "3PM", value: 79, highlighted: false }, { label: "4PM", value: 77, highlighted: false }, { label: "5PM", value: 74, highlighted: false }],
+      hourlyUnit: "temp",
+      stats: [{ label: "Wind", value: "7 mph NW" }, { label: "UV", value: "7 · High" }, { label: "Humidity", value: "38%" }],
+      attribution: "open-meteo.com · updated 2 min ago",
+    }) },
+    { role: "user" as const, content: "is it foggy for my run tomorrow?" },
+    { role: "assistant" as const, content: embedCard("### Tomorrow · 6 to 8 AM\n\n54° Fog", {
+      kind: "weather", eyebrow: "Tomorrow · 6 to 8 AM", headline: "54°", condition: "Fog",
+      insight: "Low fog until about 9, visibility near a mile. Roads stay dry. Clears by 10.",
+      rangeLow: 53, rangeHigh: 71, current: 54,
+      hourly: [{ label: "6AM", value: 54, highlighted: true }, { label: "7AM", value: 54, highlighted: false }, { label: "8AM", value: 55, highlighted: false }, { label: "9AM", value: 58, highlighted: false }, { label: "10AM", value: 62, highlighted: false }, { label: "11AM", value: 66, highlighted: false }],
+      hourlyUnit: "temp",
+      stats: [{ label: "Visibility", value: "1 mi" }, { label: "Wind", value: "4 mph W" }, { label: "Humidity", value: "92%" }],
+      attribution: "open-meteo.com · updated 2 min ago",
+    }) },
+    { role: "user" as const, content: "do I need an umbrella Thursday?" },
+    { role: "assistant" as const, content: embedCard("### Thursday · chance of rain\n\nYes Rain, 2 to 7 PM", {
+      kind: "weather", eyebrow: "Thursday · chance of rain", headline: "Yes", condition: "Rain, 2 to 7 PM",
+      insight: "Showers all afternoon, heaviest around 5, right in your commute window.",
+      rangeLow: 52, rangeHigh: 63, current: 58,
+      hourly: [{ label: "1PM", value: 20, highlighted: false }, { label: "2PM", value: 60, highlighted: true }, { label: "3PM", value: 70, highlighted: true }, { label: "4PM", value: 80, highlighted: true }, { label: "5PM", value: 90, highlighted: true }, { label: "6PM", value: 70, highlighted: true }],
+      hourlyUnit: "precip",
+      stats: [{ label: "Total", value: "0.4 in" }, { label: "Wind", value: "14 mph S" }, { label: "Gusts", value: "25 mph" }],
+      attribution: "open-meteo.com · updated 2 min ago",
+    }) },
+    { role: "user" as const, content: "will it be clear tonight?" },
+    { role: "assistant" as const, content: embedCard("### Tonight · Sunnyvale\n\n58° Clear", {
+      kind: "weather", eyebrow: "Tonight · Sunnyvale", headline: "58°", condition: "Clear",
+      insight: "Clear all night, down to 51° by dawn. Calm winds. Bring a layer if you head out.",
+      rangeLow: 51, rangeHigh: 64, current: 58,
+      hourly: [{ label: "8PM", value: 58, highlighted: true }, { label: "9PM", value: 56, highlighted: false }, { label: "10PM", value: 55, highlighted: false }, { label: "11PM", value: 54, highlighted: false }, { label: "12AM", value: 53, highlighted: false }, { label: "1AM", value: 52, highlighted: false }],
+      hourlyUnit: "temp",
+      stats: [{ label: "Wind", value: "3 mph" }, { label: "Humidity", value: "70%" }, { label: "Sunrise", value: "7:03 AM" }],
+      attribution: "open-meteo.com · updated 2 min ago",
+    }) },
+  ];
   return <AppShell title={thread ? "iHerb receipts" : "New conversation"} email="you@example.com" signOutAction={signOut} recent={MOCK_RECENT} activeConversationId={thread ? MOCK_RECENT[0].id : undefined}>
-    <Chat key={view ?? "empty"} title={thread ? "iHerb receipts" : undefined} conversationId={thread ? MOCK_RECENT[0].id : undefined} initialMessages={scan ? scanMessages : thread ? MOCK_THREAD : spending ? spendingMessages : spendingSimple ? spendingSimpleMessages : bills ? billsMessages : day ? dayMessages : email ? emailMessages : recall ? recallMessages : calendarQuery ? calendarQueryMessages : []} />
+    <Chat key={view ?? "empty"} title={thread ? "iHerb receipts" : undefined} conversationId={thread ? MOCK_RECENT[0].id : undefined} initialMessages={scan ? scanMessages : thread ? MOCK_THREAD : spending ? spendingMessages : spendingSimple ? spendingSimpleMessages : bills ? billsMessages : day ? dayMessages : email ? emailMessages : recall ? recallMessages : calendarQuery ? calendarQueryMessages : weather ? weatherMessages : []} />
   </AppShell>;
 }

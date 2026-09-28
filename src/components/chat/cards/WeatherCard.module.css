@@ -1,0 +1,32 @@
+/* Same tokens and proportions as the other answer cards -- border + surface, colour reserved for status only. */
+.card { display: grid; gap: var(--s-4); padding: var(--s-5); border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--surface); box-shadow: var(--shadow-1); }
+.eyebrow { color: var(--faint); font-size: var(--text-xs); font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
+
+.hero { display: flex; align-items: baseline; gap: var(--s-3); }
+.big { font-size: clamp(2.25rem, 1.6rem + 2.2vw, 3rem); font-weight: 700; letter-spacing: -0.04em; line-height: 1; font-variant-numeric: tabular-nums; }
+.condition { color: var(--ink-2); font-size: var(--text-lg); font-weight: 500; }
+
+.insight { margin: 0; color: var(--muted); font-size: var(--text-sm); }
+
+.range { display: flex; align-items: center; gap: var(--s-3); }
+.rangeLabel { flex: none; color: var(--faint); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
+.rangeTrack { position: relative; flex: 1; height: 4px; border-radius: var(--r-pill); background: var(--line); }
+.rangeDot { position: absolute; top: 50%; width: 10px; height: 10px; border-radius: var(--r-pill); background: var(--ink); transform: translate(-50%, -50%); box-shadow: 0 0 0 3px var(--surface); }
+
+.hourly { display: flex; justify-content: space-between; gap: var(--s-1); padding-top: var(--s-2); }
+.hourCol { display: grid; justify-items: center; gap: var(--s-1); flex: 1; min-width: 0; }
+.hourValue { font-size: var(--text-xs); font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
+.hourNow .hourValue { color: var(--ink); }
+.hourBarTrack { display: flex; align-items: flex-end; height: 2.5rem; width: 6px; border-radius: var(--r-pill); background: var(--bg-sunken); overflow: hidden; }
+.hourBar { display: block; width: 100%; border-radius: var(--r-pill); background: var(--line-strong); }
+.hourNow .hourBar { background: var(--ink); }
+.hourLabel { color: var(--faint); font-size: 0.6875rem; white-space: nowrap; }
+
+.stats { display: flex; gap: var(--s-4); padding-top: var(--s-3); border-top: 1px solid var(--line); }
+.stat { flex: 1; display: grid; gap: 2px; }
+.statLabel { color: var(--faint); font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
+.statValue { color: var(--ink-2); font-size: var(--text-sm); font-weight: 500; font-variant-numeric: tabular-nums; }
+
+.foot { margin: 0; color: var(--faint); font-size: var(--text-xs); }
+
+@media (max-width: 420px) { .stats { flex-wrap: wrap; } .stat { flex: 1 1 40%; } }

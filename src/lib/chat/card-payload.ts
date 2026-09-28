@@ -95,13 +95,31 @@ export type RecallAvailabilityCardPayload = {
   planQuery: string;
   noneQuery: string;
 };
-export type CardPayload = SpendingCardPayload | BillsCardPayload | DayCardPayload | EmailCardPayload | RecallAvailabilityCardPayload;
+export type WeatherCardPayload = {
+  kind: "weather";
+  eyebrow: string; // "Now · Sunnyvale" / "Tomorrow · 6 to 8 AM" / "Thursday · chance of rain" / "Tonight · Sunnyvale"
+  /** A temperature reading ("77°") normally; a plain "Yes"/"No" when the request was a yes/no rain/snow question (weatherYesNo). */
+  headline: string;
+  condition: string; // "Sunny" / "Fog" / "Rain, 2 to 7 PM" / "Clear"
+  insight: string;
+  rangeLow: number;
+  rangeHigh: number;
+  /** Where the current/representative reading sits within [rangeLow, rangeHigh], for the slider dot -- same unit as headline's number, ignored when headline isn't a temperature. */
+  current: number;
+  hourly: { label: string; value: number; highlighted: boolean }[];
+  /** Which quantity `hourly.value` holds -- temperature (°) normally, precipitation chance (%) for a yes/no rain question, since that's the number that actually answers it. */
+  hourlyUnit: "temp" | "precip";
+  /** Exactly 3, chosen for what's actually relevant to this question (wind/UV/humidity normally; visibility/wind/humidity for fog; total precipitation/wind/gusts for a rain yes/no; wind/humidity/sunrise for tonight). */
+  stats: { label: string; value: string }[];
+  attribution: string; // "open-meteo.com · updated just now"
+};
+export type CardPayload = SpendingCardPayload | BillsCardPayload | DayCardPayload | EmailCardPayload | RecallAvailabilityCardPayload | WeatherCardPayload;
 
 export function embedCard(text: string, payload: CardPayload): string {
   return `${text}\n\n\`\`\`daylark-card\n${JSON.stringify(payload)}\n\`\`\``;
 }
 
-const KNOWN_KINDS = new Set(["spending", "bills", "day", "email", "recall-availability"]);
+const KNOWN_KINDS = new Set(["spending", "bills", "day", "email", "recall-availability", "weather"]);
 
 /** Never throws: a malformed or unrecognized payload just means no card, the prose (unstripped) stands alone. */
 export function extractCard(content: string): { text: string; card: CardPayload | null } {
