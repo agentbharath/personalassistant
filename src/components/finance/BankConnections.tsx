@@ -25,16 +25,23 @@ export function BankConnections() {
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
   const [offset, setOffset] = useState(0);
+  const [selectedBank, setSelectedBank] = useState<string | null>(null);
   const [choices, setChoices] = useState<Record<string, string>>({});
   const handler = useRef<LinkHandler | null>(null);
   const resumed = useRef(false);
   const refresh = useCallback(async () => {
-    const response = await fetch(`/api/finance/banks?offset=${offset}`, { cache: "no-store" });
+    const params = new URLSearchParams({ offset: String(offset) });
+    if (selectedBank) params.set("connectionId", selectedBank);
+    const response = await fetch(`/api/finance/banks?${params}`, { cache: "no-store" });
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || "Could not load bank transactions.");
     setData(result); setChoices({});
-  }, [offset]);
+  }, [offset, selectedBank]);
   useEffect(() => { refresh().catch(e => setError(e.message)); }, [refresh]);
+  // Default to the first connected bank once the list arrives, so the transaction table shows one bank's history at a time.
+  useEffect(() => { if (data && selectedBank === null && data.items.length) setSelectedBank(data.items[0].id); }, [data, selectedBank]);
+  function selectBank(id: string) { setSelectedBank(id); setOffset(0); }
+  const selectedInstitution = data?.items.find(item => item.id === selectedBank)?.institution_name;
   useEffect(() => () => handler.current?.destroy(), []);
   async function run(work: () => Promise<void>) {
     setBusy(true); setError(""); setMessage("");
@@ -83,7 +90,7 @@ export function BankConnections() {
     <Script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js" strategy="afterInteractive" onReady={() => setReady(true)} onError={() => setError("Could not load Plaid. Check your connection and try again.")} />
     <ButtonLink href="/settings" variant="ghost">← Settings</ButtonLink>
     <div className={styles.header}><div><h1>Your bank connections</h1><p className={styles.muted}>Up to 730 days of bank history on a new connection (the bank may return less). Transactions save to Daylark automatically.</p>
-      {data && data.total > 0 && <p className={styles.muted}><strong>{data.imported}</strong> of {data.total} bank transactions imported into your spending records.</p>}</div>
+      {data && data.overallTotal > 0 && <p className={styles.muted}><strong>{data.overallImported}</strong> of {data.overallTotal} bank transactions imported into your spending records.</p>}</div>
       <Button variant="primary" disabled={busy || !ready || !data} onClick={() => connect()}>Connect bank</Button></div>
     <p className={styles.muted}>Connecting saves a private transaction preview. Daylark cannot move money. Gmail remains available for receipts, bills, and payment reminders.</p>
     {data?.environment === "sandbox" && <p className={styles.notice}><strong>Sandbox · test data only.</strong> Bank credentials and transactions are simulated. These records cannot be saved to your real spending totals.</p>}
@@ -92,7 +99,7 @@ export function BankConnections() {
     {!data && !error && <p role="status">Loading bank connections…</p>}
     <div className={styles.cards}>{data?.items.map(item => <section key={item.id} className={styles.card}>
       <h2>{item.institution_name}</h2>
-      <p>{item.status === "needs_reconnect" ? "Reconnect needed" : "Connected"}</p>
+      <span className={`${styles.pill} ${item.status === "needs_reconnect" ? styles.pillWarn : styles.pillOk}`}>{item.status === "needs_reconnect" ? "Reconnect needed" : "Connected"}</span>
       {item.accounts.map((a, i) => <p key={i} className={styles.muted}>{a.name}{a.mask ? ` •${a.mask}` : ""}</p>)}
       <p className={styles.muted}>{item.last_synced_at ? `Last checked ${new Date(item.last_synced_at).toLocaleString()}` : "History has not been fetched yet."}</p>
       {item.update_status !== "HISTORICAL_UPDATE_COMPLETE" && <p className={styles.muted}>Initial history may still be preparing.</p>}
@@ -105,17 +112,25 @@ export function BankConnections() {
         })}>Check transactions</Button>
         <Button disabled={busy || !ready} size="sm" onClick={() => connect(item.id)}>Reconnect</Button>
         <Button disabled={busy} size="sm" variant="ghost" onClick={() => {
-          if (window.confirm(`Disconnect ${item.institution_name}? Bank previews will be removed. Previously saved transactions will remain.`)) run(async () => { await post({ action: "disconnect", connectionId: item.id }); setMessage("Bank disconnected."); });
+          if (window.confirm(`Disconnect ${item.institution_name}? Bank previews will be removed. Previously saved transactions will remain.`)) run(async () => {
+            await post({ action: "disconnect", connectionId: item.id });
+            if (selectedBank === item.id) { setSelectedBank(null); setOffset(0); }
+            setMessage("Bank disconnected.");
+          });
         }}>Disconnect</Button>
       </div>
     </section>)}</div>
     {data && !data.items.length && <p className={styles.notice}>Connect Chase, Amex, Discover, or Capital One to start. Apple Card automatic sync needs a separate iPhone integration.</p>}
     {data && data.items.length > 0 && <>
-      <h2>Transaction preview</h2>
+      <h2>Transaction preview{selectedInstitution ? ` · ${selectedInstitution}` : ""}</h2>
+      {data.items.length > 1 && <div className={styles.tabs} role="tablist" aria-label="Bank">
+        {data.items.map(item => <button key={item.id} type="button" role="tab" aria-selected={selectedBank === item.id}
+          className={`${styles.tab} ${selectedBank === item.id ? styles.tabActive : ""}`} onClick={() => selectBank(item.id)}>{item.institution_name}</button>)}
+      </div>}
       <p className={styles.muted}>Pending or withdrawn transactions do not count toward spending. Saving a posted record authorizes Daylark to keep its bank amounts, dates, and status updated. Credits may be refunds or income; transfers are excluded from spending.</p>
       <div className={styles.scroll}><table className={styles.table}><thead><tr><th>Date / account</th><th>Merchant</th><th>Amount</th><th>Status / save</th></tr></thead><tbody>
         {data.transactions.map(row => <tr key={row.id}>
-          <td>{row.date}<small>{row.institution}</small><small>{row.account}</small></td>
+          <td>{row.date}<small>{row.account}</small></td>
           <td>{row.name}<small>{row.candidate?.direction}</small></td>
           <td className={styles.amount}>{row.currency ? new Intl.NumberFormat("en-US", { style: "currency", currency: row.currency }).format(Math.abs(row.amount)) : Math.abs(row.amount)}{row.amount < 0 ? " credit" : ""}</td>
           <td>{row.removed ? "Withdrawn by bank" : row.pending ? "Pending" : row.issue ? row.issue : row.saved ? "Saved to Daylark" : <>

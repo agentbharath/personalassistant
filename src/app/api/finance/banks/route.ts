@@ -22,9 +22,12 @@ export async function GET(request: Request) {
   if (!userId) return reply({ error: "Sign in to see bank connections." }, 401);
   try {
     plaidConfig();
-    const offset = Number(new URL(request.url).searchParams.get("offset") || 0);
+    const params = new URL(request.url).searchParams;
+    const offset = Number(params.get("offset") || 0);
     if (!Number.isSafeInteger(offset) || offset < 0 || offset > 100000) return reply({ error: "Invalid page." }, 400);
-    return reply(await bankOverview(userId, offset));
+    const connectionId = params.get("connectionId");
+    if (connectionId && !z.string().uuid().safeParse(connectionId).success) return reply({ error: "Invalid bank connection." }, 400);
+    return reply(await bankOverview(userId, offset, connectionId || undefined));
   } catch (error) { return reply({ error: bankErrorMessage(error) }, 503); }
 }
 export async function POST(request: Request) {

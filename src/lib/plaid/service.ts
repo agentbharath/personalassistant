@@ -249,19 +249,26 @@ export async function disconnectBank(userId: string, id: string) {
   } catch (error) { await release(userId, id, lease).catch(() => undefined); throw error; }
 }
 
-export async function bankOverview(userId: string, offset = 0) {
+export async function bankOverview(userId: string, offset = 0, connectionId?: string) {
   const environment = plaidConfig().environment;
   const admin = createAdminClient();
   const result = await admin.from("bank_connections").select("id,institution_name,status,update_status,last_error,last_synced_at,accounts_ciphertext")
     .eq("user_id", userId).eq("environment", environment).order("created_at");
   databaseError(result.error);
   const items = (result.data || []).map(({ accounts_ciphertext, ...row }) => ({ ...row, accounts: accounts_ciphertext ? JSON.parse(decryptText(accounts_ciphertext)) as { account_id: string; name: string; mask: string | null }[] : [] }));
-  if (!items.length) return { environment, items, transactions: [], total: 0, imported: 0 };
+  if (!items.length) return { environment, items, transactions: [], total: 0, imported: 0, overallTotal: 0, overallImported: 0 };
+  const allIds = items.map(i => i.id);
+  const scopedIds = connectionId && allIds.includes(connectionId) ? [connectionId] : allIds;
+  const overallCount = await admin.from("bank_transactions").select("id", { count: "exact", head: true }).eq("user_id", userId).in("connection_id", allIds);
+  databaseError(overallCount.error);
+  const overallImportedCount = await admin.from("bank_transactions").select("id", { count: "exact", head: true })
+    .eq("user_id", userId).in("connection_id", allIds).not("ledger_id", "is", null);
+  databaseError(overallImportedCount.error);
   const records = await admin.from("bank_transactions").select("id,connection_id,content_hash,payload_ciphertext,pending,removed,ledger_id", { count: "exact" })
-    .eq("user_id", userId).in("connection_id", items.map(i => i.id)).order("occurred_on", { ascending: false }).order("id").range(offset, offset + 49);
+    .eq("user_id", userId).in("connection_id", scopedIds).order("occurred_on", { ascending: false }).order("id").range(offset, offset + 49);
   databaseError(records.error);
   const importedCount = await admin.from("bank_transactions").select("id", { count: "exact", head: true })
-    .eq("user_id", userId).in("connection_id", items.map(i => i.id)).not("ledger_id", "is", null);
+    .eq("user_id", userId).in("connection_id", scopedIds).not("ledger_id", "is", null);
   databaseError(importedCount.error);
   const transactions = await Promise.all(((records.data || []) as BankRow[]).map(async row => {
     const transaction = JSON.parse(decryptText(row.payload_ciphertext)) as PlaidTransaction;
@@ -283,7 +290,8 @@ export async function bankOverview(userId: string, offset = 0) {
       date: transaction.date, name: transaction.merchant_name || transaction.name, amount: transaction.amount, currency: transaction.iso_currency_code,
       pending: row.pending, removed: row.removed, saved: Boolean(row.ledger_id) };
   }));
-  return { environment, items: items.map(({ accounts, ...row }) => ({ ...row, accounts: accounts.map(a => ({ name: a.name, mask: a.mask })) })), transactions, total: records.count || 0, imported: importedCount.count || 0 };
+  return { environment, items: items.map(({ accounts, ...row }) => ({ ...row, accounts: accounts.map(a => ({ name: a.name, mask: a.mask })) })), transactions,
+    total: records.count || 0, imported: importedCount.count || 0, overallTotal: overallCount.count || 0, overallImported: overallImportedCount.count || 0 };
 }
 
 export async function importBankRecord(userId: string, id: string, hash: string, match?: string) {
