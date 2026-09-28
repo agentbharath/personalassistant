@@ -3,13 +3,16 @@ const db = vi.hoisted(() => ({ rows: [] as Record<string, unknown>[], refs: [] a
 vi.mock("@/lib/security/encryption", () => ({ decryptText: (s: string) => s }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: (table: string) => {
   let before = Infinity, start = 0, end = 99;
-  const q = { select: () => q, eq: (key: string, value: string) => { db.scopes.push(`${table}:${key}:${value}`); return q; }, order: () => q, limit: () => q,
+  const filters: Record<string, string> = {};
+  const q = { select: () => q, eq: (key: string, value: string) => { db.scopes.push(`${table}:${key}:${value}`); filters[key] = value; return q; }, order: () => q, limit: () => q,
     lt: (_key: string, value: string) => { before = Number(value); return q; }, range: (a: number, b: number) => { start = a; end = b; return q; },
     maybeSingle: async () => ({ data: db.owner ? { id: "chat" } : null }),
     then: (resolve: (v: unknown) => unknown, reject: (v: unknown) => unknown) => {
       if (db.fail) return Promise.reject(new Error("offline")).then(resolve, reject);
-      if (table === "conversation_messages") db.pages++;
-      return Promise.resolve({ data: table === "conversation_messages" ? db.rows.filter(row => Number(row.sequence_number) < before).slice(0, 200) : db.refs.slice(start, end + 1) }).then(resolve, reject);
+      if (table === "conversation_messages") { db.pages++; return Promise.resolve({ data: db.rows.filter(row => Number(row.sequence_number) < before).slice(0, 200) }).then(resolve, reject); }
+      // Mirrors readReferences: only filters conversation_references by conversation_id when the code under test actually applies that filter.
+      const scoped = db.refs.filter(row => !filters.conversation_id || row.conversation_id === filters.conversation_id);
+      return Promise.resolve({ data: scoped.slice(start, end + 1) }).then(resolve, reject);
     } };
   return q;
 } }) }));
@@ -28,10 +31,18 @@ it("searches beyond the first page and keeps immutable list identities", async (
  expect(db.pages).toBe(2);
  expect(result.text).toContain("Resume draft for an engineering role");
  expect(result.references[0].id).toBe("old-list");
- for (const table of ["conversation_messages", "conversation_references"]) {
-   expect(db.scopes).toContain(`${table}:user_id:user`);
-   expect(db.scopes).toContain(`${table}:conversation_id:chat`);
- }
+ // Messages stay scoped to this one conversation; a saved search result belongs to the person, not the thread it
+ // happened in, so references are read across every one of the user's conversations, never someone else's.
+ expect(db.scopes).toContain("conversation_messages:user_id:user");
+ expect(db.scopes).toContain("conversation_messages:conversation_id:chat");
+ expect(db.scopes).toContain("conversation_references:user_id:user");
+ expect(db.scopes).not.toContain("conversation_references:conversation_id:chat");
+});
+it("finds a saved search from a different conversation (found live: a restaurant recommendation from an earlier chat couldn't be recalled from a brand-new one)", async () => {
+ db.refs = [{ id: "sushi-search", conversation_id: "an-older-chat", kind: "place_results", created_at: "2026-09-26", payload_ciphertext: JSON.stringify({ query: "best sushi restaurants in Sunnyvale, CA", places: [{ name: "Katana Sushi & Sake" }, { name: "Senro Sunnyvale" }] }) }];
+ const result = await recallConversation("user", "brand-new-chat", "restaurant recommendation sushi", []);
+ expect(result.references[0]?.id).toBe("sushi-search");
+ expect(result.text).toContain("Katana Sushi");
 });
 it("does not read another user's or a deleted conversation", async () => {
  db.owner = false;
