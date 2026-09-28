@@ -89,7 +89,11 @@ async function buildSpendingCard(userId:string,from:string,to:string,currentRows
  // days of a month have no spending at all, so the "running total" line is mostly flat with a few spikes -- a
  // staircase, not a chart (found live). Past that length, show the plain category breakdown instead, matching
  // the simpler design used for a longer period; no action buttons either, matching that same design exactly.
- const rich=Temporal.PlainDate.from(from).until(Temporal.PlainDate.from(to)).days+1<=RICH_SPENDING_CARD_MAX_DAYS;
+ // A category or merchant filter gets the same simple treatment regardless of period length (found live: "restaurants
+ // this week" still got the rich card, where "what changed" degenerated to one trivial row and the chart was a
+ // near-meaningless single-step line for a small filtered total) -- both sections are about breadth across
+ // categories/merchants, which a single-category or single-merchant query doesn't have any of.
+ const rich=!categoryFilter&&!merchantFilter&&Temporal.PlainDate.from(from).until(Temporal.PlainDate.from(to)).days+1<=RICH_SPENDING_CARD_MAX_DAYS;
  return {kind:"spending",periodLabel,filterLabel:categoryFilter?toKnownCategory(categoryFilter):null,
   currency:summary.currency,total:summary.total,priorTotal:summary.previousTotal,changePercent:summary.changePercent,comparisonLabel,
   insight:spendingInsight(summary.changePercent,comparisonLabel,changes),

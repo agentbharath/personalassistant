@@ -114,6 +114,34 @@ it("labels the card with the requested category when the query is scoped to one"
  expect(card.total).toBe(100);
 });
 
+it("gives a category-filtered query the plain category breakdown, no chart, even when the period is week-length (found live: \"restaurants this week\" still got the rich card, with a degenerate one-row \"what changed\" and a near-meaningless chart)", async () => {
+ mocks.model.mockResolvedValue({content:[{type:"text",text:JSON.stringify({...plan,mode:"spending",category:"restaurants",ranges:[{from:"2026-09-21",to:"2026-09-27"}]})}]});
+ mocks.list.mockImplementation(async (_u:string,from:string)=>{
+  if(from==="2026-09-21") return [{...row("Deccan Morsels","2026-09-25"),amountMinor:436,category:"restaurants"}];
+  return [];
+ });
+ const answer=await answerFinanceQuery("how much did I spend on restaurants this week","u");
+ const card=JSON.parse(answer.match(/```daylark-card\n([\s\S]*?)\n```/)![1]);
+ expect(card.total).toBe(436);
+ expect(card.running).toEqual([]);
+ expect(card.changes).toEqual([]);
+ expect(card.topMerchants).toEqual([]);
+ expect(card.actions).toEqual([]);
+ expect(card.categories).toEqual([{category:"restaurants",amountMinor:436,sharePercent:100}]);
+});
+
+it("gives a merchant-filtered query the same plain breakdown, not the rich card, even at week length", async () => {
+ mocks.model.mockResolvedValue({content:[{type:"text",text:JSON.stringify({...plan,mode:"spending",merchant:"Deccan Morsels",ranges:[{from:"2026-09-21",to:"2026-09-27"}]})}]});
+ mocks.list.mockImplementation(async (_u:string,from:string)=>{
+  if(from==="2026-09-21") return [{...row("Deccan Morsels","2026-09-25"),amountMinor:436,category:"restaurants"}];
+  return [];
+ });
+ const answer=await answerFinanceQuery("how much did I spend at Deccan Morsels this week","u");
+ const card=JSON.parse(answer.match(/```daylark-card\n([\s\S]*?)\n```/)![1]);
+ expect(card.running).toEqual([]);
+ expect(card.categories).toEqual([{category:"restaurants",amountMinor:436,sharePercent:100}]);
+});
+
 it("shows the same canonical category in the transaction list as the breakdown already uses, not the raw stored casing (found live: \"Shopping\" vs \"shopping\" read like inconsistent data)", async () => {
  mocks.list.mockResolvedValue([{ ...row("iHerb order","2026-09-15"), category: "Shopping" }, { ...row("PG&E","2026-09-17"), category: "Utilities" }]);
  const answer=await answerFinanceQuery("show all transactions","u");
