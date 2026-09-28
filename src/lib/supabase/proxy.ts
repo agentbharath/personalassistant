@@ -1,3 +1,4 @@
+import { allowedUser } from "@/lib/security/access";
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
@@ -39,9 +40,12 @@ export async function updateSession(request: NextRequest) {
     },
   );
 
-  const { data } = await supabase.auth.getClaims();
+  const { data } = await supabase.auth.getUser();
   const path = request.nextUrl.pathname;
-  const decision = accessDecision(path, Boolean(data?.claims?.sub), process.env.NODE_ENV !== "production");
+  if (data?.user && !allowedUser(data.user.id) && !isPublicPath(path, process.env.NODE_ENV !== "production")) {
+    return NextResponse.json({ error: "PRIVATE_APP_ACCESS_DENIED" }, { status: 403 });
+  }
+  const decision = accessDecision(path, Boolean(data?.user && allowedUser(data.user.id)), process.env.NODE_ENV !== "production");
 
   if (decision === "unauthorized") return NextResponse.json({ error: "AUTHENTICATION_REQUIRED" }, { status: 401 });
   if (decision === "login") {

@@ -1,3 +1,5 @@
+import { allowedUser, boundedJson } from "@/lib/security/access";
+import { financialRateLimit } from "@/lib/security/rate-limit";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { bankErrorMessage, plaidConfig, PlaidError } from "@/lib/plaid/client";
@@ -12,15 +14,16 @@ const actions = z.discriminatedUnion("action", [
   z.object({ action: z.literal("disconnect"), connectionId: z.string().uuid() }),
   z.object({ action: z.literal("import"), id: z.string().uuid(), hash: z.string().min(1).max(128), matchId: z.string().uuid().optional(), keepSynced: z.literal(true) }),
 ]);
-const reply = (data: unknown, status = 200) => Response.json(data, { status, headers: { "cache-control": "private, no-store" } });
+const reply = (data: unknown, status = 200) => Response.json(data, { status, headers: { "cache-control": "private, no-store", ...(status === 429 ? { "retry-after": "600" } : {}) } });
 async function actor() {
-  const { data, error } = await (await createClient()).auth.getClaims();
-  return !error && typeof data?.claims?.sub === "string" ? data.claims.sub : null;
+  const { data, error } = await (await createClient()).auth.getUser();
+  return !error && data?.user?.id && allowedUser(data.user.id) ? data.user.id : null;
 }
 export async function GET(request: Request) {
   const userId = await actor();
   if (!userId) return reply({ error: "Sign in to see bank connections." }, 401);
   try {
+    if (!await financialRateLimit(userId, "read")) return reply({ error: "Too many requests. Try again shortly." }, 429);
     plaidConfig();
     const offset = Number(new URL(request.url).searchParams.get("offset") || 0);
     if (!Number.isSafeInteger(offset) || offset < 0 || offset > 100000) return reply({ error: "Invalid page." }, 400);
@@ -31,9 +34,11 @@ export async function POST(request: Request) {
   const userId = await actor();
   if (!userId) return reply({ error: "Sign in to manage bank connections." }, 401);
   if (request.headers.get("origin") !== new URL(request.url).origin) return reply({ error: "Invalid request origin." }, 403);
-  const input = actions.safeParse(await request.json().catch(() => null));
+  const input = actions.safeParse(await boundedJson(request).catch(() => null));
   if (!input.success) return reply({ error: "Invalid bank request." }, 400);
   try {
+    if (!await financialRateLimit(userId, "write")) return reply({ error: "Too many requests. Try again shortly." }, 429);
+    if (["link", "exchange"].includes(input.data.action) && !await financialRateLimit(userId, "link")) return reply({ error: "Too many connection attempts. Try again in ten minutes." }, 429);
     const config = plaidConfig();
     const action = input.data;
     if (action.action === "link") return reply(await createBankLink(userId, action.connectionId));

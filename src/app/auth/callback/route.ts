@@ -1,3 +1,4 @@
+import { allowedUser } from "@/lib/security/access";
 import { enabled, queueSync } from "@/lib/finance-sync/store";
 import { advanceFinanceSync } from "@/lib/finance-sync/runner";
 import { withRequestContext } from "@/lib/runtime/request-context";
@@ -21,6 +22,10 @@ export async function GET(request: Request) {
   if (code) {
     const supabase = await createClient();
     const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+    if (!error && data.session && !allowedUser(data.session.user.id)) {
+      await supabase.auth.signOut();
+      return NextResponse.redirect(new URL("/login?error=private", url.origin));
+    }
     if (!error && data.session?.provider_token) {
       try {
         await storeGoogleCredentials(data.session.user.id, data.session.provider_token, data.session.provider_refresh_token);

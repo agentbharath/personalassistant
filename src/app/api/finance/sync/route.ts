@@ -1,3 +1,5 @@
+import { allowedUser, boundedJson } from "@/lib/security/access";
+import { financialRateLimit } from "@/lib/security/rate-limit";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createConversation, appendMessage } from "@/lib/conversations/store";
@@ -7,14 +9,15 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 const schema = z.object({action: z.enum(["sync", "backfill", "review", "retry", "exclude"]), ids: z.array(z.string().uuid()).max(100).optional()});
 async function actor() {
- const {data, error} = await (await createClient()).auth.getClaims();
- return !error && typeof data?.claims?.sub === "string" ? data.claims.sub : null;
+ const {data, error} = await (await createClient()).auth.getUser();
+ return !error && data?.user?.id && allowedUser(data.user.id) ? data.user.id : null;
 }
 export async function GET() {
  const userId = await actor();
  if (!userId) return Response.json({error: "AUTHENTICATION_REQUIRED"}, {status: 401});
  if (!enabled()) return Response.json({enabled: false});
  try {
+   if (!await financialRateLimit(userId, "read")) return Response.json({error: "TOO_MANY_REQUESTS"}, {status: 429});
    const state = await loadSync(userId);
    const rows = state ? await candidates(userId, state.run_id) : [];
    return Response.json({enabled: true, status: state?.status ?? "idle", checked: state?.checked ?? 0, pending: rows.filter(r => r.status === "pending").length, blocked: rows.filter(r => r.status === "blocked").length, blockedItems: rows.filter(r => r.status === "blocked").slice(0, 100).map(blockedDetails), note: freshnessLabel(state), error: state?.last_error ?? null}, {headers: {"cache-control": "private, no-store"}});
@@ -25,9 +28,10 @@ export async function POST(request: Request) {
  if (!userId) return Response.json({error: "AUTHENTICATION_REQUIRED"}, {status: 401});
  if (request.headers.get("origin") !== new URL(request.url).origin) return Response.json({error: "INVALID_ORIGIN"}, {status: 403});
  if (!enabled()) return Response.json({error: "Email sync is not enabled."}, {status: 409});
- const parsed = schema.safeParse(await request.json().catch(() => null));
+ const parsed = schema.safeParse(await boundedJson(request).catch(() => null));
  if (!parsed.success) return Response.json({error: "INVALID_REQUEST"}, {status: 400});
  try {
+   if (!await financialRateLimit(userId, "write")) return Response.json({error: "TOO_MANY_REQUESTS"}, {status: 429});
    if (parsed.data.action === "review") {
      const conversationId = await createConversation(userId, "Review financial records from email");
      const answer = await prepareSyncReview(userId, conversationId);

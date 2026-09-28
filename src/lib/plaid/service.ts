@@ -1,13 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { encryptText, decryptText } from "@/lib/security/encryption";
+import { openFinancialFields, readFinancialRows, sealFinancialFields } from "@/lib/security/financial-data";
 import { piiHmac } from "@/lib/security/pii-hmac";
 import { PlaidError, plaidConfig, plaidRequest, syncSchema, liabilitiesSchema, type PlaidEnvironment, type PlaidTransaction } from "./client";
 import { comparableMerchant, normalizeBankTransaction } from "./normalize";
 import { createBill } from "@/lib/tools/finance/bills";
 
 type BankConnection = {
-  id: string; user_id: string; environment: PlaidEnvironment; item_id: string; institution_name: string;
+  id: string; user_id: string; environment: PlaidEnvironment; item_id: string; institution_name: string; metadata_ciphertext?: string;
   access_token_ciphertext: string; cursor_ciphertext: string | null; accounts_ciphertext: string | null;
   status: string; update_status: string | null; last_error: string | null; last_synced_at: string | null;
 };
@@ -16,12 +17,24 @@ function databaseError(error: { code?: string } | null) {
   if (!error) return;
   throw new PlaidError(["42P01", "PGRST205", "PGRST202"].includes(error.code || "") ? "BANK_SETUP_REQUIRED" : "BANK_DATABASE_ERROR");
 }
+function openConnection(row: BankConnection) {
+  return row.metadata_ciphertext ? { ...row, ...JSON.parse(decryptText(row.metadata_ciphertext, `daylark:bank:${row.user_id}`)) } as BankConnection : row;
+}
+function sealConnection(userId: string, itemId: string, institution: string) {
+  return { item_id: null, institution_name: null, item_ref_hmac: piiHmac(`item:${itemId}`),
+    metadata_ciphertext: encryptText(JSON.stringify({ item_id: itemId, institution_name: institution }), `daylark:bank:${userId}`) };
+}
+function matchingRecords(rows: Record<string, any>[], candidate: NonNullable<ReturnType<typeof normalizeBankTransaction>["candidate"]>) {
+  return rows.filter(row => !row.bank_voided && Number(row.amount_minor) === candidate.amountMinor && row.currency === candidate.currency
+    && row.direction === candidate.direction && Math.abs(Date.parse(row.occurred_on) - Date.parse(candidate.occurredOn)) <= 3 * 86400000
+    && comparableMerchant(decryptText(row.merchant_ciphertext)) === comparableMerchant(candidate.merchant));
+}
 async function connection(userId: string, id: string): Promise<BankConnection> {
   const { data, error } = await createAdminClient().from("bank_connections").select("*").eq("user_id", userId).eq("id", id).maybeSingle();
   databaseError(error);
   if (!data) throw new PlaidError("BANK_NOT_FOUND");
   if (data.environment !== plaidConfig().environment) throw new PlaidError("PLAID_ENV_MISMATCH");
-  return data as BankConnection;
+  return openConnection(data as BankConnection);
 }
 async function claim(userId: string, id: string) {
   await connection(userId, id);
@@ -29,7 +42,7 @@ async function claim(userId: string, id: string) {
   const { data, error } = await createAdminClient().rpc("claim_bank_connection", { p_user_id: userId, p_id: id, p_lease: lease });
   databaseError(error);
   if (!data?.[0]) throw new PlaidError("BANK_BUSY");
-  return { item: data[0] as BankConnection, lease };
+  return { item: openConnection(data[0] as BankConnection), lease };
 }
 async function release(userId: string, id: string, lease: string, code?: string) {
   const { error } = await createAdminClient().from("bank_connections").update({ lease_id: null, lease_until: null,
@@ -89,7 +102,7 @@ export async function completeBankLink(userId: string, sessionId: string, public
   const exchanged = await plaidRequest<{ access_token: string; item_id: string }>("/item/public_token/exchange", { public_token: publicToken });
   // Persist immediately so a later metadata failure never strands a live token.
   const saved = await admin.from("bank_connections").insert({ user_id: userId, environment: plaidConfig().environment,
-    item_id: exchanged.item_id, access_token_ciphertext: encryptText(exchanged.access_token), institution_name: "Connected bank" }).select("id").single();
+    ...sealConnection(userId, exchanged.item_id, "Connected bank"), access_token_ciphertext: encryptText(exchanged.access_token) }).select("id").single();
   if (saved.error) {
     // Compensate for a failed local save. No credential is written to logs.
     await plaidRequest("/item/remove", { access_token: exchanged.access_token }).catch(() => undefined);
@@ -100,7 +113,7 @@ export async function completeBankLink(userId: string, sessionId: string, public
     const result = await plaidRequest<{ item: { institution_id: string | null } }>("/item/get", { access_token: exchanged.access_token });
     if (result.item.institution_id) {
       const institution = await plaidRequest<{ institution: { name: string } }>("/institutions/get_by_id", { institution_id: result.item.institution_id, country_codes: ["US"] });
-      await admin.from("bank_connections").update({ institution_name: institution.institution.name }).eq("user_id", userId).eq("id", id);
+      await admin.from("bank_connections").update(sealConnection(userId, exchanged.item_id, institution.institution.name)).eq("user_id", userId).eq("id", id);
     }
   } catch { /* Linking succeeded; metadata can be retried independently. */ }
   // Best effort: the connection is already live, so a failed first sync doesn't fail the link. "Check transactions" remains available.
@@ -108,14 +121,13 @@ export async function completeBankLink(userId: string, sessionId: string, public
   return id;
 }
 
-export function bankRecord(itemId: string, transaction: PlaidTransaction) {
+export function bankRecord(itemId: string, transaction: PlaidTransaction, userId: string) {
   const { candidate } = normalizeBankTransaction(transaction);
   return {
-    provider_ref: piiHmac(`${itemId}:${transaction.transaction_id}`), occurred_on: transaction.date, pending: transaction.pending,
+    provider_ref: piiHmac(`${itemId}:${transaction.transaction_id}`), occurred_on: null, pending: null,
     content_hash: piiHmac(JSON.stringify(transaction)), payload_ciphertext: encryptText(JSON.stringify(transaction)),
-    ledger_fields: candidate ? { occurred_on: candidate.occurredOn, amount_minor: candidate.amountMinor, currency: candidate.currency,
-      direction: candidate.direction, merchant_ciphertext: encryptText(candidate.merchant), merchant_hash: piiHmac(comparableMerchant(candidate.merchant)),
-      category: candidate.category, note_ciphertext: encryptText(candidate.note || "Bank transaction") } : null,
+    ledger_fields: candidate && !transaction.pending ? { ...sealFinancialFields("finance_transactions", userId, { occurred_on: candidate.occurredOn, amount_minor: candidate.amountMinor, currency: candidate.currency, direction: candidate.direction, category: candidate.category }), merchant_ciphertext: encryptText(candidate.merchant), merchant_hash: piiHmac(comparableMerchant(candidate.merchant)),
+      note_ciphertext: encryptText(candidate.note || "Bank transaction") } : null,
   };
 }
 
@@ -181,28 +193,24 @@ async function autoImportBank(userId: string, id: string, environment: PlaidEnvi
   if (environment !== "production") return 0;
   const admin = createAdminClient();
   const { data, error } = await admin.from("bank_transactions").select("id,content_hash,payload_ciphertext")
-    .eq("user_id", userId).eq("connection_id", id).is("ledger_id", null).eq("pending", false).eq("removed", false);
+    .eq("user_id", userId).eq("connection_id", id).is("ledger_id", null).eq("removed", false);
   if (error || !data?.length) return 0;
   let imported = 0;
-  await Promise.all(data.map(async row => {
+  const ledger = await readFinancialRows("finance_transactions", userId);
+  for (const row of data) {
     const transaction = JSON.parse(decryptText(row.payload_ciphertext)) as PlaidTransaction;
     const { candidate } = normalizeBankTransaction(transaction);
-    if (!candidate) return;
-    const occurred = Date.parse(`${candidate.occurredOn}T12:00:00Z`);
-    const near = await admin.from("finance_transactions").select("id")
-      .eq("user_id", userId).eq("amount_minor", candidate.amountMinor).eq("currency", candidate.currency).eq("direction", candidate.direction)
-      .eq("bank_voided", false).gte("occurred_on", new Date(occurred - 3 * 86400000).toISOString().slice(0, 10))
-      .lte("occurred_on", new Date(occurred + 3 * 86400000).toISOString().slice(0, 10)).limit(2);
-    if (near.error) return;
-    let matchId = near.data?.length === 1 ? near.data[0].id : undefined;
+    if (!candidate || transaction.pending) continue;
+    const near = matchingRecords(ledger, candidate);
+    let matchId = near.length === 1 ? near[0].id : undefined;
     if (matchId) {
       // A same-amount, same-window record already claimed by another Plaid transaction (a real coincidence, e.g.
       // two similar purchases days apart) is not this row's match -- save as a new record instead of failing.
-      const claimed = await admin.from("finance_transaction_sources").select("transaction_id").eq("transaction_id", matchId).eq("source_type", "plaid").maybeSingle();
+      const claimed = await admin.from("finance_transaction_sources").select("transaction_id").eq("user_id", userId).eq("transaction_id", matchId).eq("source_type", "plaid").maybeSingle();
       if (claimed.data) matchId = undefined;
     }
     try { await importBankRecord(userId, row.id, row.content_hash, matchId); imported++; } catch { /* left for manual review */ }
-  }));
+  }
   return imported;
 }
 
@@ -211,7 +219,7 @@ export async function syncBank(userId: string, id: string) {
   try {
     const result = await collectBankSync(decryptText(item.access_token_ciphertext), item.cursor_ciphertext ? decryptText(item.cursor_ciphertext) : undefined, item.environment);
     const { error } = await createAdminClient().rpc("apply_bank_sync", { p_user_id: userId, p_id: id, p_lease: lease,
-      p_rows: result.transactions.map(t => bankRecord(item.item_id, t)), p_removed: result.removed.map(ref => piiHmac(`${item.item_id}:${ref}`)),
+      p_rows: result.transactions.map(t => bankRecord(item.item_id, t, userId)), p_removed: result.removed.map(ref => piiHmac(`${item.item_id}:${ref}`)),
       p_cursor: encryptText(result.cursor), p_accounts: encryptText(JSON.stringify(result.accounts)), p_status: result.status });
     databaseError(error);
     const imported = await autoImportBank(userId, id, item.environment).catch(() => 0);
@@ -252,42 +260,51 @@ export async function disconnectBank(userId: string, id: string) {
 export async function bankOverview(userId: string, offset = 0) {
   const environment = plaidConfig().environment;
   const admin = createAdminClient();
-  const result = await admin.from("bank_connections").select("id,institution_name,status,update_status,last_error,last_synced_at,accounts_ciphertext")
+  const result = await admin.from("bank_connections").select("id,user_id,institution_name,metadata_ciphertext,status,update_status,last_error,last_synced_at,accounts_ciphertext")
     .eq("user_id", userId).eq("environment", environment).order("created_at");
   databaseError(result.error);
-  const items = (result.data || []).map(({ accounts_ciphertext, ...row }) => ({ ...row, accounts: accounts_ciphertext ? JSON.parse(decryptText(accounts_ciphertext)) as { account_id: string; name: string; mask: string | null }[] : [] }));
+  const items = (result.data || []).map(raw => { const { accounts_ciphertext, metadata_ciphertext: _metadata, item_id: _item, user_id: _user, ...row } = openConnection(raw as BankConnection); return ({ ...row, accounts: accounts_ciphertext ? JSON.parse(decryptText(accounts_ciphertext)) as { account_id: string; name: string; mask: string | null }[] : [] }); });
   if (!items.length) return { environment, items, transactions: [], total: 0, imported: 0 };
-  const records = await admin.from("bank_transactions").select("id,connection_id,content_hash,payload_ciphertext,pending,removed,ledger_id", { count: "exact" })
-    .eq("user_id", userId).in("connection_id", items.map(i => i.id)).order("occurred_on", { ascending: false }).order("id").range(offset, offset + 49);
-  databaseError(records.error);
-  const importedCount = await admin.from("bank_transactions").select("id", { count: "exact", head: true })
-    .eq("user_id", userId).in("connection_id", items.map(i => i.id)).not("ledger_id", "is", null);
-  databaseError(importedCount.error);
-  const transactions = await Promise.all(((records.data || []) as BankRow[]).map(async row => {
-    const transaction = JSON.parse(decryptText(row.payload_ciphertext)) as PlaidTransaction;
+  const allRecords: BankRow[] = [];
+  for (let start = 0; ; start += 1000) {
+    const records = await admin.from("bank_transactions").select("id,connection_id,content_hash,payload_ciphertext,pending,removed,ledger_id")
+      .eq("user_id", userId).in("connection_id", items.map(i => i.id)).order("id").range(start, start + 999);
+    databaseError(records.error);
+    allRecords.push(...(records.data || []) as BankRow[]);
+    if ((records.data?.length || 0) < 1000) break;
+  }
+  const decoded = allRecords.map(row => ({ row, transaction: JSON.parse(decryptText(row.payload_ciphertext)) as PlaidTransaction }));
+  decoded.sort((a, b) => b.transaction.date.localeCompare(a.transaction.date) || b.row.id.localeCompare(a.row.id));
+  const ledger = await readFinancialRows("finance_transactions", userId);
+  const transactions = await Promise.all(decoded.slice(offset, offset + 50).map(async ({ row, transaction }) => {
     const { candidate, issue } = normalizeBankTransaction(transaction);
     const item = items.find(i => i.id === row.connection_id)!;
     const account = item.accounts.find(a => a.account_id === transaction.account_id);
     const matches: { id: string; merchant: string; date: string }[] = [];
-    if (candidate && !row.ledger_id && !row.pending && !row.removed && environment === "production") {
-      const date = Date.parse(`${candidate.occurredOn}T12:00:00Z`);
-      const near = await admin.from("finance_transactions").select("id,merchant_ciphertext,occurred_on")
-        .eq("user_id", userId).eq("amount_minor", candidate.amountMinor).eq("currency", candidate.currency).eq("direction", candidate.direction)
-        .eq("bank_voided", false).gte("occurred_on", new Date(date - 3 * 86400000).toISOString().slice(0, 10))
-        .lte("occurred_on", new Date(date + 3 * 86400000).toISOString().slice(0, 10)).limit(10);
-      databaseError(near.error);
-      for (const match of near.data || []) matches.push({ id: match.id, merchant: decryptText(match.merchant_ciphertext), date: match.occurred_on });
+    if (candidate && !row.ledger_id && !transaction.pending && !row.removed && environment === "production") {
+      for (const match of matchingRecords(ledger, candidate).slice(0, 10)) matches.push({ id: match.id, merchant: decryptText(match.merchant_ciphertext), date: match.occurred_on });
     }
     return { id: row.id, hash: row.content_hash, connectionId: row.connection_id, institution: item.institution_name,
       account: account ? `${account.name}${account.mask ? ` •${account.mask}` : ""}` : "Bank account", candidate, issue, matches,
       date: transaction.date, name: transaction.merchant_name || transaction.name, amount: transaction.amount, currency: transaction.iso_currency_code,
-      pending: row.pending, removed: row.removed, saved: Boolean(row.ledger_id) };
+      pending: transaction.pending, removed: row.removed, saved: Boolean(row.ledger_id) };
   }));
-  return { environment, items: items.map(({ accounts, ...row }) => ({ ...row, accounts: accounts.map(a => ({ name: a.name, mask: a.mask })) })), transactions, total: records.count || 0, imported: importedCount.count || 0 };
+  return { environment, items: items.map(({ accounts, ...row }) => ({ ...row, accounts: accounts.map(a => ({ name: a.name, mask: a.mask })) })), transactions, total: allRecords.length, imported: allRecords.filter(row => row.ledger_id).length };
 }
 
 export async function importBankRecord(userId: string, id: string, hash: string, match?: string) {
-  const { error } = await createAdminClient().rpc("import_bank_transaction", { p_user_id: userId, p_id: id, p_hash: hash, p_match: match || null });
+  const admin = createAdminClient();
+  let matchCiphertext: string | null = null;
+  if (match) {
+    const preview = await admin.from("bank_transactions").select("payload_ciphertext").eq("user_id", userId).eq("id", id).single();
+    const existing = await admin.from("finance_transactions").select("*").eq("user_id", userId).eq("id", match).single();
+    databaseError(preview.error); databaseError(existing.error);
+    const { candidate } = normalizeBankTransaction(JSON.parse(decryptText(preview.data!.payload_ciphertext)));
+    const opened = openFinancialFields("finance_transactions", userId, existing.data!);
+    if (!candidate || !existing.data!.financial_ciphertext || !matchingRecords([opened], candidate).length) throw new PlaidError("PREVIEW_CHANGED");
+    matchCiphertext = existing.data!.financial_ciphertext;
+  }
+  const { error } = await admin.rpc("import_bank_transaction", { p_user_id: userId, p_id: id, p_hash: hash, p_match: match || null, p_match_ciphertext: matchCiphertext });
   if (error) throw new PlaidError(error.message?.includes("PREVIEW_CHANGED") ? "PREVIEW_CHANGED" : "BANK_IMPORT_FAILED");
 }
 
