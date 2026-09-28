@@ -12,7 +12,17 @@ import { reportFailure } from "@/lib/observability/report";
 // v6: a holiday-named weekend (Thanksgiving, Labor Day, Memorial Day) spans the holiday's own day through the nearest weekend, inclusive —
 // found live (R32): "this upcoming Thanksgiving weekend" was resolving to the Friday after through the following Monday, excluding
 // Thanksgiving Thursday itself and running a day past Sunday.
-export const TIME_INTERPRETER_VERSION = "time-v6";
+// v7: found live (R33): "check if Friday evening is free", asked on a Sunday, came back as "Wednesday, Sep 2" -- a
+// date exactly one month before the correct Friday, reproduced as a one-off (an identical retry got the right
+// answer). The system prompt already states an exact, unambiguous rule for a bare weekday ("always means its next
+// occurrence, counting today"), but left the actual date arithmetic to the model with no cross-check, so an
+// occasional reasoning slip went straight through. A bare weekday's date is now verified against a deterministic
+// calculation and corrected if the model's arithmetic disagrees. Separately, the same message showed a whole-day
+// window instead of just the evening: "evening"/"morning"/etc. sometimes gets classified as kind "moment" (a single
+// instant, e.g. "at 5pm") instead of kind "day" with the evening sub-range, and a "moment" reading's window has
+// always been the whole day by design (see the kind "moment" branch below) -- a daypart word in the message now
+// narrows that window to the correct sub-range even when this misclassification happens.
+export const TIME_INTERPRETER_VERSION = "time-v7";
 
 export type CalendarWindow = { start: Temporal.ZonedDateTime; end: Temporal.ZonedDateTime; label: string };
 
@@ -87,6 +97,47 @@ function parseLocal(value: string, timeZone: string): Temporal.ZonedDateTime | n
   try { return Temporal.PlainDateTime.from(value.trim().replace(/Z$|[+-]\d\d:\d\d$/, "")).toZonedDateTime(timeZone); } catch { return null; }
 }
 
+const ISO_WEEKDAYS: Record<string, number> = { monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6, sunday: 7 };
+/** The next occurrence of the named weekday, counting today (today itself if it already matches) -- the system
+ * prompt's own stated rule, computed here instead of trusted to the model's arithmetic. */
+function nextWeekdayOccurrence(today: Temporal.PlainDate, weekdayName: string): Temporal.PlainDate {
+  const targetIso = ISO_WEEKDAYS[weekdayName];
+  return today.add({ days: (targetIso - today.dayOfWeek + 7) % 7 });
+}
+/** A single, bare weekday name in the message, with no wording ("last", "after next", "in N weeks") that would
+ * change which occurrence is meant -- those stay entirely up to the model, same as before this correction existed. */
+function bareWeekdayInMessage(message: string): string | null {
+  const all = message.match(/\b(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/gi) ?? [];
+  if (all.length !== 1) return null;
+  const index = message.toLowerCase().indexOf(all[0].toLowerCase());
+  const before = message.slice(0, index);
+  const after = message.slice(index + all[0].length);
+  if (/\blast\b\s*$/i.test(before) || /^\s*\bafter\s+next\b/i.test(after) || /\bweeks?\b/i.test(before) || /\bweeks?\b/i.test(after)) return null;
+  return all[0].toLowerCase();
+}
+/** Shifts a day/moment reading's date (never its time-of-day) onto the deterministically correct next occurrence
+ * of a bare weekday named in the message, if the model's own arithmetic landed somewhere else -- but only within
+ * a bound generous enough to cover the kind of slip actually seen live (exactly one month, i.e. ~30 days), so a
+ * wildly different date (wrong year, many months off) still reaches the existing "did you mean" ask instead of
+ * being silently overridden. */
+function correctBareWeekdayDate(kind: Output["kind"], message: string, today: Temporal.PlainDate, start: Temporal.ZonedDateTime, end: Temporal.ZonedDateTime) {
+  if (kind !== "day" && kind !== "moment") return { start, end };
+  const weekdayName = bareWeekdayInMessage(message);
+  if (!weekdayName) return { start, end };
+  const dayDiff = start.toPlainDate().until(nextWeekdayOccurrence(today, weekdayName)).days;
+  return dayDiff === 0 || Math.abs(dayDiff) > 35 ? { start, end } : { start: start.add({ days: dayDiff }), end: end.add({ days: dayDiff }) };
+}
+
+const DAYPART_HOURS: Record<string, [number, number]> = { morning: [5, 12], afternoon: [12, 17], evening: [17, 23], tonight: [17, 24] };
+/** The message's own named daypart, when a "moment" reading's window would otherwise be the whole day -- see the
+ * kind "moment" branch below for why that's the normal behavior, and why a daypart word should narrow it instead. */
+function daypartWindow(message: string, dayStart: Temporal.ZonedDateTime): { start: Temporal.ZonedDateTime; end: Temporal.ZonedDateTime } | null {
+  const match = message.match(/\b(morning|afternoon|evening|tonight)\b/i);
+  if (!match) return null;
+  const [from, to] = DAYPART_HOURS[match[1].toLowerCase()];
+  return { start: dayStart.add({ hours: from }), end: to === 24 ? dayStart.add({ days: 1 }) : dayStart.add({ hours: to }) };
+}
+
 function askFrom(output: Output): TimeReading {
   const choices = [...new Set(output.choices.map((choice) => choice.trim()).filter(Boolean))].slice(0, 4);
   return { kind: "ask", question: output.question.trim() || ASK_FALLBACK, choices: choices.length >= 2 ? choices : [] };
@@ -100,18 +151,20 @@ export function toReading(output: Output, input: TimeInput): TimeReading {
   const place = output.place.trim() || null;
   if (output.kind === "none") return { kind: "window", window: { start: midnight, end: midnight.add({ days: 1 }), label: "today" }, moment: null, place };
 
-  const start = parseLocal(output.start, input.timeZone);
+  let start = parseLocal(output.start, input.timeZone);
   let end = parseLocal(output.end, input.timeZone);
   if (!start) return askFrom({ ...output, question: "", choices: [] });
   if (output.kind === "moment" && !end) end = start.add({ hours: 1 });
   if (!end || Temporal.ZonedDateTime.compare(end, start) <= 0) return askFrom({ ...output, question: "", choices: [] });
+  ({ start, end } = correctBareWeekdayDate(output.kind, input.message, today, start, end));
   if (Math.abs(start.year - today.year) > MAX_YEAR_DISTANCE) return askFrom({ ...output, question: `Did you mean ${start.toPlainDate().toLocaleString("en-US", { month: "long", day: "numeric", year: "numeric" })}?`, choices: [] });
   if (start.until(end, { largestUnit: "days" }).total({ unit: "days", relativeTo: start }) > MAX_SPAN_DAYS) return askFrom({ ...output, question: "That covers a lot of days. Which stretch would you like to see?", choices: [] });
 
   const label = output.label.trim() || `on ${start.toPlainDate().toLocaleString("en-US", { weekday: "long", month: "long", day: "numeric" })}`;
   if (output.kind === "moment") {
     const dayStart = start.startOfDay();
-    return { kind: "window", window: { start: dayStart, end: dayStart.add({ days: 1 }), label }, moment: start, place };
+    const daypart = daypartWindow(input.message, dayStart);
+    return { kind: "window", window: daypart ? { ...daypart, label } : { start: dayStart, end: dayStart.add({ days: 1 }), label }, moment: start, place };
   }
   return { kind: "window", window: { start, end, label }, moment: null, place };
 }

@@ -32,6 +32,40 @@ describe("the time interpreter reads dates with a model and checks only their fo
     expect(reading.place).toBe("AMC Bay Street");
   });
 
+  describe("a bare weekday's date is verified deterministically, not just trusted to the model (R33, found live)", () => {
+    it("corrects a wrong date within a plausible slip (here: exactly one month off, the exact gap seen live), keeping the model's time-of-day and narrowing to the named daypart", async () => {
+      // today (2026-09-21) is a Monday; the next Friday is 2026-09-25. The model instead answers with a date a
+      // month earlier that happens to fall on a Wednesday -- exactly the "Wednesday" for "Friday" mix-up seen live.
+      const reading = await run({ kind: "moment", start: "2026-08-26T17:00:00", end: "" }, { ...input, message: "check if Friday evening is free" });
+      if (reading.kind !== "window") throw new Error("expected a window");
+      expect(reading.window.start.toString()).toBe("2026-09-25T17:00:00-07:00[America/Los_Angeles]");
+      expect(reading.window.end.toString()).toBe("2026-09-25T23:00:00-07:00[America/Los_Angeles]");
+      expect(reading.moment?.toString()).toBe("2026-09-25T17:00:00-07:00[America/Los_Angeles]");
+    });
+
+    it("leaves the date alone when the model already got it right", async () => {
+      const reading = await run({ start: "2026-09-26T00:00:00", end: "2026-09-27T00:00:00" }, { ...input, message: "what's on saturday" });
+      if (reading.kind !== "window") throw new Error("expected a window");
+      expect(reading.window.start.toPlainDate().toString()).toBe("2026-09-26");
+    });
+
+    it("never overrides 'last Friday', 'Friday after next', or a message naming more than one weekday", async () => {
+      for (const message of ["what happened last friday", "the friday after next", "monday through friday"]) {
+        const reading = await run({ start: "2026-08-26T00:00:00", end: "2026-08-27T00:00:00" }, { ...input, message });
+        if (reading.kind !== "window") throw new Error("expected a window");
+        expect(reading.window.start.toPlainDate().toString()).toBe("2026-08-26"); // unchanged -- not corrected onto "the next Friday"
+      }
+    });
+  });
+
+  it("narrows a moment misclassified from a named daypart (e.g. 'evening') to that daypart's hours, not the whole day", async () => {
+    const reading = await run({ kind: "moment", start: "2026-09-26T17:00:00", end: "" }, { ...input, message: "am I free saturday evening" });
+    if (reading.kind !== "window") throw new Error("expected a window");
+    expect(reading.window.start.hour).toBe(17);
+    expect(reading.window.end.hour).toBe(23);
+    expect(reading.moment?.hour).toBe(17);
+  });
+
   it("a message with no time shows today", async () => {
     const reading = await run({ kind: "none", start: "", end: "" });
     if (reading.kind !== "window") throw new Error("expected a window");
