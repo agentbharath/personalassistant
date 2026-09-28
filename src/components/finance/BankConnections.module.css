@@ -20,10 +20,16 @@
 .tabActive, .tabActive:hover { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 
 .scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--surface); }
-.table { border-collapse: collapse; width: 100%; min-width: 40rem; font-size: var(--text-sm); }
-.table th, .table td { text-align: left; padding: var(--s-3) var(--s-4); border-bottom: 1px solid var(--line); vertical-align: top; }
+.table { border-collapse: collapse; table-layout: fixed; width: 100%; min-width: 40rem; font-size: var(--text-sm); }
+.table th, .table td { text-align: left; padding: var(--s-3) var(--s-4); border-bottom: 1px solid var(--line); vertical-align: top; overflow-wrap: break-word; }
 .table th { color: var(--faint); font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
 .table tr:last-child td { border-bottom: 0; }
+/* Fixed column widths so the grid stays put switching between banks -- otherwise each column auto-sizes to
+   whatever merchant name or status text is longest in that bank's own rows, and the table visibly reflows. */
+.table th:nth-child(1), .table td:nth-child(1) { width: 22%; }
+.table th:nth-child(2), .table td:nth-child(2) { width: 36%; }
+.table th:nth-child(3), .table td:nth-child(3) { width: 16%; }
+.table th:nth-child(4), .table td:nth-child(4) { width: 26%; }
 .table select { max-width: 16rem; display: block; margin: var(--s-2) 0; padding: var(--s-2); font: inherit; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: var(--r-sm); }
 .table small { display: block; margin-top: 0.35rem; color: var(--muted); font-size: var(--text-xs); }
 .amount { white-space: nowrap; font-variant-numeric: tabular-nums; }
