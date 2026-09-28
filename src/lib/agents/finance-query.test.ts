@@ -44,7 +44,7 @@ it("shows \"All time\" instead of the code's own 1970-01-01 sentinel for \"so fa
  expect(answer).not.toContain("daylark-card");
 });
 
-it("embeds a spending card (total, vs-prior comparison, category breakdown) for a single-range spending query", async () => {
+it("embeds a spending card with a plain category breakdown, no chart, for a month-long single-range query (a daily running total over a month is mostly flat days, not a useful chart)", async () => {
  mocks.model.mockResolvedValue({content:[{type:"text",text:JSON.stringify({...plan,mode:"spending",ranges:[{from:"2026-09-01",to:"2026-09-30"}]})}]});
  mocks.list.mockImplementation(async (_u:string,from:string)=>{
   if(from==="2026-09-01") return [{...row("Trader Joe's","2026-09-05"),amountMinor:31800,category:"groceries"},{...row("DoorDash","2026-09-10"),amountMinor:19600,category:"restaurants"}];
@@ -63,17 +63,36 @@ it("embeds a spending card (total, vs-prior comparison, category breakdown) for 
  expect(card.total).toBe(51400);
  expect(card.priorTotal).toBe(50000);
  expect(card.changePercent).toBe(3);
- expect(card.changes.map((c:{category:string})=>c.category)).toEqual(["restaurants","groceries"]);
  expect(card.insight).toContain("Up 3% vs last month");
  expect(card.insight).toContain("Restaurants drove most of the increase");
+ expect(card.categories).toEqual([{category:"groceries",amountMinor:31800,sharePercent:62},{category:"restaurants",amountMinor:19600,sharePercent:38}]);
+ expect(card.running).toEqual([]);
+ expect(card.changes).toEqual([]);
+ expect(card.topMerchants).toEqual([]);
+ expect(card.actions).toEqual([]);
+});
+
+it("embeds the richer card (running total, category changes, top merchants) for a week-long single-range query", async () => {
+ mocks.model.mockResolvedValue({content:[{type:"text",text:JSON.stringify({...plan,mode:"spending",ranges:[{from:"2026-09-01",to:"2026-09-07"}]})}]});
+ mocks.list.mockImplementation(async (_u:string,from:string)=>{
+  if(from==="2026-09-01") return [{...row("Trader Joe's","2026-09-05"),amountMinor:31800,category:"groceries"},{...row("DoorDash","2026-09-06"),amountMinor:19600,category:"restaurants"}];
+  if(from==="2026-08-25") return [{...row("Costco","2026-08-30"),amountMinor:50000,category:"groceries"}];
+  return [];
+ });
+ const answer=await answerFinanceQuery("how much did I spend this week","u");
+ const card=JSON.parse(answer.match(/```daylark-card\n([\s\S]*?)\n```/)![1]);
+ expect(card.categories).toEqual([]);
+ expect(card.changes.map((c:{category:string})=>c.category)).toEqual(["restaurants","groceries"]);
+ expect(card.topMerchants.map((m:{merchant:string})=>m.merchant)).toEqual(["Trader Joe's","DoorDash"]);
+ expect(card.actions.length).toBeGreaterThan(0);
  // Regression guard (found live): the prior-period line rendered flat at $0 because its rows were bucketed by
  // day-offset from the CURRENT period's start, putting every prior-period date at a negative offset. Each series
  // must be bucketed from its own period's start, so the prior line actually reaches its real $500 total.
- expect(card.running).toHaveLength(30);
- expect(card.running[12].prior).toBe(0); // the day before Costco's Aug 15 charge (offset 13 from Aug 2)
- expect(card.running[13].prior).toBe(50000);
- expect(card.running[29].prior).toBe(50000);
- expect(card.running[29].current).toBe(51400);
+ expect(card.running).toHaveLength(7);
+ expect(card.running[4].prior).toBe(0); // the day before Costco's Aug 30 charge (offset 5 from Aug 25)
+ expect(card.running[5].prior).toBe(50000);
+ expect(card.running[6].prior).toBe(50000);
+ expect(card.running[6].current).toBe(51400);
 });
 
 it("does not embed a card for a multi-range spending query (no single prior period to compare)", async () => {

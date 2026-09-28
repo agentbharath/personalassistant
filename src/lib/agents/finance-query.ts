@@ -85,13 +85,20 @@ async function buildSpendingCard(userId:string,from:string,to:string,currentRows
  const priorMine=priorRows.filter(row=>row.currency===summary.currency);
  const comparisonLabel=comparisonLabelFor(from,to);
  const changes=categoryChanges(mine,priorMine);
+ // A daily running-total chart and a week-over-week category diff both stop being useful past about a week: most
+ // days of a month have no spending at all, so the "running total" line is mostly flat with a few spikes -- a
+ // staircase, not a chart (found live). Past that length, show the plain category breakdown instead, matching
+ // the simpler design used for a longer period; no action buttons either, matching that same design exactly.
+ const rich=Temporal.PlainDate.from(from).until(Temporal.PlainDate.from(to)).days+1<=RICH_SPENDING_CARD_MAX_DAYS;
  return {kind:"spending",periodLabel,filterLabel:categoryFilter?toKnownCategory(categoryFilter):null,
   currency:summary.currency,total:summary.total,priorTotal:summary.previousTotal,changePercent:summary.changePercent,comparisonLabel,
   insight:spendingInsight(summary.changePercent,comparisonLabel,changes),
-  running:dailyRunning(mine,priorMine,from,to,prior.from),xTicks:xTicksFor(from,to),changes,
-  topMerchants:topMerchantsFor(mine),actions:actionsFor(comparisonLabel,changes),
+  running:rich?dailyRunning(mine,priorMine,from,to,prior.from):[],xTicks:rich?xTicksFor(from,to):[],changes:rich?changes:[],
+  topMerchants:rich?topMerchantsFor(mine):[],categories:rich?[]:summary.categories.map(c=>({category:c.category,amountMinor:c.amountMinor,sharePercent:c.sharePercent})),
+  actions:rich?actionsFor(comparisonLabel,changes):[],
   count:summary.count,otherCurrencyCount:summary.otherCurrencyCount};
 }
+const RICH_SPENDING_CARD_MAX_DAYS=10;
 function comparisonLabelFor(from:string,to:string):string {
  const days=Temporal.PlainDate.from(from).until(Temporal.PlainDate.from(to)).days+1;
  if(days<=1) return "vs yesterday";

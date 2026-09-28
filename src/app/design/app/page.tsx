@@ -15,6 +15,7 @@ export default async function DesignAppPage({ searchParams }: { searchParams: Pr
   const thread = view === "thread";
   const scan = view === "scan";
   const spending = view === "spending";
+  const spendingSimple = view === "spending-simple";
   const bills = view === "bills";
   const day = view === "day";
   const email = view === "email";
@@ -43,8 +44,24 @@ export default async function DesignAppPage({ searchParams }: { searchParams: Pr
         { merchant: "Excel Gas & Mart", amountMinor: 4001, count: 1 },
         { merchant: "Anthropic", amountMinor: 4000, count: 2 },
       ],
+      categories: [],
       actions: [{ label: "Categorize the $103.50 in Other", query: "help me categorize my Other spending this period" }, { label: "Compare to the week before", query: "compare this to last week" }],
       count: 18, otherCurrencyCount: 0,
+    }) },
+  ];
+  const spendingSimpleMessages = [
+    { role: "user" as const, content: "how much did I spend this month?" },
+    { role: "assistant" as const, content: embedCard("### Spending · September\n\n$642.00", {
+      kind: "spending", periodLabel: "September", filterLabel: null, currency: "USD", total: 64200, priorTotal: 73000, changePercent: -12,
+      comparisonLabel: "vs last month", insight: "Under last month. Groceries are steady, delivery is where it goes.",
+      running: [], xTicks: [], changes: [], topMerchants: [], actions: [],
+      categories: [
+        { category: "groceries", amountMinor: 31800, sharePercent: 50 },
+        { category: "delivery", amountMinor: 19600, sharePercent: 30 },
+        { category: "restaurants", amountMinor: 9800, sharePercent: 15 },
+        { category: "other", amountMinor: 3000, sharePercent: 5 },
+      ],
+      count: 34, otherCurrencyCount: 0,
     }) },
   ];
   const billsMessages = [
@@ -89,6 +106,6 @@ export default async function DesignAppPage({ searchParams }: { searchParams: Pr
     }) },
   ];
   return <AppShell title={thread ? "iHerb receipts" : "New conversation"} email="you@example.com" signOutAction={signOut} recent={MOCK_RECENT} activeConversationId={thread ? MOCK_RECENT[0].id : undefined}>
-    <Chat key={view ?? "empty"} title={thread ? "iHerb receipts" : undefined} conversationId={thread ? MOCK_RECENT[0].id : undefined} initialMessages={scan ? scanMessages : thread ? MOCK_THREAD : spending ? spendingMessages : bills ? billsMessages : day ? dayMessages : email ? emailMessages : []} />
+    <Chat key={view ?? "empty"} title={thread ? "iHerb receipts" : undefined} conversationId={thread ? MOCK_RECENT[0].id : undefined} initialMessages={scan ? scanMessages : thread ? MOCK_THREAD : spending ? spendingMessages : spendingSimple ? spendingSimpleMessages : bills ? billsMessages : day ? dayMessages : email ? emailMessages : []} />
   </AppShell>;
 }

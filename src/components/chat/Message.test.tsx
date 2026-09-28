@@ -24,7 +24,7 @@ describe("a message carrying a card payload (free)", () => {
     running: [{ current: 0, prior: 0 }, { current: 19600, prior: 17500 }],
     xTicks: [{ offset: 0, label: "Sep 1" }, { offset: 1, label: "Sep 2" }],
     changes: [{ category: "restaurants", now: 19600, before: 17500, delta: 2100 }],
-    topMerchants: [{ merchant: "DoorDash", amountMinor: 19600, count: 1 }],
+    topMerchants: [{ merchant: "DoorDash", amountMinor: 19600, count: 1 }], categories: [],
     actions: [{ label: "Compare to last month", query: "compare this to last month" }],
     count: 1, otherCurrencyCount: 0,
   };

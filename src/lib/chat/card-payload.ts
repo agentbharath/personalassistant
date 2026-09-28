@@ -17,13 +17,15 @@ export type SpendingCardPayload = {
   changePercent: number | null;
   comparisonLabel: string;
   insight: string;
-  /** Cumulative running totals by day offset from the period start; `running.length` is the same for both periods (`priorPeriod` mirrors the current period's length). */
+  /** Cumulative running totals by day offset from the period start; `running.length` is the same for both periods (`priorPeriod` mirrors the current period's length). Empty for a longer period (see `categories`) -- a daily running total over a month is mostly flat days and a few spikes, which reads as a broken staircase rather than a useful chart. */
   running: { current: number; prior: number }[];
   /** Sparse labels for the x-axis -- one entry per tick, not one per day, so a month-long period doesn't render 30 crowded labels. */
   xTicks: { offset: number; label: string }[];
-  /** Categories with a nonzero swing vs the prior period, largest absolute change first. */
+  /** Categories with a nonzero swing vs the prior period, largest absolute change first. Empty for a longer period (see `categories`). */
   changes: { category: string; now: number; before: number; delta: number }[];
   topMerchants: { merchant: string; amountMinor: number; count: number }[];
+  /** The plain category breakdown (share of the period's total), used instead of running/changes/topMerchants for a period longer than about a week or a single-category filter, where a running-total chart and a week-over-week category diff both stop being meaningful. Empty for the shorter/richer view. */
+  categories: { category: string; amountMinor: number; sharePercent: number }[];
   actions: { label: string; query: string }[];
   count: number;
   otherCurrencyCount: number;

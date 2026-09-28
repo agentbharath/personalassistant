@@ -11,6 +11,17 @@
 
 .insight { margin: 0; color: var(--muted); font-size: var(--text-sm); }
 
+/* The plain category breakdown used instead of the chart/changes/merchants sections for a period longer than
+   about a week -- same bars as the Today page's own spending card (TodayView.module.css), for the same reason:
+   a period that long has no useful daily granularity to chart. */
+.cats { display: grid; gap: var(--s-3); }
+.catRow { display: grid; gap: 6px; }
+.catHead { display: flex; align-items: center; justify-content: space-between; gap: var(--s-4); font-size: var(--text-sm); }
+.catName { color: var(--ink-2); }
+.catAmount { font-variant-numeric: tabular-nums; font-weight: 500; }
+.catBar { display: block; height: 6px; border-radius: var(--r-pill); background: var(--accent-soft); overflow: hidden; }
+.catFill { display: block; height: 100%; border-radius: var(--r-pill); background: var(--ink); }
+
 .section { display: grid; gap: var(--s-2); padding-top: var(--s-3); border-top: 1px solid var(--line); }
 .sectionHead { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s-2); }
 .label { color: var(--faint); font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }

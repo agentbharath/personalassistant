@@ -20,7 +20,7 @@ function niceStep(maxValue: number, targetLines = 3): number {
 /** The richer "how was my spending" card: hero total, a running-total line chart against the prior period,
  * a diverging bar per category that moved, top merchants, and one or two suggested follow-ups. */
 export function SpendingCard({ payload, onFollowUp, busy }: { payload: SpendingCardPayload; onFollowUp?: (text: string) => void; busy?: boolean }) {
-  const { periodLabel, filterLabel, currency, total, changePercent, comparisonLabel, insight, running, xTicks, changes, topMerchants, actions, count, otherCurrencyCount } = payload;
+  const { periodLabel, filterLabel, currency, total, changePercent, comparisonLabel, insight, running, xTicks, changes, topMerchants, categories, actions, count, otherCurrencyCount } = payload;
 
   const maxValue = Math.max(1, ...running.map((point) => Math.max(point.current, point.prior)));
   const step = niceStep(maxValue);
@@ -43,6 +43,14 @@ export function SpendingCard({ payload, onFollowUp, busy }: { payload: SpendingC
       </span>}
     </div>
     {insight && <p className={styles.insight}>{insight}</p>}
+
+    {categories.length > 0 && <div className={styles.cats}>{categories.map((item) => <div className={styles.catRow} key={item.category}>
+      <span className={styles.catHead}>
+        <span className={styles.catName}>{titleCase(item.category)}</span>
+        <span className={styles.catAmount}>{money(item.amountMinor, currency)}</span>
+      </span>
+      <span className={styles.catBar} aria-hidden="true"><span className={styles.catFill} style={{ width: `${Math.max(item.sharePercent, 3)}%` }} /></span>
+    </div>)}</div>}
 
     {running.length > 1 && <div className={styles.section}>
       <div className={styles.sectionHead}>
