@@ -28,11 +28,25 @@ export type SpendingCardPayload = {
   count: number;
   otherCurrencyCount: number;
 };
-export type CardPayload = SpendingCardPayload;
+export type BillsCardPayload = {
+  kind: "bills";
+  /** Null when the outstanding bills mix currencies -- adding them would be wrong, so the hero shows just the count. */
+  total: number | null;
+  currency: string | null;
+  count: number;
+  insight: string;
+  /** Past-due first, then soonest due date first -- capped; `moreCount` covers the rest. */
+  bills: { id: string; merchant: string; amountMinor: number; currency: string; badge: { weekday: string; day: number } | null; status: string; overdue: boolean; autopay: boolean }[];
+  moreCount: number;
+  actions: { label: string; query: string }[];
+};
+export type CardPayload = SpendingCardPayload | BillsCardPayload;
 
 export function embedCard(text: string, payload: CardPayload): string {
   return `${text}\n\n\`\`\`daylark-card\n${JSON.stringify(payload)}\n\`\`\``;
 }
+
+const KNOWN_KINDS = new Set(["spending", "bills"]);
 
 /** Never throws: a malformed or unrecognized payload just means no card, the prose (unstripped) stands alone. */
 export function extractCard(content: string): { text: string; card: CardPayload | null } {
@@ -40,7 +54,7 @@ export function extractCard(content: string): { text: string; card: CardPayload 
   if (!match) return { text: content, card: null };
   try {
     const parsed = JSON.parse(match[1]) as { kind?: string };
-    if (parsed.kind !== "spending") return { text: content, card: null };
+    if (!parsed.kind || !KNOWN_KINDS.has(parsed.kind)) return { text: content, card: null };
     return { text: content.slice(0, match.index).trimEnd(), card: parsed as CardPayload };
   } catch {
     return { text: content, card: null };

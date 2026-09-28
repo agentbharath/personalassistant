@@ -85,6 +85,40 @@ describe("what the user sees (R17.3, R17.7, R17.8)", () => {
 });
 
 
+describe("the bills card (chat only)", () => {
+  it("embeds a bills card led by the most urgent bill, with autopay bills flagged instead of counted down", async () => {
+    mocks.bills = [
+      bill({ id: "chase", merchant: "Chase card", amountMinor: 84600, dueDate: "2026-09-29" }),
+      bill({ id: "pge", merchant: "PG&E", amountMinor: 13800, dueDate: "2026-10-01" }),
+    ];
+    mocks.autopay = ["pg&e"];
+    const answer = await answerBills("u1", "c1");
+    expect(answer).toContain("```daylark-card");
+    const card = JSON.parse(answer.match(/```daylark-card\n([\s\S]*?)\n```/)![1]);
+    expect(card.kind).toBe("bills");
+    expect(card.count).toBe(2);
+    expect(card.total).toBe(98400);
+    expect(card.bills.map((b: { merchant: string }) => b.merchant)).toEqual(["Chase card", "PG&E"]);
+    expect(card.bills[1].status).toBe("Autopay on");
+    expect(card.bills[1].autopay).toBe(true);
+    expect(card.insight).toContain("Chase card is the one to watch");
+    expect(card.insight).toContain("not on autopay");
+    expect(card.actions).toEqual([{ label: "Mark Chase card paid", query: "I paid the Chase card bill" }]);
+  });
+
+  it("never embeds a card outside a conversation -- there is no chat surface to render it in", async () => {
+    mocks.bills = [bill()];
+    const answer = await answerBills("u1");
+    expect(answer).not.toContain("daylark-card");
+  });
+
+  it("omits the card entirely when there are no outstanding bills", async () => {
+    mocks.bills = [];
+    const answer = await answerBills("u1", "c1");
+    expect(answer).not.toContain("daylark-card");
+  });
+});
+
 describe("dues and the background email sync (R17.8, R31)", () => {
   it("shows saved bills together with the sync's freshness note, and never sweeps email inline", async () => {
     mocks.bills = [bill()];

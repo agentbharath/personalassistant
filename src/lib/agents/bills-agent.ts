@@ -6,8 +6,10 @@ import { NO_LEARNINGS } from "@/lib/learning/learnings";
 import { loadLearnings, saveLearning } from "@/lib/learning/store";
 import { listBills, settleBill } from "@/lib/tools/finance/bills";
 import { financeFreshness } from "@/lib/finance-sync/review";
+import { billsTotal } from "@/lib/today/brief";
 import { readGmailMessage, searchGmail } from "@/lib/tools/email/google-gmail";
-import { autopayDue, classifyDocument, matchPayment, outstandingNote, renderBills, sameMerchant, type Bill, type BillsCommand } from "./bills";
+import { embedCard, type BillsCardPayload } from "@/lib/chat/card-payload";
+import { autopayDue, classifyDocument, matchPayment, outstandingNote, pastDue, renderBills, sameMerchant, type Bill, type BillsCommand } from "./bills";
 import { extractInvoiceFacts } from "./email-invoice";
 
 const TIME_ZONE = process.env.DEFAULT_USER_TIMEZONE ?? "America/Los_Angeles";
@@ -16,6 +18,63 @@ const MAX_PAYMENT_LOOKUPS = 5;
 
 const money = (amountMinor: number, currency: string) => new Intl.NumberFormat("en-US", { style: "currency", currency }).format(amountMinor / 100);
 const day = (iso: string) => new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }).format(new Date(`${iso}T12:00:00Z`));
+const daysBetween = (from: string, to: string) => Math.round((Date.parse(`${to}T12:00:00Z`) - Date.parse(`${from}T12:00:00Z`)) / 86_400_000);
+const isOnAutopay = (merchant: string, autopayMerchants: string[]) => autopayMerchants.some((name) => sameMerchant(merchant, name));
+
+function billStatus(bill: Bill, autopayMerchants: string[], todayIso: string): string {
+  if (isOnAutopay(bill.merchant, autopayMerchants)) return "Autopay on";
+  if (!bill.dueDate) return "No due date";
+  const days = daysBetween(todayIso, bill.dueDate);
+  if (days < 0) return `${Math.abs(days)} day${Math.abs(days) === 1 ? "" : "s"} overdue`;
+  if (days === 0) return "Due today";
+  return `Due in ${days} day${days === 1 ? "" : "s"}`;
+}
+
+/** The single most urgent outstanding bill drives the card's insight sentence, mirroring how a person would
+ * naturally summarize a list: name the one to watch, not restate every row. */
+function billsInsight(featured: Bill, autopayMerchants: string[], todayIso: string): string {
+  const autopay = isOnAutopay(featured.merchant, autopayMerchants);
+  const overdue = featured.dueDate !== null && featured.dueDate < todayIso;
+  const weekday = (iso: string) => Temporal.PlainDate.from(iso).toLocaleString("en-US", { weekday: "long" });
+  const timing = !featured.dueDate ? "has no due date on file"
+    : overdue ? `was due ${weekday(featured.dueDate)}`
+    : featured.dueDate === todayIso ? "is due today"
+    : `is due ${weekday(featured.dueDate)}`;
+  return `${featured.merchant} is the one to watch. It ${timing}${autopay ? " and is on autopay." : " and not on autopay."}`;
+}
+
+/** Past-due first, then soonest due date -- the same ordering `renderBills` already uses for the text answer. */
+function orderBills(bills: Bill[], todayIso: string): Bill[] {
+  const late = pastDue(bills, todayIso).sort((left, right) => (left.dueDate ?? "").localeCompare(right.dueDate ?? ""));
+  const rest = bills.filter((bill) => !late.includes(bill)).sort((left, right) => (left.dueDate ?? "9999").localeCompare(right.dueDate ?? "9999"));
+  return [...late, ...rest];
+}
+
+const SHOWN_BILLS = 5;
+
+function buildBillsCard(bills: Bill[], autopayMerchants: string[], todayIso: string): BillsCardPayload | null {
+  if (!bills.length) return null;
+  const ordered = orderBills(bills, todayIso);
+  const shown = ordered.slice(0, SHOWN_BILLS);
+  const totals = billsTotal(bills);
+  const featured = ordered[0];
+  return {
+    kind: "bills",
+    total: totals?.amountMinor ?? null,
+    currency: totals?.currency ?? bills[0].currency,
+    count: bills.length,
+    insight: billsInsight(featured, autopayMerchants, todayIso),
+    bills: shown.map((bill) => ({
+      id: bill.id, merchant: bill.merchant, amountMinor: bill.amountMinor, currency: bill.currency,
+      badge: bill.dueDate ? { weekday: Temporal.PlainDate.from(bill.dueDate).toLocaleString("en-US", { weekday: "short" }).toUpperCase(), day: Temporal.PlainDate.from(bill.dueDate).day } : null,
+      status: billStatus(bill, autopayMerchants, todayIso),
+      overdue: bill.dueDate !== null && bill.dueDate < todayIso,
+      autopay: isOnAutopay(bill.merchant, autopayMerchants),
+    })),
+    moreCount: Math.max(0, ordered.length - shown.length),
+    actions: [{ label: `Mark ${featured.merchant} paid`, query: `I paid the ${featured.merchant} bill` }],
+  };
+}
 
 /** R17.6: a bill of a declared-autopay merchant counts as paid on its due date. Runs before any answer that depends on bills. */
 export async function settleAutopayBills(userId: string, learnings: Learnings) {
@@ -78,7 +137,9 @@ export async function answerBills(userId: string, conversationId?: string) {
   const saved = `${auto}${renderBills(bills, today(), found)}`;
   if (!conversationId) return saved;
   const freshness = await financeFreshness(userId, conversationId).catch(() => ({ note: "Email sync is unavailable. This answer uses saved dues only.", review: false }));
-  return [saved, freshness.note].filter(Boolean).join("\n\n");
+  const text = [saved, freshness.note].filter(Boolean).join("\n\n");
+  const card = buildBillsCard(bills, learnings.autopay, today());
+  return card ? embedCard(text, card) : text;
 }
 
 /** R17.5, R17.6, R17.8 */
