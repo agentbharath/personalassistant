@@ -41,6 +41,19 @@ describe("no rules interpret a message, ever (R20.5)", () => {
     expect(mocks.dispatch).not.toHaveBeenCalled();
   });
 
+  it("does not mention receipt-scan buttons for an ordinary message with nothing pending (found live: a weather question was told its scan buttons still work)", async () => {
+    mocks.route.mockResolvedValue(null);
+    const result = await runOrchestrator("hows the weather", "u1", [], "c1");
+    expect(result.answer).not.toMatch(/scan button/i);
+  });
+
+  it("still mentions the scan buttons when a receipt import is actually mid-review", async () => {
+    mocks.route.mockResolvedValue(null);
+    mocks.pending.mockResolvedValue(true);
+    const result = await runOrchestrator("something", "u1", [], "c1");
+    expect(result.answer).toMatch(/Confirm, Cancel, and Continue scan buttons still work/);
+  });
+
   it("asks instead of guessing when the model's specialist could not settle on a reading", async () => {
     mocks.route.mockResolvedValue(decision());
     mocks.dispatch.mockResolvedValue(null);

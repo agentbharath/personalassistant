@@ -8,15 +8,21 @@ export function logEvent(level: "info" | "warn" | "error", event: string, fields
   console[level](event, JSON.stringify(fields));
 }
 
-/** What is safe to say about an error: its type and any status or code it carries. Its message can hold private data (a subject, an address), so it is never used. */
-export function describeError(error: unknown): { errorName: string; status?: number; code?: string; reason?: string } {
+/**
+ * What is safe to say about an error: its type and any status, code or reason it carries. Its message can hold private data (a subject, an
+ * address), so it is never used -- but `apiErrorType` (the Anthropic SDK's own `error.type`, e.g. "rate_limit_error"/"overloaded_error") is a
+ * fixed category the API itself defines, never user content, so it is safe to log; it is what actually distinguishes "the model is rate
+ * limited" from "the model returned something the schema rejected" once a caller like the router has scrubbed and swallowed the rest.
+ */
+export function describeError(error: unknown): { errorName: string; status?: number; code?: string; reason?: string; apiErrorType?: string } {
   if (!error || typeof error !== "object") return { errorName: typeof error };
-  const value = error as { name?: unknown; status?: unknown; code?: unknown; reason?: unknown };
+  const value = error as { name?: unknown; status?: unknown; code?: unknown; reason?: unknown; type?: unknown };
   return {
     errorName: typeof value.name === "string" ? value.name : "Error",
     ...(typeof value.status === "number" ? { status: value.status } : {}),
     ...(typeof value.code === "string" ? { code: value.code } : {}),
     ...(typeof value.reason === "string" ? { reason: value.reason } : {}),
+    ...(typeof value.type === "string" ? { apiErrorType: value.type } : {}),
   };
 }
 
@@ -24,7 +30,7 @@ const THROTTLE_MS = 60_000;
 const lastSent = new Map<string, number>();
 
 /** Tag keys that may travel to Sentry: short labels, not content. */
-const TAG_KEYS = ["provider", "operation", "status", "reason", "version", "route", "kind"];
+const TAG_KEYS = ["provider", "operation", "status", "reason", "version", "route", "kind", "apiErrorType"];
 
 /**
  * Reports a failure the code handled itself (a fallback, a skipped step, an unavailable service). It always writes a log line, and it sends one

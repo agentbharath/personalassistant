@@ -30,6 +30,11 @@ describe("structured logging (free)", () => {
     expect(describeError("boom")).toEqual({ errorName: "string" });
     expect(describeError(null)).toEqual({ errorName: "object" });
   });
+
+  it("also captures an Anthropic-style error.type -- a fixed API category (e.g. rate_limit_error), never user content, so it is safe where the message is not", () => {
+    const anthropicError = Object.assign(new Error("do not use this text"), { name: "RateLimitError", status: 429, type: "rate_limit_error" });
+    expect(describeError(anthropicError)).toEqual({ errorName: "RateLimitError", status: 429, apiErrorType: "rate_limit_error" });
+  });
 });
 
 describe("reporting a handled failure (free)", () => {

@@ -36,7 +36,11 @@ export type UiAction = "confirm" | "cancel" | "continue_scan";
  * R20.5: what a message means is decided only by a model. When none can be used (no credit, the daily budget is used up, the provider is
  * down) Daylark says so and does nothing. It never falls back to patterns or rules. Service failures never infer a crisis or display unrelated emergency resources.
  */
-export const CANNOT_INTERPRET = "I couldn’t process that request because the AI service is unavailable or a usage limit has been reached. Please try again later. Your saved work is unchanged. Confirm, Cancel, and Continue scan buttons still work, though further extraction may need the AI service.";
+export const CANNOT_INTERPRET = "I couldn’t process that request because the AI service is unavailable or a usage limit has been reached. Please try again later. Your saved work is unchanged.";
+
+// The Confirm/Cancel/Continue scan buttons only exist when an import is actually mid-review; mentioning them otherwise (found live, R37 --
+// a weather question got told its "scan buttons still work") is just confusing. Same underlying failure, only the trailing sentence differs.
+const CANNOT_INTERPRET_WITH_PENDING_APPROVAL = `${CANNOT_INTERPRET} Confirm, Cancel, and Continue scan buttons still work, though further extraction may need the AI service.`;
 
 /** R22: when the model's specialist could not settle on a reading, ask instead of guessing. */
 export const NOT_SURE = "I wasn't sure what you meant, so I didn't do anything. Could you say a bit more about what you'd like me to do?";
@@ -85,7 +89,7 @@ export async function runOrchestrator(input: string, userId: string, context: Co
 
   if (!routed) {
     console.info("router", JSON.stringify({ requestId, source: "unavailable" }));
-    return { requestId, answer: CANNOT_INTERPRET, agents: [], confidence: 1, status: "completed" };
+    return { requestId, answer: routingInput.pendingApproval ? CANNOT_INTERPRET_WITH_PENDING_APPROVAL : CANNOT_INTERPRET, agents: [], confidence: 1, status: "completed" };
   }
 
   console.info("router", JSON.stringify({ requestId, operation: routed.operation, confidence: routed.confidence, source: routed.source }));
