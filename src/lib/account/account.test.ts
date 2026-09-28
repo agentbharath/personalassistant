@@ -12,7 +12,7 @@ vi.mock("@/lib/supabase/admin", () => ({
     from: (table: string) => ({
       delete: () => ({ eq: async (_column: string, value: string) => { db.calls.push(`delete:${table}:${value}`); return { error: null }; } }),
       select: () => {
-        const query = { limit: () => query, gt: () => query, eq: () => query, order: () => query, range: async () => ({ data: db.rows[table] ?? [], error: null }), then: (resolve: (value: unknown) => void) => resolve({ data: db.rows[table] ?? [], error: null }) };
+        const query = { eq: () => query, order: () => query, range: async () => ({ data: db.rows[table] ?? [], error: null }), then: (resolve: (value: unknown) => void) => resolve({ data: db.rows[table] ?? [], error: null }) };
         return query;
       },
     }),

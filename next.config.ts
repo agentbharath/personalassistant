@@ -4,17 +4,9 @@ import { withSentryConfig } from "@sentry/nextjs/config";
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   typedRoutes: true,
-  async headers() {
-    return [{ source: "/:path*", headers: [
-      { key: "X-Content-Type-Options", value: "nosniff" },
-      { key: "X-Frame-Options", value: "DENY" },
-      { key: "Referrer-Policy", value: "no-referrer" },
-      { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(self), payment=()" },
-      ...(process.env.NODE_ENV === "production" ? [{ key: "Strict-Transport-Security", value: "max-age=31536000" }] : []),
-    ] }];
-  },
-  // Financial pages must refresh instead of retaining a stale browser router cache.
-  experimental: { staleTimes: { dynamic: 0 } },
+  // Pages read live data, so each visit renders on the server. Keep a visited page for 30 seconds in the browser so moving between pages is
+  // instant instead of showing the loading skeleton every time. Changes (a sent message, a deletion) call router.refresh(), which clears it.
+  experimental: { staleTimes: { dynamic: 30 } },
   // The daily view was first called Today; keep old links working.
   async redirects() {
     return [{ source: "/today", destination: "/perch", permanent: false }];

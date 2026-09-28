@@ -19,13 +19,13 @@ beforeEach(() => { state.queue = []; state.inserts = []; state.ranges = []; stat
 
 describe("saved dues", () => {
   it("reads all pages instead of silently stopping at 200 bills", async () => {
-    state.queue = [{ data: Array.from({ length: 1000 }, (_, i) => row({ id: String(i) })), error: null }, { data: [row({ id: "last" })], error: null }];
-    expect(await listBills("u")).toHaveLength(1001);
-
+    state.queue = [{ data: Array.from({ length: 500 }, (_, i) => row({ id: String(i) })), error: null }, { data: [row({ id: "last" })], error: null }];
+    expect(await listBills("u")).toHaveLength(501);
+    expect(state.ranges).toEqual([[0, 499], [500, 999]]);
   });
   it("does not return a partial list if a later database page fails", async () => {
-    state.queue = [{ data: Array.from({ length: 1000 }, () => row()), error: null }, { data: null, error: new Error("down") }];
-    await expect(listBills("u")).rejects.toThrow("FINANCIAL_READ_FAILED");
+    state.queue = [{ data: Array.from({ length: 500 }, () => row()), error: null }, { data: null, error: new Error("down") }];
+    await expect(listBills("u")).rejects.toThrow("down");
   });
   it("hides older balances of a card when its latest statement was paid, without hiding other accounts", async () => {
     state.queue = [{ data: [row({ id: "older", statement_date: "2026-08-01" }), row({ id: "paid", status: "paid" }), row({ id: "other", payload_ciphertext: JSON.stringify({ paymentDirection: "transfer", accountLastFour: "5678" }) })], error: null }];

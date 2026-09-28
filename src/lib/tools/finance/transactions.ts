@@ -1,7 +1,6 @@
 import { assertToolAllowed } from "@/lib/agents/registry";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { decryptText, encryptText } from "@/lib/security/encryption";
-import { openFinancialFields, readFinancialRows, sealFinancialFields } from "@/lib/security/financial-data";
 import { piiHmac } from "@/lib/security/pii-hmac";
 
 export type TransactionCandidate = {
@@ -61,7 +60,7 @@ async function findDuplicate(supabase: ReturnType<typeof createAdminClient>, use
     if (linkedSource) {
       const { data: linkedTransaction, error: linkedError } = await supabase.from("finance_transactions").select(COLUMNS).eq("id", linkedSource.transaction_id).eq("user_id", userId).single();
       if (linkedError) throw linkedError;
-      if (!linkedTransaction.bank_voided) return { row: openFinancialFields("finance_transactions", userId, linkedTransaction), kind: "source" };
+      if (!linkedTransaction.bank_voided) return { row: linkedTransaction, kind: "source" };
       return null;
     }
   }
@@ -72,20 +71,27 @@ async function findDuplicate(supabase: ReturnType<typeof createAdminClient>, use
     if (orderIds.length === 1) {
       const {data: order, error} = await supabase.from("finance_transactions").select(COLUMNS).eq("user_id", userId).eq("id", orderIds[0]).single();
       if (error) throw error;
-      const opened = openFinancialFields("finance_transactions", userId, order);
-      if (!opened.bank_voided && Number(opened.amount_minor) === candidate.amountMinor && opened.currency === candidate.currency.toUpperCase() && opened.direction === candidate.direction) return {row: opened, kind: "order"};
+      if (!order.bank_voided && order.amount_minor === candidate.amountMinor && order.currency === candidate.currency.toUpperCase() && order.direction === candidate.direction) return {row: order, kind: "order"};
     }
   }
   const currency = candidate.currency.toUpperCase();
   const { data: exact, error: exactError } = await supabase.from("finance_transactions").select(COLUMNS).eq("user_id", userId).eq("dedupe_fingerprint", fingerprint({ ...candidate, currency }, source.orderId)).maybeSingle();
   if (exactError) throw exactError;
-  if (exact && !exact.bank_voided) return { row: openFinancialFields("finance_transactions", userId, exact), kind: "exact" };
+  if (exact && !exact.bank_voided) return { row: exact, kind: "exact" };
 
   assertToolAllowed("finance", "finance.find_similar_transactions");
   const dates = nearbyDates(candidate.occurredOn);
-  const nearby = (await readFinancialRows("finance_transactions", userId)).filter(row =>
-    Number(row.amount_minor) === candidate.amountMinor && row.currency === currency && row.direction === candidate.direction
-    && row.occurred_on >= dates.from && row.occurred_on <= dates.to);
+  const { data: nearby, error: nearbyError } = await supabase
+    .from("finance_transactions")
+    .select(COLUMNS)
+    .eq("user_id", userId)
+    .eq("amount_minor", candidate.amountMinor)
+    .eq("currency", currency)
+    .eq("direction", candidate.direction)
+    .gte("occurred_on", dates.from)
+    .lte("occurred_on", dates.to)
+    .limit(20);
+  if (nearbyError) throw nearbyError;
   const merchant = normalizeMerchant(candidate.merchant);
   let matches = (nearby ?? []).filter((row) => !row.bank_voided && normalizeMerchant(decryptText(row.merchant_ciphertext as string)) === merchant);
   if (source.orderId && matches.length) {
@@ -135,8 +141,8 @@ export async function createTransactionCandidate(userId: string, candidate: Tran
   const {data, error} = await supabase.rpc("insert_finance_transaction_with_source", {
     p_user_id: userId,
     p_transaction: {
-      ...sealFinancialFields("finance_transactions", userId, { occurred_on: candidate.occurredOn, amount_minor: candidate.amountMinor, currency, direction: candidate.direction, category: candidate.category.trim().toLowerCase() }),
-      merchant_ciphertext: encryptText(candidate.merchant), merchant_hash: piiHmac(merchant),
+      occurred_on: candidate.occurredOn, amount_minor: candidate.amountMinor, currency, direction: candidate.direction,
+      merchant_ciphertext: encryptText(candidate.merchant), merchant_hash: piiHmac(merchant), category: candidate.category.trim().toLowerCase(),
       note_ciphertext: candidate.note ? encryptText(candidate.note) : null, dedupe_fingerprint: dedupeFingerprint,
     },
     p_source: {source_type: source.type, external_ref_hmac: source.externalRef ? piiHmac(source.externalRef) : null,
@@ -150,14 +156,24 @@ export async function createTransactionCandidate(userId: string, candidate: Tran
     }
     throw error;
   }
-  return {transaction: decode(openFinancialFields("finance_transactions", userId, data.transaction)), duplicate: Boolean(data.duplicate), duplicateKind: data.duplicate ? "exact" as const : null};
+  return {transaction: decode(data.transaction), duplicate: Boolean(data.duplicate), duplicateKind: data.duplicate ? "exact" as const : null};
 }
 
 export async function listTransactions(userId: string, from: string, to: string) {
   assertToolAllowed("finance", "finance.aggregate");
-  return (await readFinancialRows("finance_transactions", userId))
-    .filter(row => !row.bank_voided && row.occurred_on >= from && row.occurred_on <= to)
-    .sort((a, b) => b.occurred_on.localeCompare(a.occurred_on) || b.id.localeCompare(a.id)).map(decode);
+  const rows: StoredTransaction[] = [];
+  const pageSize = 1000;
+  for (let offset = 0; ; offset += pageSize) {
+    const { data, error } = await createAdminClient()
+      .from("finance_transactions")
+      .select("*")
+      .eq("user_id", userId).gte("occurred_on", from).lte("occurred_on", to)
+      .order("occurred_on", { ascending: false }).order("id", { ascending: false })
+      .range(offset, offset + pageSize - 1);
+    if (error) throw error;
+    rows.push(...(data ?? []).filter(row => !row.bank_voided).map(decode));
+    if (!data || data.length < pageSize) return rows;
+  }
 }
 
 function decode(row: Record<string, unknown>): StoredTransaction {

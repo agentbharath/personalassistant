@@ -35,7 +35,6 @@
     "zod": "latest"
   },
   "devDependencies": {
-    "@electric-sql/pglite": "0.5.8",
     "@types/node": "latest",
     "@types/react": "latest",
     "@types/react-dom": "latest",

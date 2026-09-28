@@ -1,4 +1,3 @@
-import { readFinancialRows } from "@/lib/security/financial-data";
 import { messageChoices } from "@/lib/conversations/message-context";
 import { decryptText } from "@/lib/security/encryption";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -36,9 +35,9 @@ export async function buildAccountExport(userId: string, email: string | null) {
     readAll("conversations", "id, title_ciphertext, pinned_at, created_at, updated_at", userId, "created_at"),
     readAll("conversation_messages", "*", userId, "created_at"),
     readAll("user_learnings", "kind, value_ciphertext, created_at, updated_at", userId, "created_at"),
-    readFinancialRows("finance_transactions", userId),
+    readAll("finance_transactions", "id, occurred_on, amount_minor, currency, direction, merchant_ciphertext, category, note_ciphertext, created_at", userId, "occurred_on"),
     readAll("finance_transaction_sources", "transaction_id, source_type, created_at", userId, "created_at"),
-    readFinancialRows("finance_bills", userId),
+    readAll("finance_bills", "id, merchant_ciphertext, amount_minor, currency, category, statement_date, due_date, status, paid_on, created_at", userId, "statement_date"),
     readAll("message_feedback", "conversation_id, sequence_number, rating, note_ciphertext, created_at", userId, "created_at"),
     readAll("oauth_connections", "capability, scopes, created_at, updated_at", userId, "created_at"),
     readAll("email_drafts", "versions_ciphertext, discarded_at, created_at", userId, "created_at"),
