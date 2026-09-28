@@ -22,6 +22,7 @@ import { prepareCalendarAttendeeUpdate, prepareCalendarDelete, resolvePendingCal
 import { resolvePendingFinanceImport } from "@/lib/workflows/finance-import";
 import { handleEmailConversationTurn } from "./email-turn";
 import { answerEmailImportant } from "@/lib/agents/email-triage";
+import { answerRecallAndAvailability } from "@/lib/agents/recall-availability";
 import { answerScheduleFeasibility } from "./feasibility";
 import { loadRecentSearchStates, renderSearchHistory, saveSearchState } from "@/lib/conversations/search-state";
 import { buildMemoryContext } from "@/lib/memory/context";
@@ -238,6 +239,17 @@ export async function dispatchDecision(decision: RouterDecision, ctx: DispatchCo
     }
     case "multi": {
       const plan = planClauseInstructions(input, decision.agents);
+      // R33: a recall paired with a calendar check ("find the restaurant recommendation from last week and check
+      // if Friday evening is free") gets the richer combined card instead of two concatenated markdown sections --
+      // falls back to the plain composition below when neither half resolves to anything structured.
+      if (decision.generalIsRecall && decision.agents.includes("general") && decision.agents.includes("calendar")) {
+        const generalTask = plan.tasks.find((task) => task.agent === "general");
+        const calendarTask = plan.tasks.find((task) => task.agent === "calendar");
+        if (generalTask && calendarTask) {
+          const combined = await answerRecallAndAvailability(userId, conversationId, calendarTask.instruction, generalTask.instruction, decision.historyQuery ?? "", context);
+          if (combined) return done(combined, decision.agents, "completed");
+        }
+      }
       const multiMemory = decision.agents.includes("general") ? buildMemoryContext(await listMemories(userId).catch(() => [])) : "";
       const outcomes = await executeReadOnlyAgentPlan(plan.tasks, input, userId, context, decision.searchQuery, multiMemory, today, decision.generalIsRecall);
       const completed = outcomes.filter((outcome) => outcome.ok).length;

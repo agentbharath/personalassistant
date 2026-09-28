@@ -65,13 +65,39 @@ export type EmailCardPayload = {
   othersCount: number;
   othersSummary: string;
 };
-export type CardPayload = SpendingCardPayload | BillsCardPayload | DayCardPayload | EmailCardPayload;
+export type RecallAvailabilityCardPayload = {
+  kind: "recall-availability";
+  headline: string;
+  /** Null when the time couldn't be resolved (an ask/unavailable reading) -- that half falls back to plain text. */
+  availability: {
+    dateLabel: string;
+    note: string;
+    free: boolean;
+    /** Chronological, spanning the whole asked-about window (unlike the day card's meetings-only timeline: "is Friday evening free" needs the full window's shape, not just gaps between events). */
+    segments: { kind: "free" | "busy"; label: string; widthPercent: number }[];
+    ticks: string[];
+  } | null;
+  /** Null when nothing relevant was found at all (no saved search to fall back on either) -- that half falls back to plain text. */
+  recall: {
+    question: string;
+    note: string;
+    /** A place already resolved from conversation text (someone was actually recommended it, not just found in a search) -- shown as a plain answer, no picker. */
+    resolvedName: string | null;
+    /** Only populated when resolvedName is null: the saved search's own results, for the person to pick from. */
+    candidates: { id: string; name: string }[];
+    moreCount: number;
+  } | null;
+  /** Follow-up query templates with a literal "{name}" the client fills in from the chosen candidate. */
+  planQuery: string;
+  noneQuery: string;
+};
+export type CardPayload = SpendingCardPayload | BillsCardPayload | DayCardPayload | EmailCardPayload | RecallAvailabilityCardPayload;
 
 export function embedCard(text: string, payload: CardPayload): string {
   return `${text}\n\n\`\`\`daylark-card\n${JSON.stringify(payload)}\n\`\`\``;
 }
 
-const KNOWN_KINDS = new Set(["spending", "bills", "day", "email"]);
+const KNOWN_KINDS = new Set(["spending", "bills", "day", "email", "recall-availability"]);
 
 /** Never throws: a malformed or unrecognized payload just means no card, the prose (unstripped) stands alone. */
 export function extractCard(content: string): { text: string; card: CardPayload | null } {

@@ -19,6 +19,7 @@ export default async function DesignAppPage({ searchParams }: { searchParams: Pr
   const bills = view === "bills";
   const day = view === "day";
   const email = view === "email";
+  const recall = view === "recall";
   const scanMessages = [
     { role: "user" as const, content: "Import my spending from the last 30 days" },
     { role: "assistant" as const, status: "waiting_for_user", content: "### Review 2 imports\n\n1. **iHerb** — $35.53 · Sep 16\n2. **Discover** — $250.00 · Sep 11 · card payment\n\n500 email summaries checked. **Scan paused** in Primary and Updates. Progress is saved for 7 days. 62 known emails remain; more pages may follow. Choose **Continue scan** to resume where this scan stopped. Continuing does not import anything.\n\nChoose **Confirm** to import the reviewed items or **Cancel**." },
@@ -105,7 +106,29 @@ export default async function DesignAppPage({ searchParams }: { searchParams: Pr
       othersCount: 36, othersSummary: "newsletters, receipts, updates",
     }) },
   ];
+  const recallMessages = [
+    { role: "user" as const, content: "Find the restaurant recommendation from last week and check if Friday evening is free." },
+    { role: "assistant" as const, content: embedCard("### Friday evening is free. Restaurant from last week needs your help.", {
+      kind: "recall-availability", headline: "Friday evening is free. Restaurant from last week needs your help.",
+      availability: {
+        dateLabel: "Friday, Oct 2 · evening", note: "Nothing on your calendar after 5 PM.", free: true,
+        segments: [{ kind: "free", label: "Free", widthPercent: 100 }],
+        ticks: ["5 PM", "7 PM", "9 PM", "11 PM"],
+      },
+      recall: {
+        question: "Restaurant from last week",
+        note: "I don't have a record of recommending one. These came up when you searched sushi on Sep 26. Which was it?",
+        resolvedName: null,
+        candidates: [
+          { id: "1", name: "Katana Sushi & Sake" }, { id: "2", name: "Senro Sunnyvale" }, { id: "3", name: "Enka Japanese Izakaya" },
+          { id: "4", name: "Sushi Boat" }, { id: "5", name: "KOKO izakaya and oyster house" },
+        ],
+        moreCount: 4,
+      },
+      planQuery: "It was {name}. Plan that for it.", noneQuery: "None of those were it.",
+    }) },
+  ];
   return <AppShell title={thread ? "iHerb receipts" : "New conversation"} email="you@example.com" signOutAction={signOut} recent={MOCK_RECENT} activeConversationId={thread ? MOCK_RECENT[0].id : undefined}>
-    <Chat key={view ?? "empty"} title={thread ? "iHerb receipts" : undefined} conversationId={thread ? MOCK_RECENT[0].id : undefined} initialMessages={scan ? scanMessages : thread ? MOCK_THREAD : spending ? spendingMessages : spendingSimple ? spendingSimpleMessages : bills ? billsMessages : day ? dayMessages : email ? emailMessages : []} />
+    <Chat key={view ?? "empty"} title={thread ? "iHerb receipts" : undefined} conversationId={thread ? MOCK_RECENT[0].id : undefined} initialMessages={scan ? scanMessages : thread ? MOCK_THREAD : spending ? spendingMessages : spendingSimple ? spendingSimpleMessages : bills ? billsMessages : day ? dayMessages : email ? emailMessages : recall ? recallMessages : []} />
   </AppShell>;
 }

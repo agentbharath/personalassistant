@@ -6,7 +6,7 @@ import type { RouterDecision } from "./router";
 const mocks = vi.hoisted(() => ({
   answerCalendar: vi.fn(), prepareCalendarCreate: vi.fn(), answerFinance: vi.fn(), answerPublicSearch: vi.fn(), answerPlacesSearch: vi.fn(), answerFlightFares: vi.fn(), runBillsCommand: vi.fn(), answerStatusLookup: vi.fn(),
   answerGeneral: vi.fn(), draftHistory: vi.fn(), answerCasual: vi.fn(), prepareCalendarAttendeeUpdate: vi.fn(), prepareCalendarDelete: vi.fn(), handleEmailConversationTurn: vi.fn(), answerScheduleFeasibility: vi.fn(), answerDailyView: vi.fn(), answerEmailImportant: vi.fn(), saveSearchState: vi.fn(), loadRecentSearchStates: vi.fn(), renderSearchHistory: vi.fn(), prepareEmailDraft: vi.fn(), resolveEmailDraft: vi.fn(), ownerIdentity: vi.fn(), loadEmailState: vi.fn(),
-  runLearningCommand: vi.fn(), executeReadOnlyAgentPlan: vi.fn(), saveLearning: vi.fn(), runTripPlan: vi.fn(), loadLearnings: vi.fn(),
+  runLearningCommand: vi.fn(), executeReadOnlyAgentPlan: vi.fn(), planClauseInstructions: vi.fn(), answerRecallAndAvailability: vi.fn(), saveLearning: vi.fn(), runTripPlan: vi.fn(), loadLearnings: vi.fn(),
   interpretTime: vi.fn(), advanceSenderInventory: vi.fn(), classifySenders: vi.fn(), hasSenderInventoryInProgress: vi.fn(), renderSenderInventory: vi.fn(),
   resolveDelete: vi.fn(), resolveAttendees: vi.fn(), resolveCreate: vi.fn(), resolveFinance: vi.fn(),
   listMemories: vi.fn(), createMemory: vi.fn(), forgetMemory: vi.fn(), supersedeMemory: vi.fn(),
@@ -48,7 +48,8 @@ vi.mock("@/lib/today/answer", () => ({ answerDailyView: mocks.answerDailyView })
 vi.mock("@/lib/agents/email-triage", () => ({ answerEmailImportant: mocks.answerEmailImportant }));
 vi.mock("./feasibility", () => ({ answerScheduleFeasibility: mocks.answerScheduleFeasibility }));
 vi.mock("./learning-turn", () => ({ runLearningCommand: mocks.runLearningCommand }));
-vi.mock("./multi-agent", () => ({ composeMultiAgentAnswer: () => "COMPOSED", executeReadOnlyAgentPlan: mocks.executeReadOnlyAgentPlan, planClauseInstructions: () => ({ tasks: [], notes: [] }) }));
+vi.mock("./multi-agent", () => ({ composeMultiAgentAnswer: () => "COMPOSED", executeReadOnlyAgentPlan: mocks.executeReadOnlyAgentPlan, planClauseInstructions: mocks.planClauseInstructions }));
+vi.mock("@/lib/agents/recall-availability", () => ({ answerRecallAndAvailability: mocks.answerRecallAndAvailability }));
 vi.mock("@/lib/agents/trip-planner-runtime", () => ({ runTripPlanForUser: mocks.runTripPlan }));
 
 import { dispatchDecision } from "./dispatch";
@@ -71,6 +72,7 @@ beforeEach(() => {
   mocks.renderSenderInventory.mockReset().mockReturnValue("SENDER REVIEW");
   mocks.prepareCalendarCreate.mockResolvedValue("CREATE"); mocks.prepareCalendarDelete.mockResolvedValue("DELETE"); mocks.prepareCalendarAttendeeUpdate.mockResolvedValue("ATTENDEES");
   mocks.runLearningCommand.mockResolvedValue({ answer: "LEARNING", agents: [], status: "completed" }); mocks.executeReadOnlyAgentPlan.mockResolvedValue([{ agent: "email", ok: true, answer: "x" }]);
+  mocks.planClauseInstructions.mockReturnValue({ tasks: [], notes: [] }); mocks.answerRecallAndAvailability.mockResolvedValue(null);
   mocks.saveLearning.mockResolvedValue(undefined);
   mocks.resolveEmailDraft.mockResolvedValue(null); mocks.ownerIdentity.mockResolvedValue({ name: "Bharath", email: "me@example.com" }); mocks.loadEmailState.mockResolvedValue(null);
   for (const resolver of [mocks.resolveDelete, mocks.resolveAttendees, mocks.resolveCreate, mocks.resolveFinance]) resolver.mockResolvedValue(null);
@@ -266,6 +268,28 @@ describe("each operation calls its own handler (R19.4)", () => {
     const result = await dispatchDecision(decision({ operation: "multi", agents: ["calendar", "email"] }), ctx);
     expect(result?.answer).toContain("COMPOSED");
     expect(result?.agents).toEqual(["calendar", "email"]);
+    expect(mocks.answerRecallAndAvailability).not.toHaveBeenCalled();
+  });
+  describe("a recall paired with a calendar check (R33)", () => {
+    beforeEach(() => mocks.planClauseInstructions.mockReturnValue({ tasks: [{ agent: "general", instruction: "find the restaurant recommendation" }, { agent: "calendar", instruction: "check if Friday evening is free" }], notes: [] }));
+    it("uses the combined card when it resolves to one", async () => {
+      mocks.answerRecallAndAvailability.mockResolvedValue("CARD");
+      const result = await dispatchDecision(decision({ operation: "multi", agents: ["general", "calendar"], generalIsRecall: true, historyQuery: "restaurant recommendation" }), ctx);
+      expect(mocks.answerRecallAndAvailability).toHaveBeenCalledWith("u1", "c1", "check if Friday evening is free", "find the restaurant recommendation", "restaurant recommendation", []);
+      expect(result?.answer).toBe("CARD");
+      expect(mocks.executeReadOnlyAgentPlan).not.toHaveBeenCalled();
+    });
+    it("falls back to the plain composition when neither half resolves to anything structured", async () => {
+      mocks.answerRecallAndAvailability.mockResolvedValue(null);
+      const result = await dispatchDecision(decision({ operation: "multi", agents: ["general", "calendar"], generalIsRecall: true }), ctx);
+      expect(result?.answer).toContain("COMPOSED");
+      expect(mocks.executeReadOnlyAgentPlan).toHaveBeenCalled();
+    });
+    it("never tries the combined card for an ordinary (non-recall) general+calendar request", async () => {
+      const result = await dispatchDecision(decision({ operation: "multi", agents: ["general", "calendar"], generalIsRecall: false }), ctx);
+      expect(mocks.answerRecallAndAvailability).not.toHaveBeenCalled();
+      expect(result?.answer).toContain("COMPOSED");
+    });
   });
   it("runs the real trip-planner pipeline for `plan`, never the multi/web_search path (R32)", async () => {
     mocks.runTripPlan.mockResolvedValue("ITINERARY");
