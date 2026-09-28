@@ -17,6 +17,7 @@ export default async function DesignAppPage({ searchParams }: { searchParams: Pr
   const spending = view === "spending";
   const bills = view === "bills";
   const day = view === "day";
+  const email = view === "email";
   const scanMessages = [
     { role: "user" as const, content: "Import my spending from the last 30 days" },
     { role: "assistant" as const, status: "waiting_for_user", content: "### Review 2 imports\n\n1. **iHerb** — $35.53 · Sep 16\n2. **Discover** — $250.00 · Sep 11 · card payment\n\n500 email summaries checked. **Scan paused** in Primary and Updates. Progress is saved for 7 days. 62 known emails remain; more pages may follow. Choose **Continue scan** to resume where this scan stopped. Continuing does not import anything.\n\nChoose **Confirm** to import the reviewed items or **Cancel**." },
@@ -75,7 +76,19 @@ export default async function DesignAppPage({ searchParams }: { searchParams: Pr
     { role: "user" as const, content: "what does my day look like?" },
     { role: "assistant" as const, content: embedCard(renderDailyView(dailyView, { includeMeetings: false }), buildDayCard(dailyView, "2026-09-28T17:40:00Z")!) },
   ];
+  const emailMessages = [
+    { role: "user" as const, content: "anything important in my email?" },
+    { role: "assistant" as const, content: embedCard("### Since yesterday · 38 new\n\n**2 need you**", {
+      kind: "email", sinceLabel: "Since yesterday", totalCount: 38, needCount: 2,
+      insight: "One reply by Wednesday, one signature. Everything else can wait.",
+      highlights: [
+        { id: "1", sender: "Recruiting Team", initials: "RT", subject: "Scheduling your onsite", time: "8:12 AM", hint: "Reply by Wed" },
+        { id: "2", sender: "DocuSign", initials: "D", subject: "Lease renewal ready to sign", time: "Yesterday", hint: "Signature needed" },
+      ],
+      othersCount: 36, othersSummary: "newsletters, receipts, updates",
+    }) },
+  ];
   return <AppShell title={thread ? "iHerb receipts" : "New conversation"} email="you@example.com" signOutAction={signOut} recent={MOCK_RECENT} activeConversationId={thread ? MOCK_RECENT[0].id : undefined}>
-    <Chat key={view ?? "empty"} title={thread ? "iHerb receipts" : undefined} conversationId={thread ? MOCK_RECENT[0].id : undefined} initialMessages={scan ? scanMessages : thread ? MOCK_THREAD : spending ? spendingMessages : bills ? billsMessages : day ? dayMessages : []} />
+    <Chat key={view ?? "empty"} title={thread ? "iHerb receipts" : undefined} conversationId={thread ? MOCK_RECENT[0].id : undefined} initialMessages={scan ? scanMessages : thread ? MOCK_THREAD : spending ? spendingMessages : bills ? billsMessages : day ? dayMessages : email ? emailMessages : []} />
   </AppShell>;
 }

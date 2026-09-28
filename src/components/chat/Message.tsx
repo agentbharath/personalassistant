@@ -8,6 +8,7 @@ import { extractCard } from "@/lib/chat/card-payload";
 import { SpendingCard } from "./cards/SpendingCard";
 import { BillsCard } from "./cards/BillsCard";
 import { DayCard } from "./cards/DayCard";
+import { EmailCard } from "./cards/EmailCard";
 import styles from "./Message.module.css";
 
 /** Your own message, with Copy and Ask again underneath. Ask again sends the same words as a new message. */
@@ -85,6 +86,7 @@ export function AssistantMessage({ children, id, highlight, approval, resumable,
       : card?.kind === "bills" ? <BillsCard payload={card} onFollowUp={onFollowUp} busy={busy} />
       // The day card only covers Meetings; Bills/Spending still come from the markdown below it, not a fallback duplicate.
       : card?.kind === "day" ? <div style={{ display: "grid", gap: "var(--s-4)" }}><DayCard payload={card} /><Markdown>{text}</Markdown></div>
+      : card?.kind === "email" ? <EmailCard payload={card} />
       : <Markdown>{text}</Markdown>}</div>
     {(approval || resumable) && <div className={styles.actions}>
       {resumable && <Button variant="primary" disabled={busy} onClick={onContinue}>Continue scan</Button>}

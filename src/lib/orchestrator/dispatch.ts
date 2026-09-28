@@ -21,6 +21,7 @@ import { prepareAgentStage } from "@/lib/runtime/query-budget";
 import { prepareCalendarAttendeeUpdate, prepareCalendarDelete, resolvePendingCalendarAttendeeUpdate, resolvePendingCalendarCreate, resolvePendingCalendarDelete } from "@/lib/workflows/calendar-create";
 import { resolvePendingFinanceImport } from "@/lib/workflows/finance-import";
 import { handleEmailConversationTurn } from "./email-turn";
+import { answerEmailImportant } from "@/lib/agents/email-triage";
 import { answerScheduleFeasibility } from "./feasibility";
 import { loadRecentSearchStates, renderSearchHistory, saveSearchState } from "@/lib/conversations/search-state";
 import { buildMemoryContext } from "@/lib/memory/context";
@@ -125,6 +126,8 @@ export async function dispatchDecision(decision: RouterDecision, ctx: DispatchCo
       const turn = await handleEmailConversationTurn(input, userId, conversationId, context);
       return turn ? done(turn.answer, turn.agents, turn.status, turn.choices) : null;
     }
+    case "email_important":
+      return done(await answerEmailImportant(userId), ["email"]);
     case "status_lookup":
       prepareAgentStage(["email"], "fast");
       return done(await answerStatusLookup(userId, { sender: decision.sender!, matter: decision.matter! }), ["email"]);

@@ -5,7 +5,7 @@ import type { RouterDecision } from "./router";
 
 const mocks = vi.hoisted(() => ({
   answerCalendar: vi.fn(), prepareCalendarCreate: vi.fn(), answerFinance: vi.fn(), answerPublicSearch: vi.fn(), answerPlacesSearch: vi.fn(), answerFlightFares: vi.fn(), runBillsCommand: vi.fn(), answerStatusLookup: vi.fn(),
-  answerGeneral: vi.fn(), draftHistory: vi.fn(), answerCasual: vi.fn(), prepareCalendarAttendeeUpdate: vi.fn(), prepareCalendarDelete: vi.fn(), handleEmailConversationTurn: vi.fn(), answerScheduleFeasibility: vi.fn(), answerDailyView: vi.fn(), saveSearchState: vi.fn(), loadRecentSearchStates: vi.fn(), renderSearchHistory: vi.fn(), prepareEmailDraft: vi.fn(), resolveEmailDraft: vi.fn(), ownerIdentity: vi.fn(), loadEmailState: vi.fn(),
+  answerGeneral: vi.fn(), draftHistory: vi.fn(), answerCasual: vi.fn(), prepareCalendarAttendeeUpdate: vi.fn(), prepareCalendarDelete: vi.fn(), handleEmailConversationTurn: vi.fn(), answerScheduleFeasibility: vi.fn(), answerDailyView: vi.fn(), answerEmailImportant: vi.fn(), saveSearchState: vi.fn(), loadRecentSearchStates: vi.fn(), renderSearchHistory: vi.fn(), prepareEmailDraft: vi.fn(), resolveEmailDraft: vi.fn(), ownerIdentity: vi.fn(), loadEmailState: vi.fn(),
   runLearningCommand: vi.fn(), executeReadOnlyAgentPlan: vi.fn(), saveLearning: vi.fn(), runTripPlan: vi.fn(), loadLearnings: vi.fn(),
   interpretTime: vi.fn(), advanceSenderInventory: vi.fn(), classifySenders: vi.fn(), hasSenderInventoryInProgress: vi.fn(), renderSenderInventory: vi.fn(),
   resolveDelete: vi.fn(), resolveAttendees: vi.fn(), resolveCreate: vi.fn(), resolveFinance: vi.fn(),
@@ -45,6 +45,7 @@ vi.mock("@/lib/auth/owner", () => ({ ownerIdentity: mocks.ownerIdentity }));
 vi.mock("@/lib/conversations/email-state", () => ({ loadEmailState: mocks.loadEmailState }));
 vi.mock("./email-turn", () => ({ handleEmailConversationTurn: mocks.handleEmailConversationTurn }));
 vi.mock("@/lib/today/answer", () => ({ answerDailyView: mocks.answerDailyView }));
+vi.mock("@/lib/agents/email-triage", () => ({ answerEmailImportant: mocks.answerEmailImportant }));
 vi.mock("./feasibility", () => ({ answerScheduleFeasibility: mocks.answerScheduleFeasibility }));
 vi.mock("./learning-turn", () => ({ runLearningCommand: mocks.runLearningCommand }));
 vi.mock("./multi-agent", () => ({ composeMultiAgentAnswer: () => "COMPOSED", executeReadOnlyAgentPlan: mocks.executeReadOnlyAgentPlan, planClauseInstructions: () => ({ tasks: [], notes: [] }) }));
@@ -60,7 +61,7 @@ const ctx = { requestId: "r1", input: "the message", userId: "u1", context: [], 
 beforeEach(() => {
   for (const mock of Object.values(mocks)) mock.mockReset();
   mocks.answerGeneral.mockResolvedValue(CRISIS_RESPONSE);
-  mocks.answerFinance.mockResolvedValue("FINANCE"); mocks.runBillsCommand.mockResolvedValue("BILLS"); mocks.answerDailyView.mockResolvedValue("DAILY"); mocks.answerStatusLookup.mockResolvedValue("STATUS");
+  mocks.answerFinance.mockResolvedValue("FINANCE"); mocks.runBillsCommand.mockResolvedValue("BILLS"); mocks.answerDailyView.mockResolvedValue("DAILY"); mocks.answerEmailImportant.mockResolvedValue("EMAIL_IMPORTANT"); mocks.answerStatusLookup.mockResolvedValue("STATUS");
   mocks.answerCalendar.mockResolvedValue("CALENDAR"); mocks.answerPublicSearch.mockResolvedValue("WEB"); mocks.answerCasual.mockResolvedValue("CASUAL");
   mocks.answerPlacesSearch.mockReset().mockResolvedValue("PLACES"); mocks.answerFlightFares.mockReset().mockResolvedValue("FARES");
   mocks.loadLearnings.mockReset().mockResolvedValue({ homeLocation: undefined });
@@ -233,6 +234,7 @@ describe("each operation calls its own handler (R19.4)", () => {
     [decision({ operation: "finance_record" }), () => mocks.answerFinance, "FINANCE"],
     [decision({ operation: "bills_list" }), () => mocks.runBillsCommand, "BILLS"],
     [decision({ operation: "daily_view" }), () => mocks.answerDailyView, "DAILY"],
+    [decision({ operation: "email_important" }), () => mocks.answerEmailImportant, "EMAIL_IMPORTANT"],
     [decision({ operation: "calendar_query" }), () => mocks.answerCalendar, "CALENDAR"],
     [decision({ operation: "web_search", searchQuery: "q" } as never), () => mocks.answerPublicSearch, "WEB"],
     [decision({ operation: "unsupported" }), () => mocks.answerCasual, "CASUAL"],

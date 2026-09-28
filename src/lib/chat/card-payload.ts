@@ -51,13 +51,25 @@ export type DayCardPayload = {
    * reads as a snapshot of that moment, not a live view. */
   timeline: { time: string; label: string; duration: string | null; kind: "meeting" | "free" | "allday"; startingIn: string | null; past: boolean; location: string | null }[];
 };
-export type CardPayload = SpendingCardPayload | BillsCardPayload | DayCardPayload;
+export type EmailCardPayload = {
+  kind: "email";
+  sinceLabel: string;
+  totalCount: number;
+  needCount: number;
+  insight: string;
+  /** The action items to show in full, capped; needCount is the true total, which may exceed highlights.length. */
+  highlights: { id: string; sender: string; initials: string; subject: string; time: string; hint: string }[];
+  /** Everything that did NOT need action -- always totalCount - needCount, independent of the highlights cap. */
+  othersCount: number;
+  othersSummary: string;
+};
+export type CardPayload = SpendingCardPayload | BillsCardPayload | DayCardPayload | EmailCardPayload;
 
 export function embedCard(text: string, payload: CardPayload): string {
   return `${text}\n\n\`\`\`daylark-card\n${JSON.stringify(payload)}\n\`\`\``;
 }
 
-const KNOWN_KINDS = new Set(["spending", "bills", "day"]);
+const KNOWN_KINDS = new Set(["spending", "bills", "day", "email"]);
 
 /** Never throws: a malformed or unrecognized payload just means no card, the prose (unstripped) stands alone. */
 export function extractCard(content: string): { text: string; card: CardPayload | null } {
