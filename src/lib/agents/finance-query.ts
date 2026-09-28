@@ -88,7 +88,7 @@ async function buildSpendingCard(userId:string,from:string,to:string,currentRows
  return {kind:"spending",periodLabel,filterLabel:categoryFilter?toKnownCategory(categoryFilter):null,
   currency:summary.currency,total:summary.total,priorTotal:summary.previousTotal,changePercent:summary.changePercent,comparisonLabel,
   insight:spendingInsight(summary.changePercent,comparisonLabel,changes),
-  running:dailyRunning(mine,priorMine,from,to),xTicks:xTicksFor(from,to),changes,
+  running:dailyRunning(mine,priorMine,from,to,prior.from),xTicks:xTicksFor(from,to),changes,
   topMerchants:topMerchantsFor(mine),actions:actionsFor(comparisonLabel,changes),
   count:summary.count,otherCurrencyCount:summary.otherCurrencyCount};
 }
@@ -109,18 +109,19 @@ function spendingInsight(changePercent:number|null,comparisonLabel:string,change
  const drove=driver.delta>0?`${cap(driver.category)} drove most of the increase, up ${money(driver.delta)}.`:`${cap(driver.category)} is the biggest reason spending is down, off ${money(Math.abs(driver.delta))}.`;
  return `${trend} ${drove}`;
 }
-/** Cumulative totals by day offset from the period start, for the "running total" chart -- `priorPeriod` is always
- * the same length as [from,to], so the two series line up one-to-one without needing to carry real prior dates. */
-function dailyRunning(mine:SpendingRow[],priorMine:SpendingRow[],from:string,to:string):SpendingCardPayload["running"] {
+/** Cumulative totals by day offset from each period's OWN start, for the "running total" chart -- `priorPeriod` is
+ * always the same length as [from,to], so the two series still line up one-to-one on a shared x-axis even though
+ * the prior period's real dates fall entirely before `from` (bucketing both series off `from` would put every
+ * prior-period row at a negative offset and silently drop it -- found live: the prior line rendered flat at $0). */
+function dailyRunning(mine:SpendingRow[],priorMine:SpendingRow[],from:string,to:string,priorFrom:string):SpendingCardPayload["running"] {
  const days=Temporal.PlainDate.from(from).until(Temporal.PlainDate.from(to)).days+1;
- const start=Temporal.PlainDate.from(from);
- const bucket=(rows:SpendingRow[])=>{
+ const bucket=(rows:SpendingRow[],start:Temporal.PlainDate)=>{
   const daily=new Array(days).fill(0);
   for(const row of rows){const offset=start.until(Temporal.PlainDate.from(row.occurredOn)).days;if(offset>=0&&offset<days) daily[offset]+=row.amountMinor;}
   let running=0;
   return daily.map(amount=>(running+=amount));
  };
- const currentDaily=bucket(mine),priorDaily=bucket(priorMine);
+ const currentDaily=bucket(mine,Temporal.PlainDate.from(from)),priorDaily=bucket(priorMine,Temporal.PlainDate.from(priorFrom));
  return currentDaily.map((current,i)=>({current,prior:priorDaily[i]}));
 }
 function xTicksFor(from:string,to:string):SpendingCardPayload["xTicks"] {

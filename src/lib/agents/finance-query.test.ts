@@ -66,6 +66,14 @@ it("embeds a spending card (total, vs-prior comparison, category breakdown) for 
  expect(card.changes.map((c:{category:string})=>c.category)).toEqual(["restaurants","groceries"]);
  expect(card.insight).toContain("Up 3% vs last month");
  expect(card.insight).toContain("Restaurants drove most of the increase");
+ // Regression guard (found live): the prior-period line rendered flat at $0 because its rows were bucketed by
+ // day-offset from the CURRENT period's start, putting every prior-period date at a negative offset. Each series
+ // must be bucketed from its own period's start, so the prior line actually reaches its real $500 total.
+ expect(card.running).toHaveLength(30);
+ expect(card.running[12].prior).toBe(0); // the day before Costco's Aug 15 charge (offset 13 from Aug 2)
+ expect(card.running[13].prior).toBe(50000);
+ expect(card.running[29].prior).toBe(50000);
+ expect(card.running[29].current).toBe(51400);
 });
 
 it("does not embed a card for a multi-range spending query (no single prior period to compare)", async () => {
