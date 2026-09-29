@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { AssistantMessage, UserMessage } from "./Message";
-import { embedCard, type SpendingCardPayload, type StockCardPayload } from "@/lib/chat/card-payload";
+import { embedCard, type SpendingCardPayload, type SportsCardPayload, type StockCardPayload } from "@/lib/chat/card-payload";
 
 describe("the buttons under your own message (free)", () => {
   it("offers Copy and Ask again", () => {
@@ -63,5 +63,20 @@ describe("a message carrying a card payload (free)", () => {
     expect(html).toContain("$509.22");
     expect(html).not.toContain("daylark-card");
     expect(html).not.toContain('"kind":"stock"');
+  });
+
+  it("renders a sports card instead of markdown, and never leaks the raw JSON fence into the page", () => {
+    const sports: SportsCardPayload = {
+      kind: "sports", eyebrow: "San Francisco 49ers", headline: "36–30", statusLabel: "Final · W", resultDirection: "up",
+      opponentLabel: "vs Arizona Cardinals", insight: "Won vs Arizona Cardinals.",
+      stats: [{ label: "Record", value: "3-0" }, { label: "Next game", value: "vs Denver Broncos, Sun, Oct 4" }],
+      attribution: "espn.com · updated just now",
+    };
+    const html = renderToStaticMarkup(<AssistantMessage>{embedCard("### San Francisco 49ers\n\n36–30 · Final · W", sports)}</AssistantMessage>);
+    expect(html).toContain("36–30");
+    expect(html).toContain("Won vs Arizona Cardinals");
+    expect(html).toContain("Denver Broncos");
+    expect(html).not.toContain("daylark-card");
+    expect(html).not.toContain('"kind":"sports"');
   });
 });

@@ -12,6 +12,7 @@ import { EmailCard } from "./cards/EmailCard";
 import { RecallAvailabilityCard } from "./cards/RecallAvailabilityCard";
 import { WeatherCard } from "./cards/WeatherCard";
 import { StockCard } from "./cards/StockCard";
+import { SportsCard } from "./cards/SportsCard";
 import styles from "./Message.module.css";
 
 /** One segment of a possibly-multi-part answer (a compound question, or several agents in one turn): its own
@@ -28,6 +29,7 @@ function CardSegmentView({ segment, onFollowUp, busy }: { segment: CardSegment; 
   if (card?.kind === "recall-availability") return <RecallAvailabilityCard payload={card} onFollowUp={onFollowUp} busy={busy} />;
   if (card?.kind === "weather") return <WeatherCard payload={card} />;
   if (card?.kind === "stock") return <StockCard payload={card} />;
+  if (card?.kind === "sports") return <SportsCard payload={card} />;
   return text ? <Markdown>{text}</Markdown> : null;
 }
 

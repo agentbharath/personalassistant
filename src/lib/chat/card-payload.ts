@@ -136,13 +136,25 @@ export type StockCardPayload = {
   stats: { label: string; value: string }[];
   attribution: string; // "twelvedata.com · updated just now"
 };
-export type CardPayload = SpendingCardPayload | BillsCardPayload | DayCardPayload | EmailCardPayload | RecallAvailabilityCardPayload | WeatherCardPayload | StockCardPayload;
+export type SportsCardPayload = {
+  kind: "sports";
+  eyebrow: string; // "San Francisco 49ers · NFL"
+  headline: string; // "36–30" / "60–58" / "vs Denver Broncos"
+  statusLabel: string; // "Final · W" / "Q3 8:42" / "Sat, Oct 4 · 1:00 PM"
+  resultDirection: "up" | "down" | "flat"; // win -> up, loss -> down, tie/in-progress/upcoming -> flat
+  opponentLabel: string; // "vs Arizona Cardinals" / "at Seattle Seahawks"
+  insight: string;
+  /** Up to 2: season record, next game. Fewer when a next game isn't known (offseason) or there's no record yet. */
+  stats: { label: string; value: string }[];
+  attribution: string; // "espn.com · updated just now"
+};
+export type CardPayload = SpendingCardPayload | BillsCardPayload | DayCardPayload | EmailCardPayload | RecallAvailabilityCardPayload | WeatherCardPayload | StockCardPayload | SportsCardPayload;
 
 export function embedCard(text: string, payload: CardPayload): string {
   return `${text}\n\n\`\`\`daylark-card\n${JSON.stringify(payload)}\n\`\`\``;
 }
 
-const KNOWN_KINDS = new Set(["spending", "bills", "day", "email", "recall-availability", "weather", "stock"]);
+const KNOWN_KINDS = new Set(["spending", "bills", "day", "email", "recall-availability", "weather", "stock", "sports"]);
 
 export type CardSegment = { text: string; card: CardPayload | null };
 
