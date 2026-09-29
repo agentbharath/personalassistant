@@ -55,6 +55,10 @@ export async function answerFlightFares(query: string, today: string, userId: st
   try {
     result = await searchFlights({ origin: slots.origin, destination: slots.destination, date: slots.date, tripType: slots.tripType });
   } catch (error) {
+    // A flight-search error never carries anything personal (an HTTP status, SerpApi's own error string, a route/date already visible
+    // in the URL) -- unlike reportFailure's blanket policy elsewhere, so the full message/stack goes straight to console here, not just
+    // the scrubbed name+status. Sentry's own account may be unavailable (a free trial, a bad token); this never depends on it.
+    console.error("flight_search_failed", JSON.stringify({ origin: slots.origin, destination: slots.destination, date: slots.date, tripType: slots.tripType }), error instanceof Error ? error.stack ?? error.message : error);
     reportFailure("flight_search_failed", error);
     return `I couldn't get live fares right now. Try [Google Flights](${googleFlightsFallbackLink(slots.origin, slots.destination, slots.date)}) directly for ${slots.origin} to ${slots.destination}.`;
   }
