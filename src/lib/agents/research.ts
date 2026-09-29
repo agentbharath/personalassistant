@@ -26,7 +26,9 @@ const RESEARCH_BUDGET = { totalMs: 100_000, costLimitUsd: 0.6 } as const;
  * raw snippets itself), compose one structured, decisive comparison with a stronger model, check its shape deterministically, repair once.
  * Bump RESEARCH_VERSION on any change to a prompt or schema below.
  */
-export const RESEARCH_VERSION = "research-v1";
+// v2: found live, the composer literally wrote "fact 12"/"fact 3" inline in reasoning prose instead of stating the number or claim
+// itself -- composerSystem now explicitly forbids writing the word "fact" or a bare source number in recommendation/reasoning.
+export const RESEARCH_VERSION = "research-v2";
 
 type Source = { title: string; url: string; snippet: string };
 
@@ -117,7 +119,7 @@ function composerSystem(subject: string, sourceCount: number) {
 You compose one decisive comparison from real facts already extracted from search evidence about ${subject} -- you do not invent prices, specs or claims beyond what a fact's detail says.
 
 recommendation: one direct sentence naming the actual pick ("Go with the Coway AP-1512HH"), never a hedge ("it depends") or a tie -- if the evidence is genuinely split, still name the one that best fits what was actually asked, and say why in reasoning.
-reasoning: 2 to 4 sentences, the actual deciding factors, each naming a real fact (a price, a spec, an expert's own verdict), never generic praise.
+reasoning: 2 to 4 sentences, the actual deciding factors, each stating a real number or claim (a price, a spec, an expert's own verdict) plainly in prose, never generic praise. Never write the word "fact" or a bare source number in recommendation or reasoning -- state the number or claim itself ("2,400W solar input"), not a reference to where it came from; a reader-facing citation only ever belongs next to an option's own facts below, never inline in prose.
 options: one entry per option actually compared (every option named in the request, plus any others the evidence surfaced worth mentioning), each with 2 to 5 of its own most relevant facts, in the person's or evidence's own name for it, and source (the fact's own source number -- cite only numbers 1 to ${sourceCount}, never invent one).
 caveat: one short line only when something matters (prices vary by retailer, a spec wasn't confirmed across all sources), else "".
 
@@ -156,9 +158,10 @@ export function critiqueComparison(comparison: Comparison, sourceCount: number):
 }
 
 function renderComparison(comparison: Comparison, subject: string, sources: Source[]): string {
-  // 900, not the usual 500: composerSystem asks for 2-4 sentences that each name a real fact (a price, a spec, an expert's own words),
-  // which routinely runs past 500 and got cut off mid-word -- found live comparing 4 air purifiers.
-  const lines: string[] = [`### ${plain(subject, 100)}`, `**${plain(comparison.recommendation, 200)}**`, plain(comparison.reasoning, 900)];
+  // 400/900, not the usual 160/500: recommendation is "one direct sentence" but often a compound one with real numbers in it, and
+  // reasoning is 2-4 full sentences -- both routinely ran past a tighter cap and got cut off mid-word (found live: a budget-laptop
+  // recommendation truncated to "...typical budget m", an air-purifier reasoning cut to "...the Coway Airmega 400 is").
+  const lines: string[] = [`### ${plain(subject, 100)}`, `**${plain(comparison.recommendation, 400)}**`, plain(comparison.reasoning, 900)];
   for (const option of comparison.options) {
     lines.push(`#### ${plain(option.name, 80)}`);
     const facts = option.facts.map((fact) => {
