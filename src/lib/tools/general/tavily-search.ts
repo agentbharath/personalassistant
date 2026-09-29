@@ -13,7 +13,10 @@ export async function searchPublicWeb(query: string, options: { domains?: string
   const response = await resilientFetch("tavily", "https://api.tavily.com/search", {
     method: "POST",
     headers: { authorization: `Bearer ${process.env.TAVILY_API_KEY}`, "content-type": "application/json" },
-    body: JSON.stringify({ query, search_depth: options.depth ?? "basic", topic: "general", include_domains: options.domains, include_answer: false, max_results: maxResults, include_raw_content: false, include_images: false }),
+    // chunks_per_source only applies at "advanced" depth: Tavily then returns the actual passages from each page that match the query,
+    // instead of one generic lead-in excerpt -- the snippet is far more likely to actually contain the fact asked for (found live: thin
+    // or stale-reading answers traced back to evidence that never had the answer in it, not a synthesis-prompt problem).
+    body: JSON.stringify({ query, search_depth: options.depth ?? "basic", chunks_per_source: options.depth === "advanced" ? 3 : undefined, topic: "general", include_domains: options.domains, include_answer: false, max_results: maxResults, include_raw_content: false, include_images: false }),
   }, { timeoutMs: 8_000, maxAttempts: 2 });
   if (!response.ok) throw new Error(`PUBLIC_SEARCH_${response.status}`);
   const body = await response.json() as { answer?: string; results?: Array<{ title?: string; url?: string; content?: string }> };

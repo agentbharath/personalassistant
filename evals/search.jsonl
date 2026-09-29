@@ -1,0 +1,12 @@
+{"id": "s-costco-electronics", "query": "how many days do I have to return an opened TV to Costco", "expect": {"contains": ["90"]}}
+{"id": "s-eiffel-year", "query": "what year did the Eiffel Tower open to the public", "expect": {"contains": ["1889"]}}
+{"id": "s-nba-minutes", "query": "how many minutes is a regulation NBA basketball game, not counting overtime", "expect": {"contains": ["48"]}}
+{"id": "s-piano-keys", "query": "how many keys does a standard full-size piano have", "expect": {"contains": ["88"]}}
+{"id": "s-violin-strings", "query": "how many strings does a standard violin have", "expect": {"contains": ["4", "four"]}}
+{"id": "s-russia-timezones", "query": "how many time zones does Russia span", "expect": {"contains": ["11", "eleven"]}}
+{"id": "s-camel-humps", "query": "how many humps does a Bactrian camel have", "expect": {"contains": ["2", "two"]}}
+{"id": "s-shipping-container", "query": "how many feet long is a standard shipping container, the most common size", "expect": {"contains": ["20", "40"]}}
+{"id": "s-ocean-freezing", "query": "at what temperature in Fahrenheit does ocean salt water freeze, approximately", "expect": {"contains": ["28"]}}
+{"id": "s-microwave-watts", "query": "what wattage is a typical home microwave oven", "expect": {"contains": ["watt"]}}
+{"id": "s-mount-everest-height", "query": "how tall is Mount Everest in feet, the official height", "expect": {"contains": ["29,0"]}}
+{"id": "s-human-bones", "query": "how many bones are in an adult human body", "expect": {"contains": ["206"]}}

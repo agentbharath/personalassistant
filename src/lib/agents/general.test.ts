@@ -21,6 +21,12 @@ beforeEach(() => {
 });
 
 describe("a web search answer (free)", () => {
+  it("searches at advanced depth with real per-source chunks and no 500-char truncation (found live: a basic-depth snippet is often a generic page summary, not the passage that answers the question)", async () => {
+    mocks.synthesize.mockResolvedValue(places());
+    await answerPublicSearch("Chinese restaurants in Sunnyvale, CA");
+    expect(mocks.search).toHaveBeenCalledWith("Chinese restaurants in Sunnyvale, CA", { depth: "advanced", maxResults: 6, snippetLength: 1500 });
+  });
+
   it("shows places as a card list with a Maps link built by code, and cites the sources", async () => {
     mocks.synthesize.mockResolvedValue(places());
     const answer = await answerPublicSearch("Chinese restaurants in Sunnyvale, CA");

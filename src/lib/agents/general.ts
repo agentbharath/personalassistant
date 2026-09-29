@@ -3,6 +3,10 @@ import { synthesizeSearchResults } from "@/lib/model/claude";
 import { cleanModelText, renderSearchAnswer, plain } from "./search-answer";
 import { withPublicQueryCache } from "@/lib/cache/public-query-cache";
 
+// v2: general search moved from basic-depth, 500-char-truncated evidence to advanced depth with real per-source chunks (R42, found live:
+// thin/stale-reading answers traced to evidence that never had the answer in it, not a synthesis-prompt problem). See evals/search.jsonl.
+export const GENERAL_SEARCH_VERSION = "general-search-v2";
+
 export type SearchPlaces = Array<{ name: string; address: string; note: string }>;
 /** Called with what the search showed, so a follow-up can point at it. Best effort. */
 export type RememberSearch = (state: { query: string; places: SearchPlaces }) => Promise<void>;
@@ -23,7 +27,11 @@ export async function answerPublicSearch(query: string, remember?: RememberSearc
 }
 
 async function loadAnswer(query: string, memoryContext: string, today?: string, homeRegion?: string): Promise<Loaded> {
-  const research = await searchPublicWeb(query);
+  // Advanced depth + real per-source chunks + no 500-char truncation (found live: a basic-depth snippet is often a generic page summary,
+  // not the passage that actually answers the question -- no amount of synthesis prompting recovers a fact the evidence never had).
+  // maxResults asks for one extra over what's actually shown (evidence below stays capped at 5): a couple of raw results are routinely
+  // dropped for missing a title/url, and this is a free buffer against that, not extra data being discarded on purpose.
+  const research = await searchPublicWeb(query, { depth: "advanced", maxResults: 6, snippetLength: 1500 });
   // The same numbered evidence goes to the model and to the reader, so a [3] in the answer is source 3 in the list below it.
   const evidence = research.sources.slice(0, 5);
   const structured = evidence.length ? await synthesizeSearchResults(query, evidence, memoryContext, today, homeRegion) : null;
