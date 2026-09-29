@@ -22,6 +22,7 @@ const MOCK: DailyView = {
     { category: "restaurants", amountMinor: 12250, sharePercent: 30, entries: [{ merchant: "Curry Point", amountMinor: 12250, occurredOn: "2026-09-18" }] },
     { category: "transport", amountMinor: 6000, sharePercent: 15, entries: [{ merchant: "Uber", amountMinor: 6000, occurredOn: "2026-09-19" }] },
   ], biggest: { merchant: "Costco", amountMinor: 11000, occurredOn: "2026-09-16" }, otherCurrencyCount: 0 } },
+  spendingToday: { state: "ok", value: null },
 };
 
 const NOW = Date.parse("2026-09-21T18:00:00Z");
@@ -38,7 +39,7 @@ export default async function DesignPerchPage({ searchParams }: { searchParams: 
   // ?state=connect shows the not-connected and empty states.
   const connect = (await searchParams).state === "connect";
   const view: DailyView = connect
-    ? { ...MOCK, meetingsToday: { state: "needs_connection" }, meetingsAhead: { state: "needs_connection" }, bills: { state: "ok", value: { overdue: [], dueToday: [], dueThisWeek: [], dueLater: [], noDueDate: [] } }, spending: { state: "ok", value: null } }
+    ? { ...MOCK, meetingsToday: { state: "needs_connection" }, meetingsAhead: { state: "needs_connection" }, bills: { state: "ok", value: { overdue: [], dueToday: [], dueThisWeek: [], dueLater: [], noDueDate: [] } }, spending: { state: "ok", value: null }, spendingToday: { state: "ok", value: null } }
     : MOCK;
   return <AppShell title="Perch" email="you@example.com" signOutAction={signOut} recent={MOCK_RECENT} activeView="perch"><TodayView view={view} replies={<WaitingCard result={connect ? { state: "setup", prefs: { saved: false, perchEnabled: true, remindersEnabled: true, kinds: ["person", "business", "recruiter"] } } : MOCK_WAITING} now={NOW} />} /></AppShell>;
 }

@@ -42,29 +42,32 @@ export function renderDailyView(view: DailyView, options?: { includeMeetings?: b
     }
   }
 
+  // R41: "what's my day look like" is scoped to today's things -- overdue and due-today bills (both a live problem as of today), never
+  // a bill due later this week or beyond, which belongs to bills_list, not a day overview. Perch's own page is unaffected: it reads the
+  // full bucket breakdown directly from `view.bills.value`, not this rendered text.
   lines.push("", "**Bills to pay**", "");
   if (view.bills.state !== "ok") lines.push(problem(view.bills, "your bills"));
   else {
-    const { overdue, dueToday, dueThisWeek, dueLater, noDueDate } = view.bills.value;
-    const row = (label: string) => (bill: (typeof overdue)[number]) => `- ${bill.merchant}, ${money(bill.amountMinor, bill.currency)}${label ? ` · ${label}` : bill.dueDate ? ` · due ${shortDate(bill.dueDate)}` : ""}`;
-    if (!overdue.length && !dueToday.length && !dueThisWeek.length && !dueLater.length && !noDueDate.length) lines.push("No unpaid bills.");
+    const { overdue, dueToday } = view.bills.value;
+    const row = (label: string) => (bill: (typeof overdue)[number]) => `- ${bill.merchant}, ${money(bill.amountMinor, bill.currency)} · ${label}`;
+    if (!overdue.length && !dueToday.length) lines.push("No bills due today.");
     else {
-      lines.push(...overdue.map(row("overdue")), ...dueToday.map(row("due today")), ...dueThisWeek.map(row("")), ...dueLater.map(row("")), ...noDueDate.map(row("no due date")));
-      const totals = billTotalsByCurrency([...overdue, ...dueToday, ...dueThisWeek, ...dueLater, ...noDueDate]);
+      lines.push(...overdue.map(row("overdue")), ...dueToday.map(row("due today")));
+      const totals = billTotalsByCurrency([...overdue, ...dueToday]);
       for (const total of totals) lines.push("", `Total to pay (${total.currency}): **${money(total.amountMinor, total.currency)}**.`);
       lines.push("", "Unpaid bills don’t count as spending until they’re paid.");
     }
   }
 
-  lines.push("", "**Spending, last 7 days**", "");
-  if (view.spending.state !== "ok") lines.push(problem(view.spending, "your spending"));
-  else if (!view.spending.value) lines.push("No spending recorded in the last 7 days.");
+  lines.push("", "**Spending today**", "");
+  if (view.spendingToday.state !== "ok") lines.push(problem(view.spendingToday, "your spending"));
+  else if (!view.spendingToday.value) lines.push("No spending recorded today.");
   else {
-    const week = view.spending.value;
-    const change = week.changePercent === null ? "" : week.changePercent === 0 ? ", level with the week before" : `, ${week.changePercent > 0 ? "up" : "down"} ${Math.abs(week.changePercent)}% on the week before`;
-    lines.push(`**${money(week.total, week.currency)}** across ${week.count} purchase${week.count === 1 ? "" : "s"}${change}.`,
-      "", ...week.categories.slice(0, 4).map((item) => `- ${titleCase(item.category)}, ${money(item.amountMinor, week.currency)} (${item.sharePercent}%)`));
-    if (week.biggest) lines.push("", `Biggest: ${week.biggest.merchant}, ${money(week.biggest.amountMinor, week.currency)} on ${shortDate(week.biggest.occurredOn)}.`);
+    const day = view.spendingToday.value;
+    const change = day.changePercent === null ? "" : day.changePercent === 0 ? ", level with yesterday" : `, ${day.changePercent > 0 ? "up" : "down"} ${Math.abs(day.changePercent)}% on yesterday`;
+    lines.push(`**${money(day.total, day.currency)}** across ${day.count} purchase${day.count === 1 ? "" : "s"}${change}.`,
+      "", ...day.categories.slice(0, 4).map((item) => `- ${titleCase(item.category)}, ${money(item.amountMinor, day.currency)} (${item.sharePercent}%)`));
+    if (day.biggest) lines.push("", `Biggest: ${day.biggest.merchant}, ${money(day.biggest.amountMinor, day.currency)}.`);
   }
   return lines.join("\n").replace(/^\n+/, "");
 }

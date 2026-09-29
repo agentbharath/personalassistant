@@ -64,4 +64,16 @@ describe("the daily view loads each part on its own (free)", () => {
     await loadDailyView("u1", now);
     expect(mocks.transactions).toHaveBeenCalledWith("u1", "2026-09-08", "2026-09-21");
   });
+
+  it("derives today-vs-yesterday spending from the same fetch as the week view (R41: one query, two scoped answers)", async () => {
+    mocks.transactions.mockResolvedValue([
+      { occurredOn: "2026-09-21", amountMinor: 500, currency: "USD", direction: "expense", merchant: "Philz", category: "restaurants" },
+      { occurredOn: "2026-09-20", amountMinor: 200, currency: "USD", direction: "expense", merchant: "Uber", category: "transport" },
+      { occurredOn: "2026-09-15", amountMinor: 9000, currency: "USD", direction: "expense", merchant: "Costco", category: "groceries" },
+    ]);
+    const view = await loadDailyView("u1", now);
+    expect(mocks.transactions).toHaveBeenCalledTimes(1); // not called again for spendingToday
+    expect(view.spendingToday.state === "ok" && view.spendingToday.value).toMatchObject({ total: 500, count: 1, previousTotal: 200 });
+    expect(view.spending.state === "ok" && view.spending.value?.total).toBe(9700); // last 7 days (Sep 15-21): all three, unaffected
+  });
 });

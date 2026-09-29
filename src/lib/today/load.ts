@@ -4,7 +4,7 @@ import { GoogleConnectionRequiredError } from "@/lib/auth/google-credential-brok
 import { GoogleCalendarAccessError, listCalendarEvents, type CalendarEvent } from "@/lib/tools/calendar/google-calendar";
 import { listBills } from "@/lib/tools/finance/bills";
 import { listTransactions } from "@/lib/tools/finance/transactions";
-import { WEEK_DAYS, billBuckets, spendingWindow, weeklySpending, type BillBuckets, type WeeklySpending } from "./brief";
+import { WEEK_DAYS, billBuckets, periodSpending, spendingWindow, weeklySpending, type BillBuckets, type WeeklySpending } from "./brief";
 
 const TIME_ZONE = process.env.DEFAULT_USER_TIMEZONE ?? "America/Los_Angeles";
 
@@ -17,6 +17,9 @@ export type DailyView = {
   meetingsAhead: Section<CalendarEvent[]>;
   bills: Section<BillBuckets>;
   spending: Section<WeeklySpending | null>;
+  /** Today's spending alone (vs. yesterday), for a chat answer scoped to just today (R41) -- Perch's own page keeps reading `spending`
+   * (the last-7-days habit view) unchanged; this is additive, not a replacement. */
+  spendingToday: Section<WeeklySpending | null>;
 };
 
 async function section<T>(load: () => Promise<T>): Promise<Section<T>> {
@@ -39,15 +42,20 @@ export async function loadDailyView(userId: string, now = Temporal.Now.zonedDate
   const meetings = (pick: (event: CalendarEvent) => boolean): Section<CalendarEvent[]> => events.state === "ok" ? { state: "ok", value: events.value.filter(pick) } : events;
 
   const window = spendingWindow(today.toString());
-  const [bills, spending] = await Promise.all([
+  const yesterday = today.subtract({ days: 1 }).toString();
+  const [bills, transactions] = await Promise.all([
     section<BillBuckets>(async () => billBuckets(await listBills(userId, "outstanding") as Bill[], today.toString())),
-    section(async () => weeklySpending(await listTransactions(userId, window.from, window.to), today.toString())),
+    section(() => listTransactions(userId, window.from, window.to)),
   ]);
+  // One fetch, two derived views: the last-7-days habit (Perch, unchanged) and just today vs. yesterday (the chat answer, R41).
+  const spending: Section<WeeklySpending | null> = transactions.state === "ok" ? { state: "ok", value: weeklySpending(transactions.value, today.toString()) } : transactions;
+  const spendingToday: Section<WeeklySpending | null> = transactions.state === "ok" ? { state: "ok", value: periodSpending(transactions.value, today.toString(), today.toString(), yesterday, yesterday) } : transactions;
   return {
     today: today.toString(),
     meetingsToday: meetings((event) => startsBefore(event, tomorrowStart)),
     meetingsAhead: meetings((event) => !startsBefore(event, tomorrowStart)),
     bills,
     spending,
+    spendingToday,
   };
 }

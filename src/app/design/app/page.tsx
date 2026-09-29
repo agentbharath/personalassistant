@@ -91,6 +91,7 @@ export default async function DesignAppPage({ searchParams }: { searchParams: Pr
     meetingsAhead: { state: "ok", value: [] },
     bills: { state: "ok", value: { overdue: [], dueToday: [], dueThisWeek: [{ id: "b1", merchant: "Chase card", amountMinor: 84600, currency: "USD", category: "other", statementDate: "2026-09-01", dueDate: "2026-09-29", status: "outstanding", paidOn: null }], dueLater: [], noDueDate: [] } },
     spending: { state: "ok", value: { currency: "USD", from: "2026-09-21", to: "2026-09-27", total: 32506, count: 8, previousTotal: 89000, changePercent: -63, dailyAverage: 4644, categories: [{ category: "groceries", amountMinor: 15000, sharePercent: 46, entries: [] }], biggest: { merchant: "Trader Joe's", amountMinor: 8000, occurredOn: "2026-09-24" }, otherCurrencyCount: 0 } },
+    spendingToday: { state: "ok", value: { currency: "USD", from: "2026-09-28", to: "2026-09-28", total: 1899, count: 1, previousTotal: 0, changePercent: null, dailyAverage: 1899, categories: [{ category: "restaurants", amountMinor: 1899, sharePercent: 100, entries: [] }], biggest: { merchant: "Philz Coffee", amountMinor: 1899, occurredOn: "2026-09-28" }, otherCurrencyCount: 0 } },
   };
   const dayMessages = [
     { role: "user" as const, content: "what does my day look like?" },

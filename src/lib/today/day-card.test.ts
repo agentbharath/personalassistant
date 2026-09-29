@@ -11,6 +11,7 @@ const baseView = (meetingsToday: DailyView["meetingsToday"]): DailyView => ({
   meetingsAhead: { state: "ok", value: [] },
   bills: { state: "ok", value: { overdue: [], dueToday: [], dueThisWeek: [], dueLater: [], noDueDate: [] } },
   spending: { state: "ok", value: null },
+  spendingToday: { state: "ok", value: null },
 });
 
 describe("the day card's timeline (free)", () => {
