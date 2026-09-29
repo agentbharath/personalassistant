@@ -36,6 +36,8 @@ import { runLearningCommand } from "./learning-turn";
 import { composeMultiAgentAnswer, executeReadOnlyAgentPlan, planClauseInstructions } from "./multi-agent";
 import { runTripPlanForUser } from "@/lib/agents/trip-planner-runtime";
 import { runResearchForUser } from "@/lib/agents/research-runtime";
+import type { RememberResearch } from "@/lib/agents/research";
+import { saveResearchState } from "@/lib/conversations/research-state";
 import { ROUTER_CONFIDENCE_THRESHOLD, type ContextMessage, type Lesson, type RouterDecision } from "./router";
 import { CRISIS_RESPONSE } from "./scope";
 import { UNSAFE_REFUSAL } from "./safety";
@@ -271,7 +273,8 @@ export async function dispatchDecision(decision: RouterDecision, ctx: DispatchCo
       // R47: same reasoning as "plan" above -- a real comparison (per-option research fan-out, extraction, a stronger composer, a
       // deterministic critic), not the single-shot search-and-summarize path. See agents/research.ts.
       if (!decision.researchSubject?.trim()) return done("What are you trying to decide between?", ["general"], "waiting_for_user");
-      return done(await runResearchForUser(decision.researchSubject, decision.researchOptions ?? [], userId), ["general"]);
+      const rememberResearch = conversationId ? (state: Parameters<RememberResearch>[0]) => saveResearchState(userId, conversationId, state) : undefined;
+      return done(await runResearchForUser(decision.researchSubject, decision.researchOptions ?? [], userId, rememberResearch), ["general"]);
     }
     case "finance_sender_review": {
       // R32: the first step of a real historical import is reviewing which senders are in scope, not importing blind. sinceDate is a

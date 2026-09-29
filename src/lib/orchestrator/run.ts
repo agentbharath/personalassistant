@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 import { Temporal } from "@js-temporal/polyfill";
 import { loadEmailState } from "@/lib/conversations/email-state";
 import { loadSearchState, loadRecentSearchStates, searchRecallContext } from "@/lib/conversations/search-state";
+import { loadRecentResearchStates, researchRecallContext } from "@/lib/conversations/research-state";
 import { hasPendingApproval } from "@/lib/workflows/pending";
 import { NOTHING_PENDING, answerApproval, dispatchDecision } from "./dispatch";
 import { routeForUser } from "./router-runtime";
@@ -61,8 +62,11 @@ export async function runOrchestrator(input: string, userId: string, context: Co
   // built up its own real context (a multi-turn trip being planned, say), a pile of unrelated saved restaurant searches only competes with
   // it for the model's attention and can dilute a plain "the trip we're already discussing" reference. R29's own "list everything" answer
   // does not depend on this block being present: it re-reads the saved records directly, so nothing is lost by skipping this when it
-  // would only be noise.
-  const recalled = context.length <= 4 ? searchRecallContext(await loadRecentSearchStates(userId)) : "";
+  // would only be noise. Research comparisons (R47) get the same treatment -- found live: a brand new conversation asking "which air
+  // purifier did you recommend" had nothing to recall from at all, since research mode had no persistence before this.
+  const recalled = context.length <= 4
+    ? [searchRecallContext(await loadRecentSearchStates(userId)), researchRecallContext(await loadRecentResearchStates(userId))].filter(Boolean).join("\n")
+    : "";
   if (recalled) context = [{ role: "assistant", content: `Earlier conversation summary:\n${context.filter(turn => turn.content.startsWith("Earlier conversation summary")).map(turn => turn.content).join("\n")}\n${recalled}` }, ...context.filter(turn => !turn.content.startsWith("Earlier conversation summary"))];
 
   // R19, R20.5: one model call decides what the message means, including safety, approvals, dates and lessons, and the agents do the work

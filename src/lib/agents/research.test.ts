@@ -152,4 +152,22 @@ describe("the full pipeline (research -> extract -> compose -> critique -> rende
     expect(extraction?.[1]).toHaveProperty("temperature", 0);
     expect(composition?.[1]).not.toHaveProperty("temperature");
   });
+
+  it("hands the finished comparison to `remember`, so a later chat can recall it (found live, R47: research mode had no persistence at all before this)", async () => {
+    const remember = vi.fn().mockResolvedValue(undefined);
+    await runResearch("air purifiers", ["Coway Airmega 400", "Levoit Core 600S"], deps, remember);
+    expect(remember).toHaveBeenCalledWith({ subject: "air purifiers", recommendation: "Go with the Levoit Core 600S for the price.", options: ["Coway Airmega 400", "Levoit Core 600S"] });
+  });
+
+  it("never calls `remember` when there's nothing real to save, and a failure saving never breaks the answer", async () => {
+    const remember = vi.fn().mockResolvedValue(undefined);
+    mocks.search.mockResolvedValue({ answer: "", sources: [] });
+    await runResearch("nonexistent gadget", [], deps, remember); // no comparison ever gets composed, so nothing to save
+    expect(remember).not.toHaveBeenCalled();
+
+    mocks.search.mockResolvedValue({ answer: "", sources: [source(1), source(2)] });
+    const failing = vi.fn().mockRejectedValue(new Error("db down"));
+    const answer = await runResearch("air purifiers", [], deps, failing);
+    expect(answer).toContain("Go with the Levoit Core 600S");
+  });
 });

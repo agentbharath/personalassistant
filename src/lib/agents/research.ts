@@ -12,6 +12,11 @@ import { reportFailure } from "@/lib/observability/report";
  * trip planner, so this can be verified live without forcing it through this session's per-call SpendMeter framework blind. */
 export type ResearchDeps = { complete: (operation: string, params: Anthropic.MessageCreateParamsNonStreaming) => Promise<Anthropic.Message> };
 
+/** So a later chat can recall this comparison ("which air purifier did you recommend") -- research mode had no persistence at all before
+ * this (R47), unlike an ordinary place search's own remember callback in agents/general.ts. Optional, and never required: a live eval or
+ * any other caller with no conversation to save against simply omits it. */
+export type RememberResearch = (state: { subject: string; recommendation: string; options: string[] }) => Promise<void>;
+
 /** A big comparison question does several parallel searches and up to two model calls (one at the "high" tier) -- comfortably more time
  * and cost than the default per-request budget, which exists to keep an ordinary quick lookup cheap, not to cap a request that genuinely
  * needs real per-option research. Same budget the trip planner uses, for the same reason. */
@@ -180,7 +185,7 @@ function renderComparison(comparison: Comparison, subject: string, sources: Sour
 /** The whole pipeline: research, extract, compose, check, repair once, render. Never the single-shot search-and-summarize path
  * (`agents/general.ts`) for a request this big -- the same distinction R32 already draws for trips. `deps` is required, never defaulted
  * to the real `callClaude`, so a live eval can inject a spend-metered raw call the same way the trip planner's own does. */
-export async function runResearch(subject: string, options: string[], deps: ResearchDeps): Promise<string> {
+export async function runResearch(subject: string, options: string[], deps: ResearchDeps, remember?: RememberResearch): Promise<string> {
   extendRequestBudget(RESEARCH_BUDGET.totalMs, RESEARCH_BUDGET.costLimitUsd);
   const sources = await researchSubject(subject, options);
   if (!sources.length) return `I couldn't find reliable current information to compare ${subject}. Try again in a bit, or ask about one option at a time.`;
@@ -210,5 +215,6 @@ export async function runResearch(subject: string, options: string[], deps: Rese
     const remaining = critiqueComparison(comparison, sources.length);
     if (remaining.length) reportFailure("research_unrepaired", new Error(remaining.join(" ")), { version: RESEARCH_VERSION });
   }
+  if (remember) await remember({ subject, recommendation: comparison.recommendation, options: comparison.options.map((option) => option.name) }).catch(() => undefined);
   return renderComparison(comparison, subject, sources);
 }
