@@ -38,11 +38,17 @@ export async function fetchQuote(symbol: string): Promise<Quote | null> {
   url.searchParams.set("symbol", symbol);
   url.searchParams.set("apikey", apiKey);
   const response = await resilientFetch("twelve_data", url, {}, { timeoutMs: 8_000, maxAttempts: 2 });
-  if (!response.ok) throw new Error(`TWELVE_DATA_${response.status}`);
-  const body = await response.json() as QuoteResponse;
-  // An unrecognized symbol or a bad key comes back 200 OK with status:"error", not a 4xx -- Twelve Data's own error shape, not a transport
-  // failure, so it's read here rather than left to throw on a missing field below.
-  if (body.status === "error" || !body.symbol || body.close === undefined) return null;
+  const body = await response.json().catch(() => null) as QuoteResponse | null;
+  // Twelve Data reports "no such symbol" as its own structured error (status:"error") -- sometimes under a 200, but found live: an
+  // outright invalid symbol comes back under a real HTTP 404, which used to throw here before this body was ever read. Read the body
+  // first, regardless of HTTP status, rather than treating every non-200 as a transport failure. A real auth/quota problem (401/403/429)
+  // still throws: a bad or expired key is a misconfiguration to surface, not a symbol to quietly shrug off as unrecognized.
+  if (body?.status === "error") {
+    if (response.status === 401 || response.status === 403 || response.status === 429) throw new Error(`TWELVE_DATA_${response.status}`);
+    return null;
+  }
+  if (!response.ok || !body) throw new Error(`TWELVE_DATA_${response.status}`);
+  if (!body.symbol || body.close === undefined) return null;
   const price = Number(body.close);
   if (!Number.isFinite(price)) return null;
   return {

@@ -27,12 +27,27 @@ describe("Twelve Data quote provider contract", () => {
     });
   });
 
-  it("returns null for an unrecognized symbol, Twelve Data's own error shape rather than a transport failure", async () => {
+  it("returns null for an unrecognized symbol under a 200, Twelve Data's own error shape rather than a transport failure", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ code: 400, message: "symbol not found", status: "error" }), { status: 200 })));
     expect(await fetchQuote("NOTREAL")).toBeNull();
   });
 
-  it("throws on a real HTTP failure, so a real outage never silently renders as an empty result", async () => {
+  it("returns null for an unrecognized symbol under a real 404 too (found live: an outright invalid symbol comes back this way, not a 200)", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ code: 404, message: "symbol or figi parameter is missing or invalid", status: "error" }), { status: 404 })));
+    expect(await fetchQuote("NOTREALTICKER")).toBeNull();
+  });
+
+  it("throws on a bad or expired key (401) instead of quietly treating it as an unrecognized symbol -- a misconfiguration to surface", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ code: 401, message: "invalid apikey", status: "error" }), { status: 401 })));
+    await expect(fetchQuote("AAPL")).rejects.toThrow("TWELVE_DATA_401");
+  });
+
+  it("throws when quota is exhausted (429), the same reasoning", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ code: 429, message: "quota exceeded", status: "error" }), { status: 429 })));
+    await expect(fetchQuote("AAPL")).rejects.toThrow("TWELVE_DATA_429");
+  });
+
+  it("throws on a real HTTP failure with no structured error body, so a real outage never silently renders as an empty result", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("", { status: 500 })));
     await expect(fetchQuote("AAPL")).rejects.toThrow("TWELVE_DATA_500");
   });
