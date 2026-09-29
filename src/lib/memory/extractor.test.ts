@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extractMemories } from "./extractor";
+import { extractMemories, MEMORY_EXTRACTOR_VERSION } from "./extractor";
 
 const reply = (candidates: unknown[]) => ({ content: [{ type: "text", text: JSON.stringify({ candidates }) }] }) as never;
 const candidate = (over: Partial<{ action: string; type: string; category: string; strength: string; statement: string; stated: boolean; validUntil: string | null; supersedes: string | null }> = {}) => ({
@@ -32,5 +32,9 @@ describe("the memory extractor (free)", () => {
     const long = "x".repeat(600);
     const result = await extractMemories("...", [], { complete: async () => reply([candidate({ statement: long })]) });
     expect(result[0].statement).toHaveLength(500);
+  });
+
+  it("is on v4, which tells a challenge about the assistant's own behavior apart from a real instruction (found live: a testing claim -- \"you know you're only supposed to answer X\" -- was filed as a rule restricting every future answer, since it reads structurally like a real rule and this function never sees the assistant's own reply to know the claim was false)", () => {
+    expect(MEMORY_EXTRACTOR_VERSION).toBe("memory-extract-v4");
   });
 });

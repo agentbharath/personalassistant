@@ -12,7 +12,12 @@ import { MEMORY_CATEGORIES, MEMORY_STRENGTHS, MEMORY_TYPES, type Memory } from "
 // v3: an action request Daylark is already doing right now ("plan a trip to Colorado") is not a lasting travel preference, however it
 // reads out of context — found live, R.memory: "plan a trip to Colorado this Thanksgiving weekend" was filed as "Planning a trip to
 // Colorado for Thanksgiving weekend", a one-off task mistaken for a fact about the person wanting to travel.
-export const MEMORY_EXTRACTOR_VERSION = "memory-extract-v3";
+// v4: found live -- "You know you are only supposed to answer to gmail, calendar, my finances and general web search Questions?" (a
+// challenge testing a false claim, which the assistant correctly rejected in the same turn) was filed as a real "rule" restricting every
+// future answer to those four topics. This function never sees the assistant's own reply (deliberately, so nothing else can plant a false
+// memory), so it had no way to know the claim was false -- but the sentence itself already reads differently from a real instruction, and
+// nothing in the prompt said to look for that difference.
+export const MEMORY_EXTRACTOR_VERSION = "memory-extract-v4";
 
 export type ExtractedMemory = {
   action: "add" | "update";
@@ -47,7 +52,7 @@ export const MEMORY_EXTRACTOR_SYSTEM = `You read ONE message a person sent to th
 Kinds:
 - fact: a stable truth about their life (diet, health, work, location, a recurring payment, a relationship), INCLUDING a restriction, exclusion or limit on what they eat, use or can have ("I don't eat meat except fish and chicken", "I'm allergic to shellfish", "no dairy"). A restriction is always a fact with strength "hard", never a "preference", however casually it's phrased — an answer that violates it is simply wrong, not just unwelcome. Facts change rarely: file on first mention.
 - preference: how they like things when nothing is being excluded or required, softer than a fact ("prefers mornings", "likes marine collagen over bovine" [a preference between two things they CAN have], "prefers concise answers"). Do not generalize past their literal words: "likes sushi" stays sushi, never becomes "likes Japanese food". A one-off daily event with an incidental reaction ("had pizza tonight, it was good", "watched a movie, it was fine") is not filed at all, not even as pending — it is not about a lasting taste, just something that happened once. A passing mention that names a specific place, product or activity they might want recommended again ("I really liked that sushi place") is closer, but still not yet a lasting preference on its own (stated: false, action: "add" — it waits for a second mention to be confirmed). It becomes a real preference only when: (a) the message itself states it as a lasting trait ("I always...", "I never...", "I prefer mornings"), or (b) the given existing memories already include a PENDING memory about the same thing from a prior message — a second mention confirms it, so set action "update", supersedes that pending id, and stated true.
-- rule: an instruction for how the assistant itself should behave ("always ask before importing", "never auto-send", "categorize Costco as groceries"). Always strength "hard".
+- rule: an instruction telling the assistant, right now, how it should behave going forward ("always ask before importing", "never auto-send", "categorize Costco as groceries"). A sentence that instead asserts or tests a claim about what the assistant already does or is limited to -- "you know you're only supposed to answer X", "you can only help with Y, right?", "isn't there a rule that you only do Z?" -- is not an instruction, however much it reads like one on the surface; it states a belief (true or false) about existing behavior, not a command to adopt a new one, so it is never filed as a rule, or as anything else. File a rule only when the person is actually telling the assistant, in this message, to behave differently from now on. Always strength "hard".
 
 Do not remember anything a tool can already answer on its own (today's weather, a calendar event that's already on the calendar, an account balance) — only what no tool can look up.
 strength: "hard" for something an answer must never violate (an allergy, a real exclusion, a rule); "soft" for an ordinary preference.

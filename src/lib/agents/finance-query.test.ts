@@ -4,7 +4,7 @@ vi.mock("@/lib/runtime/model-runtime",()=>({callClaude:mocks.model}));
 vi.mock("@/lib/tools/finance/transactions",()=>({listTransactions:mocks.list,createTransactionCandidate:mocks.write}));
 import { FINANCE_QUERY_JSON_SCHEMA, answerFinanceQuery } from "./finance-query";
 import { answerFinance } from "./finance";
-const plan={mode:"transactions",ranges:[{from:"2026-08-01",to:"2026-09-30"}],merchant:null,category:null,clarification:null};
+const plan={mode:"transactions",ranges:[{from:"2026-08-01",to:"2026-09-30"}],merchant:null,category:null,clarification:null,format:"normal"};
 const row=(id:string,date:string,direction:string="expense",currency="USD")=>({id,occurredOn:date,direction,currency,amountMinor:100,merchant:id,category:"other"});
 beforeEach(()=>{vi.clearAllMocks();mocks.model.mockResolvedValue({content:[{type:"text",text:JSON.stringify(plan)}]});mocks.list.mockResolvedValue([row("August purchase","2026-08-01"),row("Card payment","2026-09-15","transfer"),row("Refund","2026-09-30","income"),row("INR purchase","2026-09-01","expense","INR")]);});
 it("handles the reported request as a read and includes payments and refunds",async()=>{
@@ -100,6 +100,21 @@ it("does not embed a card for a multi-range spending query (no single prior peri
  mocks.list.mockResolvedValue([row("A","2026-08-01"),row("C","2026-10-31")]);
  const answer=await answerFinanceQuery("August and October spending","u");
  expect(answer).not.toContain("daylark-card");
+});
+
+it("returns real CSV for an explicit export request instead of re-showing the same card (found live: \"As csv\" after a spending summary just re-ran the query and repeated the identical summary)", async () => {
+ mocks.model.mockResolvedValue({content:[{type:"text",text:JSON.stringify({...plan,mode:"spending",format:"csv",ranges:[{from:"2026-09-01",to:"2026-09-30"}]})}]});
+ mocks.list.mockResolvedValue([{...row("Trader Joe's","2026-09-05"),amountMinor:31800,category:"groceries"},{...row("DoorDash","2026-09-10"),amountMinor:19600,category:"restaurants"}]);
+ const answer=await answerFinanceQuery("As csv","u");
+ expect(answer).toBe("```csv\nCategory,Amount\ngroceries,$318.00\nrestaurants,$196.00\n```");
+ expect(answer).not.toContain("daylark-card");
+});
+
+it("quotes a CSV field that contains a comma, for a transactions export", async () => {
+ mocks.model.mockResolvedValue({content:[{type:"text",text:JSON.stringify({...plan,mode:"transactions",format:"csv"})}]});
+ mocks.list.mockResolvedValue([{...row("x","2026-08-01"),merchant:"Smith, Jones & Co"}]);
+ const answer=await answerFinanceQuery("export my transactions as csv","u");
+ expect(answer).toBe('```csv\nDate,Merchant,Amount,Type,Category\n2026-08-01,"Smith, Jones & Co",$1.00,expense,other\n```');
 });
 
 it("labels the card with the requested category when the query is scoped to one", async () => {
