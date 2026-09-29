@@ -20,8 +20,7 @@ export type GeocodedPlace = { name: string; latitude: number; longitude: number;
 
 type GeocodingResponse = { results?: Array<{ name: string; latitude: number; longitude: number; timezone: string; admin1?: string; country_code?: string }> };
 
-/** The place name a person would recognize ("Sunnyvale, CA"), from Open-Meteo's own free geocoder -- no Google Maps key needed. Null when nothing matched. */
-export async function geocodeLocation(query: string): Promise<GeocodedPlace | null> {
+async function geocodeOnce(query: string): Promise<GeocodedPlace | null> {
   assertToolAllowed("general", "web.search_weather");
   const url = new URL("https://geocoding-api.open-meteo.com/v1/search");
   url.searchParams.set("name", query);
@@ -34,6 +33,22 @@ export async function geocodeLocation(query: string): Promise<GeocodedPlace | nu
   if (!first) return null;
   const label = [first.name, first.admin1 && first.admin1 !== first.name ? first.admin1 : first.country_code].filter(Boolean).join(", ");
   return { name: label, latitude: first.latitude, longitude: first.longitude, timezone: first.timezone };
+}
+
+/** The place name a person would recognize ("Sunnyvale, CA"), from Open-Meteo's own free geocoder -- no Google Maps key needed. Null when
+ * nothing matched. Open-Meteo's geocoder does exact-ish name matching with no tolerance for a trailing word that isn't part of the place
+ * itself: "Sunnyvale, CA weather today" matches nothing even though "Sunnyvale, CA" alone matches instantly (found live: a router call
+ * occasionally folds a stray word like "weather" or "today" into the place instead of keeping searchQuery to just the place, its own
+ * instruction notwithstanding -- a model-following slip, not something worth chasing away entirely with more prompt wording alone). Retries
+ * with the trailing word dropped, up to three times, before giving up -- cheap (a query that already matches returns on the first try) and
+ * it turns an outright "I couldn't find that" into the right answer whenever the real place name was there all along, just not alone. */
+export async function geocodeLocation(query: string): Promise<GeocodedPlace | null> {
+  const words = query.trim().split(/\s+/);
+  for (let drop = 0; drop <= Math.min(3, words.length - 1); drop += 1) {
+    const result = await geocodeOnce(words.slice(0, words.length - drop).join(" "));
+    if (result) return result;
+  }
+  return null;
 }
 
 export type Forecast = {

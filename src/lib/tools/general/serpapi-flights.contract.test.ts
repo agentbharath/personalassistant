@@ -40,4 +40,11 @@ describe("SerpApi Google Flights provider contract", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: "Invalid API key" }), { status: 200 })));
     await expect(searchFlights({ origin: "SJC", destination: "LAS", date: "2026-11-06", tripType: "one_way" })).rejects.toThrow("SERPAPI_FLIGHTS_ERROR");
   });
+
+  it("carries SerpApi's own error string and the HTTP status as safe-to-log fields, not just baked into the message (so a real failure shows why, not just that it failed)", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: "Your account has run out of searches." }), { status: 200 })));
+    await expect(searchFlights({ origin: "SJC", destination: "LAS", date: "2026-11-06", tripType: "one_way" })).rejects.toMatchObject({ reason: "Your account has run out of searches." });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("", { status: 429 })));
+    await expect(searchFlights({ origin: "SJC", destination: "LAS", date: "2026-11-06", tripType: "one_way" })).rejects.toMatchObject({ status: 429 });
+  });
 });

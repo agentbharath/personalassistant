@@ -64,9 +64,12 @@ export async function searchFlights(params: { origin: string; destination: strin
   url.searchParams.set("hl", "en");
   url.searchParams.set("api_key", process.env.SERP_API ?? "");
   const response = await resilientFetch("serpapi_flights", url, {}, { timeoutMs: 10_000, maxAttempts: 2 });
-  if (!response.ok) throw new Error(`SERPAPI_FLIGHTS_${response.status}`);
+  // `.status`/`.reason` ride along on the thrown error, not just baked into its message: reportFailure's describeError reads exactly
+  // these two fields as safe to log (never the message, which can hold private data elsewhere) -- so a real failure here shows up in
+  // logs as an actual HTTP status or SerpApi's own error string, not just "a fares search failed" with no way to tell why.
+  if (!response.ok) throw Object.assign(new Error(`SERPAPI_FLIGHTS_${response.status}`), { status: response.status });
   const body = await response.json() as SerpApiResponse;
-  if (body.error) throw new Error(`SERPAPI_FLIGHTS_ERROR`);
+  if (body.error) throw Object.assign(new Error("SERPAPI_FLIGHTS_ERROR"), { reason: body.error.slice(0, 200) });
   const offers = [...(body.best_flights ?? []), ...(body.other_flights ?? [])]
     .flatMap((itinerary) => { const offer = toOffer(itinerary, params.tripType); return offer ? [offer] : []; })
     .sort((a, b) => a.price - b.price);
