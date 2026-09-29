@@ -120,13 +120,29 @@ export type WeatherCardPayload = {
   stats: { label: string; value: string }[];
   attribution: string; // "open-meteo.com · updated just now"
 };
-export type CardPayload = SpendingCardPayload | BillsCardPayload | DayCardPayload | EmailCardPayload | RecallAvailabilityCardPayload | WeatherCardPayload;
+export type StockCardPayload = {
+  kind: "stock";
+  eyebrow: string; // "AAPL · Apple Inc"
+  headline: string; // "$254.32"
+  changeLabel: string; // "+$1.24 (0.49%)" / "-$3.10 (1.2%)"
+  changeDirection: "up" | "down" | "flat";
+  insight: string;
+  rangeLow: number; // the day's low
+  rangeHigh: number; // the day's high
+  /** Where the current price sits within [rangeLow, rangeHigh], for the range bar's dot. */
+  current: number;
+  isMarketOpen: boolean;
+  /** Exactly 3: previous close, volume, exchange. */
+  stats: { label: string; value: string }[];
+  attribution: string; // "twelvedata.com · updated just now"
+};
+export type CardPayload = SpendingCardPayload | BillsCardPayload | DayCardPayload | EmailCardPayload | RecallAvailabilityCardPayload | WeatherCardPayload | StockCardPayload;
 
 export function embedCard(text: string, payload: CardPayload): string {
   return `${text}\n\n\`\`\`daylark-card\n${JSON.stringify(payload)}\n\`\`\``;
 }
 
-const KNOWN_KINDS = new Set(["spending", "bills", "day", "email", "recall-availability", "weather"]);
+const KNOWN_KINDS = new Set(["spending", "bills", "day", "email", "recall-availability", "weather", "stock"]);
 
 /** Never throws: a malformed or unrecognized payload just means no card, the prose (unstripped) stands alone. */
 export function extractCard(content: string): { text: string; card: CardPayload | null } {

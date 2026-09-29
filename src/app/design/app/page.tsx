@@ -22,6 +22,7 @@ export default async function DesignAppPage({ searchParams }: { searchParams: Pr
   const recall = view === "recall";
   const calendarQuery = view === "calendar-query";
   const weather = view === "weather";
+  const stock = view === "stock";
   const scanMessages = [
     { role: "user" as const, content: "Import my spending from the last 30 days" },
     { role: "assistant" as const, status: "waiting_for_user", content: "### Review 2 imports\n\n1. **iHerb** — $35.53 · Sep 16\n2. **Discover** — $250.00 · Sep 11 · card payment\n\n500 email summaries checked. **Scan paused** in Primary and Updates. Progress is saved for 7 days. 62 known emails remain; more pages may follow. Choose **Continue scan** to resume where this scan stopped. Continuing does not import anything.\n\nChoose **Confirm** to import the reviewed items or **Cancel**." },
@@ -194,7 +195,23 @@ export default async function DesignAppPage({ searchParams }: { searchParams: Pr
       attribution: "open-meteo.com · updated 2 min ago",
     }) },
   ];
+  const stockMessages = [
+    { role: "user" as const, content: "what's Apple stock at" },
+    { role: "assistant" as const, content: embedCard("### AAPL · Apple Inc\n\n$254.32 +$1.24 (0.49%)", {
+      kind: "stock", eyebrow: "AAPL · Apple Inc", headline: "$254.32", changeLabel: "+$1.24 (0.49%)", changeDirection: "up",
+      insight: "Up 0.49% today.", rangeLow: 251.90, rangeHigh: 255.10, current: 254.32, isMarketOpen: true,
+      stats: [{ label: "Prev close", value: "$253.08" }, { label: "Volume", value: "42.8M" }, { label: "Exchange", value: "NASDAQ" }],
+      attribution: "twelvedata.com · updated just now",
+    }) },
+    { role: "user" as const, content: "how's Tesla doing today" },
+    { role: "assistant" as const, content: embedCard("### TSLA · Tesla, Inc.\n\n$412.87 -$8.53 (2.02%)", {
+      kind: "stock", eyebrow: "TSLA · Tesla, Inc.", headline: "$412.87", changeLabel: "-$8.53 (2.02%)", changeDirection: "down",
+      insight: "Down 2.02% today; market is closed.", rangeLow: 408.10, rangeHigh: 424.60, current: 412.87, isMarketOpen: false,
+      stats: [{ label: "Prev close", value: "$421.40" }, { label: "Volume", value: "89.3M" }, { label: "Exchange", value: "NASDAQ" }],
+      attribution: "twelvedata.com · updated just now",
+    }) },
+  ];
   return <AppShell title={thread ? "iHerb receipts" : "New conversation"} email="you@example.com" signOutAction={signOut} recent={MOCK_RECENT} activeConversationId={thread ? MOCK_RECENT[0].id : undefined}>
-    <Chat key={view ?? "empty"} title={thread ? "iHerb receipts" : undefined} conversationId={thread ? MOCK_RECENT[0].id : undefined} initialMessages={view === "spending-empty" ? emptySpendingMessages : scan ? scanMessages : thread ? MOCK_THREAD : spending ? spendingMessages : spendingSimple ? spendingSimpleMessages : bills ? billsMessages : day ? dayMessages : email ? emailMessages : recall ? recallMessages : calendarQuery ? calendarQueryMessages : weather ? weatherMessages : []} />
+    <Chat key={view ?? "empty"} title={thread ? "iHerb receipts" : undefined} conversationId={thread ? MOCK_RECENT[0].id : undefined} initialMessages={view === "spending-empty" ? emptySpendingMessages : scan ? scanMessages : thread ? MOCK_THREAD : spending ? spendingMessages : spendingSimple ? spendingSimpleMessages : bills ? billsMessages : day ? dayMessages : email ? emailMessages : recall ? recallMessages : calendarQuery ? calendarQueryMessages : weather ? weatherMessages : stock ? stockMessages : []} />
   </AppShell>;
 }

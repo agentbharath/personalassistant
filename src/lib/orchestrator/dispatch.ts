@@ -12,6 +12,7 @@ import { answerPublicSearch, type RememberSearch } from "@/lib/agents/general";
 import { answerPlacesSearch } from "@/lib/agents/places-search";
 import { answerFlightFares } from "@/lib/agents/fares";
 import { answerWeather } from "@/lib/agents/weather";
+import { answerStock } from "@/lib/agents/stocks";
 import { runBillsCommand } from "@/lib/agents/bills-agent";
 import { answerStatusLookup } from "@/lib/agents/status-lookup";
 import { acknowledgeLearning } from "@/lib/learning/commands";
@@ -228,6 +229,7 @@ export async function dispatchDecision(decision: RouterDecision, ctx: DispatchCo
         if (decision.searchKind === "places") return answerPlacesSearch(query, index === 0 ? remember : undefined, searchMemory);
         if (decision.searchKind === "fares") return answerFlightFares(query, today, userId);
         if (decision.searchKind === "weather") return answerWeather(input, query || homeRegion || "", userId, Boolean(decision.weatherYesNo), context, today, searchMemory);
+        if (decision.searchKind === "stocks") return answerStock(query, searchMemory, today);
         return answerPublicSearch(query, index === 0 ? remember : undefined, searchMemory, today, homeRegion);
       };
       // Two or three genuinely separate subjects each get their own search and their own real answer, instead of one being shortchanged
