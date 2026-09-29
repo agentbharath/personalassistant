@@ -35,6 +35,7 @@ import { answerDailyView } from "@/lib/today/answer";
 import { runLearningCommand } from "./learning-turn";
 import { composeMultiAgentAnswer, executeReadOnlyAgentPlan, planClauseInstructions } from "./multi-agent";
 import { runTripPlanForUser } from "@/lib/agents/trip-planner-runtime";
+import { runResearchForUser } from "@/lib/agents/research-runtime";
 import { ROUTER_CONFIDENCE_THRESHOLD, type ContextMessage, type Lesson, type RouterDecision } from "./router";
 import { CRISIS_RESPONSE } from "./scope";
 import { UNSAFE_REFUSAL } from "./safety";
@@ -265,6 +266,12 @@ export async function dispatchDecision(decision: RouterDecision, ctx: DispatchCo
       // stage picks its own model tier internally (fast for extraction, high for composition), same as multi-agent.ts's per-task calls.
       if (!decision.destination?.trim() || !decision.dateText?.trim()) return done("Where are you thinking, and for which dates?", ["general", "calendar"], "waiting_for_user");
       return done(await runTripPlanForUser(decision.destination, decision.dateText, userId, context), ["general", "calendar"]);
+    }
+    case "research": {
+      // R47: same reasoning as "plan" above -- a real comparison (per-option research fan-out, extraction, a stronger composer, a
+      // deterministic critic), not the single-shot search-and-summarize path. See agents/research.ts.
+      if (!decision.researchSubject?.trim()) return done("What are you trying to decide between?", ["general"], "waiting_for_user");
+      return done(await runResearchForUser(decision.researchSubject, decision.researchOptions ?? [], userId), ["general"]);
     }
     case "finance_sender_review": {
       // R32: the first step of a real historical import is reviewing which senders are in scope, not importing blind. sinceDate is a
