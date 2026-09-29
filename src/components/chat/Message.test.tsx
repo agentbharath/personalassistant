@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { AssistantMessage, UserMessage } from "./Message";
-import { embedCard, type SpendingCardPayload } from "@/lib/chat/card-payload";
+import { embedCard, type SpendingCardPayload, type StockCardPayload } from "@/lib/chat/card-payload";
 
 describe("the buttons under your own message (free)", () => {
   it("offers Copy and Ask again", () => {
@@ -48,5 +48,20 @@ describe("a message carrying a card payload (free)", () => {
     const broken = "An answer.\n\n```daylark-card\nnot valid json\n```";
     const html = renderToStaticMarkup(<AssistantMessage>{broken}</AssistantMessage>);
     expect(html).toContain("An answer.");
+  });
+
+  it("renders every card as its own real card, none leaked as raw JSON text, when a multi-query answer joins two cards into one message (found live: only the last of several stock lookups rendered as a card, the rest showed as literal '{\"kind\":\"stock\",...}' text)", () => {
+    const stock = (symbol: string, price: string): StockCardPayload => ({
+      kind: "stock", eyebrow: `${symbol} · ${symbol} Inc`, headline: price, changeLabel: "+$1.00 (1.00%)", changeDirection: "up",
+      insight: "Up 1.00% today.", rangeLow: 99, rangeHigh: 101, current: 100, isMarketOpen: true,
+      stats: [{ label: "Prev close", value: "$99.00" }, { label: "Volume", value: "1.0M" }, { label: "Exchange", value: "NASDAQ" }],
+      attribution: "twelvedata.com · updated just now",
+    });
+    const joined = [embedCard("NVDA · NVIDIA Corporation", stock("NVDA", "$228.86")), embedCard("MSFT · Microsoft Corporation", stock("MSFT", "$509.22"))].join("\n\n---\n\n");
+    const html = renderToStaticMarkup(<AssistantMessage>{joined}</AssistantMessage>);
+    expect(html).toContain("$228.86");
+    expect(html).toContain("$509.22");
+    expect(html).not.toContain("daylark-card");
+    expect(html).not.toContain('"kind":"stock"');
   });
 });

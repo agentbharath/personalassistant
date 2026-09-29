@@ -5,7 +5,7 @@
  * the chat UI strips it and renders the card instead. The prose before the fence is what "Copy answer" copies
  * and what a client that doesn't render cards falls back to, so it must stand alone.
  */
-const FENCE = /\n*```daylark-card\n([\s\S]*?)\n```\s*$/;
+const FENCE = /```daylark-card\n([\s\S]*?)\n```/g;
 
 export type SpendingCardPayload = {
   kind: "spending";
@@ -144,15 +144,35 @@ export function embedCard(text: string, payload: CardPayload): string {
 
 const KNOWN_KINDS = new Set(["spending", "bills", "day", "email", "recall-availability", "weather", "stock"]);
 
-/** Never throws: a malformed or unrecognized payload just means no card, the prose (unstripped) stands alone. */
-export function extractCard(content: string): { text: string; card: CardPayload | null } {
-  const match = content.match(FENCE);
-  if (!match) return { text: content, card: null };
-  try {
-    const parsed = JSON.parse(match[1]) as { kind?: string };
-    if (!parsed.kind || !KNOWN_KINDS.has(parsed.kind)) return { text: content, card: null };
-    return { text: content.slice(0, match.index).trimEnd(), card: parsed as CardPayload };
-  } catch {
-    return { text: content, card: null };
+export type CardSegment = { text: string; card: CardPayload | null };
+
+/**
+ * Never throws. One or more answers, each already embedCard'ed on its own, can end up joined into one message
+ * (a multi-part search, several agents in one "multi" turn) -- found live: a card's own fence is only ever at
+ * the very end of ITS answer, never of the joined whole, so a single-card-anchored extraction could only ever
+ * find the LAST fence, leaving every earlier card's raw JSON sitting in the "text" as literal, visible text.
+ * Finds every fence anywhere in the content instead, pairing each with the prose that led into it, in order --
+ * this is also the shape a genuinely compound answer ("what's the weather and how's AAPL doing") needs: each
+ * sub-answer's own text stays next to its own card, not all the text lumped above all the cards.
+ * A malformed or unrecognized fence degrades to plain text for just that one segment, never the whole message.
+ */
+export function extractCards(content: string): { text: string; segments: CardSegment[] } {
+  const segments: CardSegment[] = [];
+  let cursor = 0;
+  for (const match of content.matchAll(FENCE)) {
+    const before = content.slice(cursor, match.index).trim();
+    let card: CardPayload | null = null;
+    try {
+      const parsed = JSON.parse(match[1]) as { kind?: string };
+      if (parsed.kind && KNOWN_KINDS.has(parsed.kind)) card = parsed as CardPayload;
+    } catch { /* malformed: this segment's own text still stands, just with no card */ }
+    // A fence whose card didn't parse/recognize is kept as literal text (the same "unstripped" fallback the
+    // single-card version always had), rejoined onto this segment's own leading prose rather than dropped.
+    segments.push(card ? { text: before, card } : { text: content.slice(cursor, match.index + match[0].length).trim(), card: null });
+    cursor = match.index! + match[0].length;
   }
+  const trailing = content.slice(cursor).trim();
+  if (trailing || segments.length === 0) segments.push({ text: trailing, card: null });
+  const text = segments.map((segment) => segment.text).filter(Boolean).join("\n\n");
+  return { text, segments };
 }

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, IconButton } from "@/components/ui/Button";
 import { CheckIcon, CopyIcon, RetryIcon, ThumbDownIcon, ThumbUpIcon } from "@/components/ui/icons";
 import { Markdown } from "./Markdown";
-import { extractCard } from "@/lib/chat/card-payload";
+import { extractCards, type CardSegment } from "@/lib/chat/card-payload";
 import { SpendingCard } from "./cards/SpendingCard";
 import { BillsCard } from "./cards/BillsCard";
 import { DayCard } from "./cards/DayCard";
@@ -13,6 +13,23 @@ import { RecallAvailabilityCard } from "./cards/RecallAvailabilityCard";
 import { WeatherCard } from "./cards/WeatherCard";
 import { StockCard } from "./cards/StockCard";
 import styles from "./Message.module.css";
+
+/** One segment of a possibly-multi-part answer (a compound question, or several agents in one turn): its own
+ * prose paired with its own card, in the order they were written -- never all the text lumped above all the
+ * cards. The single-segment case (almost every answer) renders exactly as before this was generalized. */
+function CardSegmentView({ segment, onFollowUp, busy }: { segment: CardSegment; onFollowUp?: (text: string) => void; busy?: boolean }) {
+  const { text, card } = segment;
+  if (card?.kind === "spending") return <SpendingCard payload={card} onFollowUp={onFollowUp} busy={busy} />;
+  if (card?.kind === "bills") return <BillsCard payload={card} onFollowUp={onFollowUp} busy={busy} />;
+  // A standalone day card (calendar_query, any single day) is the whole answer; daily_view's isn't -- its card
+  // only covers Meetings, with Bills/Spending still coming from the markdown below it, not a fallback duplicate.
+  if (card?.kind === "day") return card.standalone ? <DayCard payload={card} /> : <div style={{ display: "grid", gap: "var(--s-4)" }}><DayCard payload={card} />{text && <Markdown>{text}</Markdown>}</div>;
+  if (card?.kind === "email") return <EmailCard payload={card} />;
+  if (card?.kind === "recall-availability") return <RecallAvailabilityCard payload={card} onFollowUp={onFollowUp} busy={busy} />;
+  if (card?.kind === "weather") return <WeatherCard payload={card} />;
+  if (card?.kind === "stock") return <StockCard payload={card} />;
+  return text ? <Markdown>{text}</Markdown> : null;
+}
 
 /** Your own message, with Copy and Ask again underneath. Ask again sends the same words as a new message. */
 export function UserMessage({ children, id, highlight, busy, onResend }: { children: string; id?: string; highlight?: "match" | "active"; busy?: boolean; onResend?: () => void }) {
@@ -71,9 +88,9 @@ export function AssistantMessage({ children, id, highlight, approval, resumable,
     if (ok) setNoteOpen(false);
   }
 
-  // The card payload rides as a trailing fence in the same stored text (no schema migration); the prose before
-  // it is what gets copied, so a client that never learns about cards still gets a complete plain-text answer.
-  const { text, card } = useMemo(() => extractCard(children), [children]);
+  // Each card payload rides as its own fence in the same stored text (no schema migration); the combined prose
+  // is what gets copied, so a client that never learns about cards still gets a complete plain-text answer.
+  const { text, segments } = useMemo(() => extractCards(children), [children]);
 
   async function copy() {
     try {
@@ -85,16 +102,9 @@ export function AssistantMessage({ children, id, highlight, approval, resumable,
 
   return <article id={id} className={`${styles.assistant} ${highlight ? styles[highlight] : ""}`} aria-label={notice ? "Daylark notice" : "Daylark replied"}>
     <header className={styles.head}>Daylark</header>
-    <div className={notice ? styles.notice : undefined}>{card?.kind === "spending" ? <SpendingCard payload={card} onFollowUp={onFollowUp} busy={busy} />
-      : card?.kind === "bills" ? <BillsCard payload={card} onFollowUp={onFollowUp} busy={busy} />
-      // A standalone day card (calendar_query, any single day) is the whole answer; daily_view's isn't -- its card
-      // only covers Meetings, with Bills/Spending still coming from the markdown below it, not a fallback duplicate.
-      : card?.kind === "day" ? (card.standalone ? <DayCard payload={card} /> : <div style={{ display: "grid", gap: "var(--s-4)" }}><DayCard payload={card} /><Markdown>{text}</Markdown></div>)
-      : card?.kind === "email" ? <EmailCard payload={card} />
-      : card?.kind === "recall-availability" ? <RecallAvailabilityCard payload={card} onFollowUp={onFollowUp} busy={busy} />
-      : card?.kind === "weather" ? <WeatherCard payload={card} />
-      : card?.kind === "stock" ? <StockCard payload={card} />
-      : <Markdown>{text}</Markdown>}</div>
+    <div className={notice ? styles.notice : undefined} style={segments.length > 1 ? { display: "grid", gap: "var(--s-4)" } : undefined}>
+      {segments.map((segment, index) => <CardSegmentView key={index} segment={segment} onFollowUp={onFollowUp} busy={busy} />)}
+    </div>
     {(approval || resumable) && <div className={styles.actions}>
       {resumable && <Button variant="primary" disabled={busy} onClick={onContinue}>Continue scan</Button>}
       {approval && <Button variant={resumable ? "secondary" : "primary"} disabled={busy} onClick={onConfirm}><CheckIcon width={16} height={16} />{resumable ? "Import reviewed items" : "Confirm"}</Button>}

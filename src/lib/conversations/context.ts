@@ -1,8 +1,8 @@
-import { extractCard } from "@/lib/chat/card-payload";
+import { extractCards } from "@/lib/chat/card-payload";
 /** Cards carry machine-readable data after a complete prose answer. Keep their JSON out of routing context. */
 export function assistantConversationText(content:string) {
-  const {text,card}=extractCard(content);
-  return card && text ? text : content;
+  const {text,segments}=extractCards(content);
+  return segments.some(segment=>segment.card) && text ? text : content;
 }
 
 export type ContextTurn = { role: "user" | "assistant"; content: string; choices?: string[] };
