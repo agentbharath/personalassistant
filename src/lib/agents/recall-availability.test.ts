@@ -92,6 +92,45 @@ describe("the recall half", () => {
     expect(card.recall.candidates).toEqual([{ id: "r1-0", name: "Katana Sushi & Sake" }]);
   });
 
+  it("prefers a reference whose own date actually falls in a stated timeframe over the top keyword-ranked one (found live: \"last week\" surfaced a same-day search)", async () => {
+    vi.useFakeTimers(); vi.setSystemTime(new Date("2026-09-28T18:00:00Z")); // a Monday; "last week" is Sep 21-27
+    try {
+      mocks.listCalendar.mockResolvedValue([]);
+      mocks.recall.mockResolvedValue({ text: "two saved searches", references: [
+        placeRef("today-search", "sushi", ["Same-Day Sushi"], "2026-09-28T12:00:00.000Z"), // top-ranked, but not last week
+        placeRef("last-week-search", "sushi", ["Katana Sushi & Sake"], "2026-09-23T12:00:00.000Z"), // actually last week
+      ] });
+      mocks.model.mockResolvedValue({ content: [{ type: "text", text: JSON.stringify({ resolvedId: null, note: "No definite pick yet." }) }] });
+      await answerRecallAndAvailability("u1", "c1", "check Friday evening", "find the restaurant recommendation", "restaurant recommendation last week", []);
+      const sent = JSON.parse(mocks.model.mock.calls[0][1].messages[0].content);
+      expect(sent.candidates).toEqual([{ id: "last-week-search-0", name: "Katana Sushi & Sake" }]);
+      expect(sent.timeframeNamed).toBe("Last week");
+      expect(sent.timeframeMismatch).toBe(false);
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("is honest when nothing found actually falls in the stated timeframe, instead of presenting a same-day search as if it does", async () => {
+    vi.useFakeTimers(); vi.setSystemTime(new Date("2026-09-28T18:00:00Z"));
+    try {
+      mocks.listCalendar.mockResolvedValue([]);
+      mocks.recall.mockResolvedValue({ text: "one saved search, from today", references: [placeRef("today-search", "sushi", ["Same-Day Sushi"], "2026-09-28T12:00:00.000Z")] });
+      mocks.model.mockRejectedValue(new Error("model unavailable"));
+      const answer = await answerRecallAndAvailability("u1", "c1", "check Friday evening", "find the restaurant recommendation", "restaurant recommendation last week", []);
+      const card = JSON.parse(answer!.match(/```daylark-card\n([\s\S]*?)\n```/)![1]);
+      expect(card.recall.note).toContain("not from last week as asked");
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("does not invent a timeframe mismatch when the clause names no timeframe at all", async () => {
+    mocks.listCalendar.mockResolvedValue([]);
+    mocks.recall.mockResolvedValue({ text: "x", references: [placeRef("r1", "sushi", ["Katana Sushi & Sake"])] });
+    mocks.model.mockResolvedValue({ content: [{ type: "text", text: JSON.stringify({ resolvedId: null, note: "No definite pick yet." }) }] });
+    await answerRecallAndAvailability("u1", "c1", "check Friday evening", "find the restaurant recommendation", "restaurant recommendation", []);
+    const sent = JSON.parse(mocks.model.mock.calls[0][1].messages[0].content);
+    expect(sent.timeframeNamed).toBeNull();
+    expect(sent.timeframeMismatch).toBe(false);
+  });
+
   it("returns null recall (falls back to the plain half) when no saved search reference exists at all", async () => {
     mocks.listCalendar.mockResolvedValue([]);
     mocks.recall.mockResolvedValue({ text: "nothing relevant", references: [] });
