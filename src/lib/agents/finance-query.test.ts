@@ -39,7 +39,7 @@ it("passes previous periods and the current reply to the query interpreter",asyn
 it("shows \"All time\" instead of the code's own 1970-01-01 sentinel for \"so far\" (found live: it read like a bug, not an all-time answer)", async () => {
  mocks.model.mockResolvedValue({content:[{type:"text",text:JSON.stringify({...plan,mode:"spending",ranges:[{from:"1970-01-01",to:"2026-09-25"}]})}]});
  const answer=await answerFinanceQuery("how much have I spent so far","u");
- expect(answer).toContain("All time through 2026-09-25");
+ expect(answer).toContain("All time through Sep 25, 2026");
  expect(answer).not.toContain("1970-01-01");
  expect(answer).not.toContain("daylark-card");
 });
@@ -48,23 +48,24 @@ it("embeds a spending card with a plain category breakdown, no chart, for a mont
  mocks.model.mockResolvedValue({content:[{type:"text",text:JSON.stringify({...plan,mode:"spending",ranges:[{from:"2026-09-01",to:"2026-09-30"}]})}]});
  mocks.list.mockImplementation(async (_u:string,from:string)=>{
   if(from==="2026-09-01") return [{...row("Trader Joe's","2026-09-05"),amountMinor:31800,category:"groceries"},{...row("DoorDash","2026-09-10"),amountMinor:19600,category:"restaurants"}];
-  if(from==="2026-08-02") return [{...row("Costco","2026-08-15"),amountMinor:50000,category:"groceries"}];
+  if(from==="2026-08-01") return [{...row("Costco","2026-08-15"),amountMinor:50000,category:"groceries"}];
   return [];
  });
- const answer=await answerFinanceQuery("how much did I spend this month","u");
+ const answer=await answerFinanceQuery("how much did I spend September 1–30, 2026","u");
  expect(mocks.list).toHaveBeenNthCalledWith(1,"u","2026-09-01","2026-09-30");
- expect(mocks.list).toHaveBeenNthCalledWith(2,"u","2026-08-02","2026-08-31");
+ expect(mocks.list).toHaveBeenNthCalledWith(2,"u","2026-08-01","2026-08-31");
  expect(answer).toContain("### Spending"); // the plain-text fallback stays intact for copy/older clients
  expect(answer).toContain("```daylark-card");
  const card=JSON.parse(answer.match(/```daylark-card\n([\s\S]*?)\n```/)![1]);
  expect(card.kind).toBe("spending");
- expect(card.periodLabel).toContain("2026-09-01");
+ expect(card.periodLabel).toBe("Sep 1–30, 2026");
+ expect(card.priorPeriodLabel).toBe("Aug 1–31, 2026");
  expect(card.filterLabel).toBeNull();
  expect(card.total).toBe(51400);
  expect(card.priorTotal).toBe(50000);
  expect(card.changePercent).toBe(3);
- expect(card.insight).toContain("Up 3% vs last month");
- expect(card.insight).toContain("Restaurants drove most of the increase");
+ expect(card.comparisonLabel).toBe("vs Aug 1–31, 2026");
+ expect(card.insight).toContain("Restaurants had the largest change: $196.00 more");
  expect(card.categories).toEqual([{category:"groceries",amountMinor:31800,sharePercent:62},{category:"restaurants",amountMinor:19600,sharePercent:38}]);
  expect(card.running).toEqual([]);
  expect(card.changes).toEqual([]);
@@ -79,7 +80,7 @@ it("embeds the richer card (running total, category changes, top merchants) for 
   if(from==="2026-08-25") return [{...row("Costco","2026-08-30"),amountMinor:50000,category:"groceries"}];
   return [];
  });
- const answer=await answerFinanceQuery("how much did I spend this week","u");
+ const answer=await answerFinanceQuery("how much did I spend September 1–7, 2026","u");
  const card=JSON.parse(answer.match(/```daylark-card\n([\s\S]*?)\n```/)![1]);
  expect(card.categories).toEqual([]);
  expect(card.changes.map((c:{category:string})=>c.category)).toEqual(["restaurants","groceries"]);
@@ -123,7 +124,7 @@ it("labels the card with the requested category when the query is scoped to one"
   if(from==="2026-09-01") return [{...row("DoorDash","2026-09-10"),category:"restaurants"}];
   return [];
  });
- const answer=await answerFinanceQuery("how much did I spend on food this month","u");
+ const answer=await answerFinanceQuery("how much did I spend on food in September 2026","u");
  const card=JSON.parse(answer.match(/```daylark-card\n([\s\S]*?)\n```/)![1]);
  expect(card.filterLabel).toBe("restaurants");
  expect(card.total).toBe(100);
@@ -135,14 +136,14 @@ it("gives a category-filtered query the plain category breakdown, no chart, even
   if(from==="2026-09-21") return [{...row("Deccan Morsels","2026-09-25"),amountMinor:436,category:"restaurants"}];
   return [];
  });
- const answer=await answerFinanceQuery("how much did I spend on restaurants this week","u");
+ const answer=await answerFinanceQuery("how much did I spend on restaurants September 21–27, 2026","u");
  const card=JSON.parse(answer.match(/```daylark-card\n([\s\S]*?)\n```/)![1]);
  expect(card.total).toBe(436);
  expect(card.running).toEqual([]);
  expect(card.changes).toEqual([]);
- expect(card.topMerchants).toEqual([]);
+ expect(card.topMerchants).toEqual([{merchant:"Deccan Morsels",amountMinor:436,count:1}]);
  expect(card.actions).toEqual([]);
- expect(card.categories).toEqual([{category:"restaurants",amountMinor:436,sharePercent:100}]);
+ expect(card.categories).toEqual([]);
 });
 
 it("gives a merchant-filtered query the same plain breakdown, not the rich card, even at week length", async () => {
@@ -151,10 +152,11 @@ it("gives a merchant-filtered query the same plain breakdown, not the rich card,
   if(from==="2026-09-21") return [{...row("Deccan Morsels","2026-09-25"),amountMinor:436,category:"restaurants"}];
   return [];
  });
- const answer=await answerFinanceQuery("how much did I spend at Deccan Morsels this week","u");
+ const answer=await answerFinanceQuery("how much did I spend at Deccan Morsels September 21–27, 2026","u");
  const card=JSON.parse(answer.match(/```daylark-card\n([\s\S]*?)\n```/)![1]);
  expect(card.running).toEqual([]);
  expect(card.categories).toEqual([{category:"restaurants",amountMinor:436,sharePercent:100}]);
+ expect(card.filterLabel).toBe("Deccan Morsels");
 });
 
 it("shows the same canonical category in the transaction list as the breakdown already uses, not the raw stored casing (found live: \"Shopping\" vs \"shopping\" read like inconsistent data)", async () => {
@@ -166,16 +168,16 @@ it("shows the same canonical category in the transaction list as the breakdown a
  expect(answer).not.toContain("| Utilities |");
 });
 
-it("analysis mode compares the period to the equal-length period immediately before it", async () => {
+it("analysis mode compares a complete calendar month with the previous calendar month", async () => {
  mocks.model.mockResolvedValue({content:[{type:"text",text:JSON.stringify({...plan,mode:"analysis",ranges:[{from:"2026-09-01",to:"2026-09-30"}]})}]});
  mocks.list.mockImplementation(async (_u:string,from:string)=>{
   if(from==="2026-09-01") return [row("A","2026-09-05"),row("B","2026-09-20")];
-  if(from==="2026-08-02") return [row("C","2026-08-15")];
+  if(from==="2026-08-01") return [row("C","2026-08-15")];
   return [];
  });
- const answer=await answerFinanceQuery("analyze my spending behavior this month","u");
+ const answer=await answerFinanceQuery("analyze my spending behavior in September 2026","u");
  expect(mocks.list).toHaveBeenNthCalledWith(1,"u","2026-09-01","2026-09-30");
- expect(mocks.list).toHaveBeenNthCalledWith(2,"u","2026-08-02","2026-08-31");
+ expect(mocks.list).toHaveBeenNthCalledWith(2,"u","2026-08-01","2026-08-31");
  expect(answer).toContain("### Spending analysis");
  expect(answer).toContain("$2.00");
  expect(answer).toContain("▲ 100%");
@@ -185,7 +187,7 @@ it("analysis mode flags a same-amount, roughly-monthly merchant as a recurring c
  mocks.model.mockResolvedValue({content:[{type:"text",text:JSON.stringify({...plan,mode:"analysis",ranges:[{from:"2026-09-01",to:"2026-09-30"}]})}]});
  mocks.list.mockImplementation(async (_u:string,from:string)=>{
   if(from==="2026-09-01") return [{...row("Netflix","2026-09-10"),amountMinor:1599}];
-  if(from==="2026-08-02") return [{...row("Netflix","2026-08-11"),amountMinor:1599}];
+  if(from==="2026-08-01") return [{...row("Netflix","2026-08-11"),amountMinor:1599}];
   return [];
  });
  const answer=await answerFinanceQuery("analyze my spending behavior","u");
@@ -207,4 +209,82 @@ it("its JSON schema never uses minItems/maxItems on an array (Anthropic's struct
     return [...bad, ...Object.values(node as Record<string, unknown>).flatMap(walk)];
   };
   expect(walk(FINANCE_QUERY_JSON_SCHEMA)).toEqual([]);
+});
+
+it("food includes separate groceries, restaurants, coffee and delivery, excluding shopping",async()=>{
+ mocks.model.mockResolvedValue({content:[{type:"text",text:JSON.stringify({...plan,mode:"spending",category:"food",ranges:[{from:"2026-09-01",to:"2026-09-28"}]})}]});
+ mocks.list.mockImplementation(async(_u:string,from:string)=>from==="2026-09-01"?["groceries","restaurants","coffee","delivery","shopping"].map(category=>({...row(category,"2026-09-10"),category,amountMinor:1000})):[]);
+ const answer=await answerFinanceQuery("food September 1–28, 2026","u");
+ const card=JSON.parse(answer.match(/```daylark-card\n([\s\S]*?)\n```/)![1]);
+ expect(card.total).toBe(4000);
+ expect(card.categories.map((c:{category:string})=>c.category).sort()).toEqual(["coffee","delivery","groceries","restaurants"]);
+ expect(mocks.write).not.toHaveBeenCalled();
+});
+
+it("does not report zero prior spending when the comparison could not load",async()=>{
+ mocks.model.mockResolvedValue({content:[{type:"text",text:JSON.stringify({...plan,mode:"spending",ranges:[{from:"2026-09-21",to:"2026-09-27"}]})}]});
+ mocks.list.mockResolvedValueOnce([{...row("Store","2026-09-25"),amountMinor:5000}]).mockRejectedValueOnce(new Error("unavailable"));
+ const answer=await answerFinanceQuery("spending September 21–27, 2026","u");
+ const card=JSON.parse(answer.match(/```daylark-card\n([\s\S]*?)\n```/)![1]);
+ expect(card.total).toBe(5000);
+ expect(card.changePercent).toBeNull();
+ expect(card.running).toEqual([]);
+ expect(card.insight).toContain("previous period could not load");
+});
+
+it("corrects a model's rolling this-week range using the user's local date",async()=>{
+ vi.useFakeTimers();vi.setSystemTime(new Date("2026-09-29T02:00:00Z")); // Monday evening in California, Tuesday UTC.
+ try {
+  mocks.model.mockResolvedValue({content:[{type:"text",text:JSON.stringify({...plan,mode:"spending",ranges:[{from:"2026-09-22",to:"2026-09-28"}]})}]});
+  mocks.list.mockImplementation(async(_u:string,from:string)=>[{...row("Store",from),amountMinor:5000}]);
+  const answer=await answerFinanceQuery("spending this week","u");
+  expect(mocks.list).toHaveBeenNthCalledWith(1,"u","2026-09-28","2026-09-28");
+  expect(mocks.list).toHaveBeenNthCalledWith(2,"u","2026-09-21","2026-09-21");
+  const card=JSON.parse(answer.match(/```daylark-card\n([\s\S]*?)\n```/)![1]);
+  expect(card.periodLabel).toBe("Sep 28, 2026");
+ } finally {vi.useRealTimers();}
+});
+
+it("compares this month only through today with matching prior-month dates",async()=>{
+ vi.useFakeTimers();vi.setSystemTime(new Date("2026-09-28T20:00:00Z"));
+ try {
+  mocks.model.mockResolvedValue({content:[{type:"text",text:JSON.stringify({...plan,mode:"spending",ranges:[{from:"2026-09-01",to:"2026-09-30"}]})}]});
+  mocks.list.mockImplementation(async(_u:string,from:string)=>[{...row("Store",from),amountMinor:5000}]);
+  const answer=await answerFinanceQuery("spending this month","u");
+  expect(mocks.list).toHaveBeenNthCalledWith(1,"u","2026-09-01","2026-09-28");
+  expect(mocks.list).toHaveBeenNthCalledWith(2,"u","2026-08-01","2026-08-28");
+  const card=JSON.parse(answer.match(/```daylark-card\n([\s\S]*?)\n```/)![1]);
+  expect(card.periodLabel).toBe("Sep 1–28, 2026");
+  expect(card.priorPeriodLabel).toBe("Aug 1–28, 2026");
+ } finally {vi.useRealTimers();}
+});
+
+it.each(["spending","analysis"])("explains an empty Monday in %s mode and offers a rolling week without changing the range",async(mode)=>{
+ vi.useFakeTimers();vi.setSystemTime(new Date("2026-09-29T03:00:00Z"));
+ try {
+  mocks.model.mockResolvedValue({content:[{type:"text",text:JSON.stringify({...plan,mode,category:"groceries",ranges:[{from:"2026-09-22",to:"2026-09-28"}]})}]});
+  mocks.list.mockResolvedValue([]);
+  const answer=await answerFinanceQuery("groceries spending this week","u");
+  const card=JSON.parse(answer.match(/```daylark-card\n([\s\S]*?)\n```/)![1]);
+  expect(mocks.list).toHaveBeenCalledWith("u","2026-09-28","2026-09-28");
+  expect(card.empty).toBe(true);
+  expect(card.insight).toContain("today only");
+  expect(card.insight).toContain("on groceries");
+  expect(card.actions[0]).toEqual({label:"Last 7 days",query:"Show my spending on groceries for the last 7 days"});
+  expect(answer).not.toContain("email records still being scanned");
+ } finally {vi.useRealTimers();}
+});
+
+it("applies the deterministic \"this week\" override even when analysis mode's own classifier returns more than one range (found live: that quirk was silently skipping the friendly empty-Monday explanation, purely because of which mode got picked)",async()=>{
+ vi.useFakeTimers();vi.setSystemTime(new Date("2026-09-29T03:00:00Z"));
+ try {
+  mocks.model.mockResolvedValue({content:[{type:"text",text:JSON.stringify({...plan,mode:"analysis",ranges:[{from:"2026-09-22",to:"2026-09-28"},{from:"2026-09-15",to:"2026-09-21"}]})}]});
+  mocks.list.mockResolvedValue([]);
+  const answer=await answerFinanceQuery("how was my spending this week","u");
+  expect(mocks.list).toHaveBeenCalledWith("u","2026-09-28","2026-09-28");
+  const card=JSON.parse(answer.match(/```daylark-card\n([\s\S]*?)\n```/)![1]);
+  expect(card.empty).toBe(true);
+  expect(card.insight).toContain("today only");
+  expect(answer).not.toContain("email records still being scanned");
+ } finally {vi.useRealTimers();}
 });

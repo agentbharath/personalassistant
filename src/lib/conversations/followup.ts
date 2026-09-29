@@ -1,4 +1,4 @@
-import { clipTurn, type ContextTurn } from "./context";
+import { assistantConversationText, clipTurn, type ContextTurn } from "./context";
 const normalize = (value: string) => value.normalize("NFKC").toLowerCase().replace(/[’‘]/g, "'").replace(/\s+/g, " ").trim();
 /** Preserve the actual exchange, including server-saved choices; this does not guess the user's intent. */
 export function followupContext(context: ContextTurn[], message: string) {
@@ -11,7 +11,7 @@ export function followupContext(context: ContextTurn[], message: string) {
   const exactChoice = choices.find(choice => normalize(choice) === normalize(message));
   return {
     precedingRequest: preceding ? clipTurn(preceding.content, 2000) : null,
-    assistantReply: clipTurn(assistant.content, 4000),
+    assistantReply: clipTurn(assistantConversationText(assistant.content), 4000),
     offeredChoices: choices,
     selectedChoice: exactChoice ?? null,
     subsequentUserReplies: [...turns.slice(index + 1).filter(turn => turn.role === "user").map(turn => clipTurn(turn.content, 1000)), message],

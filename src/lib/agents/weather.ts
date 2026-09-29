@@ -30,12 +30,6 @@ function hourlyInstants(hourly: Forecast["hourly"], timeZone: string): string[] 
   return hourly.time.map((local) => Temporal.PlainDateTime.from(local).toZonedDateTime(timeZone).toInstant().toString());
 }
 
-/** Evenly sampled indices across a range, capped to `count` points -- the mockup's own hourly strips are always a handful of points, not one per hour of a long window. */
-function sampleIndices(indices: number[], count: number): number[] {
-  if (indices.length <= count) return indices;
-  return Array.from({ length: count }, (_, i) => indices[Math.round((i * (indices.length - 1)) / (count - 1))]);
-}
-
 function dominantCondition(codes: number[]): number {
   // The most severe code wins (higher WMO codes are broadly more severe/eventful) -- "partly cloudy all day, rain at 5" should read as rain, not cloudy.
   return codes.length ? Math.max(...codes) : 0;
@@ -48,7 +42,7 @@ function dominantCondition(codes: number[]): number {
 function rainAssessment(hourly: Forecast["hourly"], indices: number[]): { kind: "rain" | "snow"; label: string; peakIndex: number } | null {
   const rainy = indices.filter((i) => hourly.precipitationProbability[i] >= HIGH_CHANCE);
   if (!rainy.length) return null;
-  const kind = RAIN_CODES.has(dominantCondition(rainy.map((i) => hourly.weatherCode[i]))) ? "rain" : "snow";
+  const kind = rainy.some(i => [71,73,75,77,85,86].includes(hourly.weatherCode[i])) ? "snow" : "rain";
   const label = rainy.length === 1 ? `${kind === "rain" ? "Rain" : "Snow"}, ${clockLabel(hourly.time[rainy[0]])}` : `${kind === "rain" ? "Rain" : "Snow"}, ${clockLabel(hourly.time[rainy[0]])} to ${clockLabel(hourly.time[rainy[rainy.length - 1]])}`;
   const peakIndex = rainy.slice().sort((a, b) => hourly.precipitationProbability[b] - hourly.precipitationProbability[a])[0];
   return { kind, label, peakIndex };
@@ -61,64 +55,76 @@ type BuildInput = { forecast: Forecast; placeName: string; timeZone: string; win
 
 /** Everything the card needs, computed once from the forecast + the resolved time window. No model in the loop --
  * every number and word comes straight from the API response, the same reasoning R32 already applied to places and fares. */
-function buildWeatherCard({ forecast, placeName, timeZone, window, yesNo, now }: BuildInput): WeatherCardPayload {
+export function buildWeatherCard({ forecast, placeName, timeZone, window, yesNo, now }: BuildInput): WeatherCardPayload {
   const instants = hourlyInstants(forecast.hourly, timeZone);
   const windowStart = window.start.toInstant().toString();
   const windowEnd = window.end.toInstant().toString();
-  const inWindow = instants.map((t, i) => i).filter((i) => instants[i] >= windowStart && instants[i] < windowEnd);
+  const inWindow = instants.map((t, i) => i).filter((i) => Temporal.Instant.compare(instants[i], windowStart) >= 0 && Temporal.Instant.compare(instants[i], windowEnd) < 0);
   const dayKey = window.start.toPlainDate().toString();
-  const dayIndex = Math.max(0, forecast.daily.time.indexOf(dayKey));
+  const dayIndex = forecast.daily.time.indexOf(dayKey);
+  if (dayIndex < 0 || !inWindow.length) throw new Error("FORECAST_WINDOW_UNAVAILABLE");
 
-  const includesNow = windowStart <= now && now < windowEnd && dayIndex === 0;
+  const includesNow = Temporal.Instant.compare(windowStart, now) <= 0 && Temporal.Instant.compare(now, windowEnd) < 0 && dayIndex === 0;
   const isTonight = /tonight|evening/i.test(window.label) && window.start.hour >= 17;
-  const isFogQuestion = inWindow.some((i) => FOG_CODES.has(forecast.hourly.weatherCode[i]));
+  const isFogQuestion = includesNow ? FOG_CODES.has(forecast.current.weatherCode) : inWindow.some((i) => FOG_CODES.has(forecast.hourly.weatherCode[i]));
 
   const dayWord = includesNow ? "Now" : isTonight ? "Tonight" : window.start.toLocaleString("en-US", { weekday: "long" });
-  const sampled = sampleIndices(inWindow.length ? inWindow : [0], HOURLY_POINTS);
+  const currentHour = instants.findIndex((instant, i) => Temporal.Instant.compare(instant, now) <= 0 && (!instants[i+1] || Temporal.Instant.compare(now, instants[i+1]) < 0));
+  const sampled = includesNow && currentHour >= 0
+    ? instants.map((_, i) => i).slice(currentHour, currentHour + HOURLY_POINTS)
+    : inWindow.slice(0, HOURLY_POINTS);
+  const asOf = Temporal.Instant.from(now).toZonedDateTimeISO(timeZone).toLocaleString("en-US", {month:"short", day:"numeric", hour:"numeric", minute:"2-digit"});
+  const attribution = `Open-Meteo · as of ${asOf} · °F`;
+  const hourlyLabel = yesNo ? "Hourly precipitation chance" : includesNow ? "Next hours · °F" : "Hourly forecast · °F";
 
   if (yesNo) {
     const assessment = rainAssessment(forecast.hourly, inWindow.length ? inWindow : [dayIndex]);
+    const rainyStart = assessment ? inWindow.findIndex(i => forecast.hourly.precipitationProbability[i] >= HIGH_CHANCE) : -1;
+    const rainHours = !includesNow && rainyStart >= 0 ? inWindow.slice(Math.max(0, rainyStart - 1), Math.max(0, rainyStart - 1) + HOURLY_POINTS) : sampled;
     return {
-      kind: "weather", eyebrow: `${dayWord} · ${assessment ? `chance of ${assessment.kind}` : "clear skies expected"}`,
+      kind: "weather", hourlyLabel, appearance: assessment ? assessment.kind : "cloud", eyebrow: `${dayWord} · ${assessment ? `chance of ${assessment.kind}` : "precipitation outlook"}`,
       headline: assessment ? "Yes" : "No", condition: assessment?.label ?? conditionFor(dominantCondition(inWindow.map((i) => forecast.hourly.weatherCode[i]))),
-      insight: assessment ? `Showers ${window.label}, heaviest around ${clockLabel(forecast.hourly.time[assessment.peakIndex])}.` : `No rain expected ${window.label}.`,
+      insight: assessment ? `Showers ${window.label}, heaviest around ${clockLabel(forecast.hourly.time[assessment.peakIndex])}.` : `Rain is unlikely ${window.label}; peak precipitation chance is ${round(Math.max(...inWindow.map(i=>forecast.hourly.precipitationProbability[i])))}%.`,
       rangeLow: round(Math.min(...inWindow.map((i) => forecast.hourly.temperature[i]))), rangeHigh: round(Math.max(...inWindow.map((i) => forecast.hourly.temperature[i]))),
       current: round(forecast.hourly.temperature[inWindow[0] ?? dayIndex]),
-      hourly: sampled.map((i) => ({ label: shortHour(forecast.hourly.time[i]), value: round(forecast.hourly.precipitationProbability[i]), highlighted: forecast.hourly.precipitationProbability[i] >= HIGH_CHANCE })),
+      hourly: rainHours.map((i) => ({ label: shortHour(forecast.hourly.time[i]), value: round(forecast.hourly.precipitationProbability[i]), highlighted: forecast.hourly.precipitationProbability[i] >= HIGH_CHANCE })),
       hourlyUnit: "precip",
       stats: [
-        { label: "Total", value: `${forecast.daily.precipitationInches[dayIndex]?.toFixed(1) ?? "0.0"} in` },
-        { label: "Wind", value: windLabel(Math.max(...inWindow.map((i) => forecast.hourly.windSpeed[i]), 0), forecast.current.windDirection) },
-        { label: "Gusts", value: `${round(forecast.current.windGusts)} mph` },
+        { label: "Day total", value: `${forecast.daily.precipitationInches[dayIndex]?.toFixed(1) ?? "0.0"} in` },
+        { label: "Wind max", value: `${round(Math.max(...inWindow.map((i) => forecast.hourly.windSpeed[i]), 0))} mph` },
+        { label: "Peak chance", value: `${round(Math.max(...inWindow.map(i=>forecast.hourly.precipitationProbability[i])))}%` },
       ],
-      attribution: "open-meteo.com · updated just now",
+      attribution,
     };
   }
 
   const code = includesNow ? forecast.current.weatherCode : dominantCondition(inWindow.map((i) => forecast.hourly.weatherCode[i]));
   const temps = inWindow.map((i) => forecast.hourly.temperature[i]);
   const current = includesNow ? forecast.current.temperature : temps[0] ?? forecast.daily.tempMax[dayIndex];
-  const peakIndex = inWindow[temps.indexOf(Math.max(...temps))] ?? dayIndex;
 
   return {
-    kind: "weather",
+    kind: "weather", hourlyLabel,
+    appearance: FOG_CODES.has(code) ? "fog" : RAIN_CODES.has(code) ? "rain" : [71,73,75,77,85,86].includes(code) ? "snow" : code >= 2 ? "cloud" : (includesNow ? !forecast.current.isDay : isTonight) ? "night" : "sun",
     eyebrow: includesNow ? `Now · ${placeName}` : isTonight ? `Tonight · ${placeName}` : /\d/.test(window.label) ? `${dayWord} · ${window.label.replace(/^(today|tomorrow|tonight)\s*/i, "")}` : `${dayWord} · ${placeName}`,
     headline: `${round(current)}°`,
     condition: isFogQuestion ? "Fog" : conditionFor(code),
     insight: includesNow
-      ? `${forecast.current.isDay ? "Warm and clear" : "Clear"}. Peaks at ${round(Math.max(...temps, current))}° around ${clockLabel(forecast.hourly.time[peakIndex])}, then cools after sunset.`
-      : isFogQuestion ? `Low fog until about ${clockLabel(forecast.hourly.time[inWindow[inWindow.length - 1]] ?? forecast.hourly.time[dayIndex])}, visibility near ${(Math.min(...inWindow.map((i) => forecast.hourly.visibilityMiles[i])) || 1).toFixed(0)} mile. Roads stay dry.`
-      : isTonight ? `Clear all night, down to ${round(forecast.daily.tempMin[dayIndex])}° by dawn.`
-      : `${conditionFor(code)} ${window.label}.`,
-    rangeLow: round(forecast.daily.tempMin[dayIndex]), rangeHigh: round(forecast.daily.tempMax[dayIndex]), current: round(current),
-    hourly: sampled.map((i) => ({ label: shortHour(forecast.hourly.time[i]), value: round(forecast.hourly.temperature[i]), highlighted: instants[i] <= now && now < (instants[i + 1] ?? "9999") })),
+      ? `${conditionFor(code)} now. ${sampled.length ? `The next hours range from ${round(Math.min(...sampled.map(i=>forecast.hourly.temperature[i])))}° to ${round(Math.max(...sampled.map(i=>forecast.hourly.temperature[i])))}°.` : ""}`
+      : isFogQuestion ? `Fog in this window. Visibility as low as ${Math.min(...inWindow.map(i=>forecast.hourly.visibilityMiles[i])).toFixed(1)} mi.`
+      : `${conditionFor(code)} ${window.label}. Temperatures from ${round(Math.min(...temps))}° to ${round(Math.max(...temps))}°.`,
+    rangeLow: round(includesNow ? forecast.daily.tempMin[dayIndex] : Math.min(...temps)), rangeHigh: round(includesNow ? forecast.daily.tempMax[dayIndex] : Math.max(...temps)), current: round(current),
+    hourly: sampled.map((i) => ({ label: shortHour(forecast.hourly.time[i]), value: round(forecast.hourly.temperature[i]), highlighted: i === currentHour && includesNow })),
     hourlyUnit: "temp",
-    stats: isFogQuestion
+    stats: !includesNow ? [
+      { label: "Wind", value: `${round(Math.max(...inWindow.map(i=>forecast.hourly.windSpeed[i])))} mph max` },
+      { label: isFogQuestion ? "Visibility" : "Rain chance", value: isFogQuestion ? `${Math.min(...inWindow.map(i=>forecast.hourly.visibilityMiles[i])).toFixed(0)} mi` : `${round(Math.max(...inWindow.map(i=>forecast.hourly.precipitationProbability[i])))}%` },
+      isTonight ? { label: "Sunrise", value: clockLabel(forecast.daily.sunrise[dayIndex + 1] ?? forecast.daily.sunrise[dayIndex]) } : { label: "UV max", value: uvLabel(Math.max(...inWindow.map(i=>forecast.hourly.uvIndex[i]))) },
+    ] : isFogQuestion
       ? [{ label: "Visibility", value: `${(Math.min(...inWindow.map((i) => forecast.hourly.visibilityMiles[i])) || 1).toFixed(0)} mi` }, { label: "Wind", value: windLabel(forecast.hourly.windSpeed[inWindow[0] ?? dayIndex] ?? 0, forecast.current.windDirection) }, { label: "Humidity", value: `${round(forecast.current.humidity)}%` }]
       : isTonight
       ? [{ label: "Wind", value: `${round(forecast.hourly.windSpeed[inWindow[0] ?? dayIndex] ?? 0)} mph` }, { label: "Humidity", value: `${round(forecast.current.humidity)}%` }, { label: "Sunrise", value: clockLabel(forecast.daily.sunrise[dayIndex + 1] ?? forecast.daily.sunrise[dayIndex]) }]
       : [{ label: "Wind", value: windLabel(forecast.current.windSpeed, forecast.current.windDirection) }, { label: "UV", value: uvLabel(forecast.daily.uvIndexMax[dayIndex] ?? 0) }, { label: "Humidity", value: `${round(forecast.current.humidity)}%` }],
-    attribution: "open-meteo.com · updated just now",
+    attribution,
   };
 }
 

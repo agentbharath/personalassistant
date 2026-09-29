@@ -1,3 +1,4 @@
+import { compactDateLabel } from "@/lib/dates/display";
 import { Button } from "@/components/ui/Button";
 import type { BillsCardPayload } from "@/lib/chat/card-payload";
 import styles from "./BillsCard.module.css";
@@ -10,12 +11,12 @@ export function BillsCard({ payload, onFollowUp, busy }: { payload: BillsCardPay
   const { total, currency, count, insight, bills, moreCount, actions } = payload;
 
   return <section className={styles.card} aria-label={`Outstanding bills, ${count} bill${count === 1 ? "" : "s"}`}>
-    <p className={styles.eyebrow}>Outstanding bills</p>
+    <p className={styles.eyebrow}>{payload.periodLabel ? `Due · ${compactDateLabel(payload.periodLabel)}` : "Outstanding bills"}</p>
     <div className={styles.hero}>
       {total !== null && currency ? <p className={styles.big}>{money(total, currency)}</p> : <p className={styles.big}>{count}</p>}
       <span className={styles.count}>{count} bill{count === 1 ? "" : "s"}</span>
     </div>
-    {insight && <p className={styles.insight}>{insight}</p>}
+    {insight && <p className={styles.insight}>{insight.replace(/ and (?:is )?not on autopay\./gi, ". Autopay status is unknown.")}</p>}
 
     <div className={styles.list}>{bills.map((bill) => <div className={styles.row} key={bill.id}>
       <span className={`${styles.badge} ${bill.overdue ? styles.badgeOverdue : ""}`}>
@@ -29,8 +30,9 @@ export function BillsCard({ payload, onFollowUp, busy }: { payload: BillsCardPay
     </div>)}</div>
     {moreCount > 0 && <p className={styles.more}>+{moreCount} more bill{moreCount === 1 ? "" : "s"} not shown</p>}
 
+    <p className={styles.foot}>Saved bills · autopay shown only when confirmed</p>
     {actions.length > 0 && <div className={styles.actions}>
-      {actions.map((action) => <Button key={action.label} size="sm" variant="primary" disabled={busy || !onFollowUp} onClick={() => onFollowUp?.(action.query)}>{action.label}</Button>)}
+      {actions.map((action, index) => <Button key={action.label} size="sm" variant={index === 0 ? "primary" : "secondary"} disabled={busy || !onFollowUp} onClick={() => onFollowUp?.(action.query)}>{action.label}</Button>)}
     </div>}
   </section>;
 }

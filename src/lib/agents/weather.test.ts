@@ -39,6 +39,9 @@ describe("current conditions (\"now\" mode)", () => {
     expect(card.condition).toBe("Clear sky");
     expect(card.rangeLow).toBe(54);
     expect(card.rangeHigh).toBe(79);
+    expect(card.hourly.map((h: {label:string})=>h.label)).toEqual(["3PM","4PM","5PM","6PM","7PM","8PM"]);
+    expect(card.hourly[0].highlighted).toBe(true);
+    expect(card.appearance).toBe("sun");
     expect(card.stats.map((s: { label: string }) => s.label)).toEqual(["Wind", "UV", "Humidity"]);
     expect(card.stats[0].value).toBe("7 mph NW");
   });
@@ -57,8 +60,8 @@ describe("a narrowed daypart window (found live fix upstream: this now arrives a
     const answer = await answerWeather("is it foggy for my run tomorrow", "Sunnyvale, CA", "u1", false, [], "2026-09-28", "", "2026-09-28T15:00:00Z");
     const card = JSON.parse(answer.match(/```daylark-card\n([\s\S]*?)\n```/)![1]);
     expect(card.condition).toBe("Fog");
-    expect(card.stats.map((s: { label: string }) => s.label)).toEqual(["Visibility", "Wind", "Humidity"]);
-    expect(card.stats[0].value).toBe("1 mi");
+    expect(card.stats.map((s: { label: string }) => s.label)).toEqual(["Wind", "Visibility", "UV max"]);
+    expect(card.stats[1].value).toBe("1 mi");
   });
 });
 
@@ -77,7 +80,7 @@ describe("a yes/no rain question (weatherYesNo)", () => {
     expect(card.headline).toBe("Yes");
     expect(card.condition).toBe("Rain, 2 PM to 7 PM");
     expect(card.hourlyUnit).toBe("precip");
-    expect(card.stats).toEqual([{ label: "Total", value: "0.4 in" }, { label: "Wind", value: expect.stringContaining("mph") }, { label: "Gusts", value: "25 mph" }]);
+    expect(card.stats).toEqual([{ label: "Day total", value: "0.4 in" }, { label: "Wind max", value: "14 mph" }, { label: "Peak chance", value: "80%" }]);
   });
 
   it("answers No when nothing crosses the high-chance threshold, without inventing a snow chance (found live: a dry October day in Sunnyvale came back \"chance of snow\" -- the eyebrow's rain-vs-snow word was computed from the whole day's dominant code, not from the actually-rainy hours, so a merely-non-rain code like \"mainly clear\" defaulted to \"snow\")", async () => {
@@ -93,7 +96,7 @@ describe("a yes/no rain question (weatherYesNo)", () => {
     const card = JSON.parse(answer.match(/```daylark-card\n([\s\S]*?)\n```/)![1]);
     expect(card.headline).toBe("No");
     expect(card.eyebrow).not.toContain("snow");
-    expect(card.eyebrow).toBe("Tuesday · clear skies expected");
+    expect(card.eyebrow).toBe("Tuesday · precipitation outlook");
     expect(card.condition).toBe("Mainly clear");
   });
 });
@@ -111,7 +114,7 @@ describe("tonight", () => {
     const answer = await answerWeather("will it be clear tonight", "Sunnyvale, CA", "u1", false, [], "2026-09-28", "", "2026-09-28T15:00:00Z");
     const card = JSON.parse(answer.match(/```daylark-card\n([\s\S]*?)\n```/)![1]);
     expect(card.eyebrow).toBe("Tonight · Sunnyvale, CA");
-    expect(card.stats.map((s: { label: string }) => s.label)).toEqual(["Wind", "Humidity", "Sunrise"]);
+    expect(card.stats.map((s: { label: string }) => s.label)).toEqual(["Wind", "Rain chance", "Sunrise"]);
     expect(card.stats[2].value).toBe("7:03 AM");
   });
 });

@@ -1,9 +1,9 @@
 import type { Learning, Learnings } from "./learnings";
 
 // ---------- R14.4: fixed category set ----------
-export const CATEGORIES = ["restaurants", "groceries", "transport", "shopping", "utilities", "entertainment", "software", "health", "housing", "other"] as const;
+export const CATEGORIES = ["restaurants", "groceries", "coffee", "delivery", "food", "transport", "shopping", "utilities", "entertainment", "software", "health", "housing", "other"] as const;
 const SYNONYMS: Record<string, (typeof CATEGORIES)[number]> = {
-  restaurant: "restaurants", restaurants: "restaurants", food: "restaurants", dining: "restaurants", "eating out": "restaurants", takeout: "restaurants",
+  restaurant: "restaurants", restaurants: "restaurants", food: "food", coffee: "coffee", cafes: "coffee", delivery: "delivery", dining: "restaurants", "eating out": "restaurants", takeout: "restaurants",
   grocery: "groceries", groceries: "groceries",
   transport: "transport", transportation: "transport", travel: "transport", gas: "transport", fuel: "transport", commute: "transport",
   shopping: "shopping", retail: "shopping", clothes: "shopping", clothing: "shopping",
@@ -34,7 +34,9 @@ export function toKnownCategory(value: string): string {
 
 // Ordered: the first match wins, so "uber eats" is checked before "uber". Deterministic, and always overridden by a learned category.
 const MERCHANT_CATEGORIES: Array<[RegExp, (typeof CATEGORIES)[number]]> = [
-  [/doordash|uber ?eats|grubhub|postmates|seamless|caviar|chipotle|starbucks|mcdonald|dunkin|restaurant|cafe|coffee|pizza|kitchen|grill|bistro|diner|bakery/i, "restaurants"],
+  [/doordash|uber ?eats|grubhub|postmates|seamless|caviar/i, "delivery"],
+  [/starbucks|dunkin|philz|peet.s|cafe|coffee/i, "coffee"],
+  [/chipotle|mcdonald|restaurant|pizza|kitchen|grill|bistro|diner|bakery/i, "restaurants"],
   [/instacart|safeway|kroger|whole foods|trader joe|aldi|albertsons|sprouts|grocery|supermarket/i, "groceries"],
   [/uber|lyft|parking|clipper|bart\b|chevron|shell|exxon|airlines?|united|delta|southwest|amtrak|greyhound|fuel|gas station/i, "transport"],
   [/pg&e|pge\b|pacific gas|comcast|xfinity|at&t|verizon|t-mobile|conservice|water|electric|utility|utilities|internet/i, "utilities"],
@@ -90,6 +92,12 @@ export function applyMerchantLearnings<T extends { merchant: string; category: s
   const learned = learnings.merchantCategories[merchant.toLowerCase()] ?? learnings.merchantCategories[original.toLowerCase()];
   const category = learned ?? toKnownCategory(candidate.category);
   return { candidate: { ...candidate, merchant, category }, renamed: merchant !== original, recategorized: learned !== undefined && learned !== candidate.category };
+}
+
+/** Food is an umbrella filter; an unspecified food record stays unspecified. */
+export function matchesCategory(category: string, filter: string) {
+  const wanted = toKnownCategory(filter), actual = toKnownCategory(category);
+  return wanted === "food" ? ["food", "groceries", "restaurants", "coffee", "delivery"].includes(actual) : actual === wanted;
 }
 
 // ---------- R14.1: calendar ----------

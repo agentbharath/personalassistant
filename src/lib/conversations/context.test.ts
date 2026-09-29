@@ -10,3 +10,10 @@ it("bounds total context and keeps the latest reply",()=>{
   expect(result.reduce((sum,turn)=>sum+turn.content.length,0)).toBeLessThanOrEqual(3000);
   expect(result.at(-1)?.content).toContain("end 29");
 });
+
+it("removes only assistant presentation payloads while preserving the prose and user content",()=>{
+ const content='Today has two meetings.\n\n```daylark-card\n{"kind":"day","timeline":[]}\n```';
+ const result=recentContext([{role:"assistant",content},{role:"user",content}]);
+ expect(result[0].content).toBe("Today has two meetings.");
+ expect(result[1].content).toBe(content);
+});

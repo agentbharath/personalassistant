@@ -131,7 +131,7 @@ describe("merchant names for any sender (R8.11)", () => {
 
 describe("category guess from the merchant (R14.4)", () => {
   it.each([
-    ["DoorDash", "restaurants"], ["Uber Eats", "restaurants"], ["Uber", "transport"], ["Lyft", "transport"], ["Netflix", "entertainment"],
+    ["DoorDash", "delivery"], ["Uber Eats", "delivery"], ["Uber", "transport"], ["Lyft", "transport"], ["Netflix", "entertainment"],
     ["Google Play", "entertainment"], ["PG&E", "utilities"], ["Xfinity", "utilities"], ["Heritage Park Apartments", "housing"], ["Safeway", "groceries"], ["CVS Pharmacy", "health"],
   ])("%s → %s", (merchant, category) => expect(guessCategory(merchant)).toBe(category));
   it("says nothing for an unknown merchant, so the default and the user's own corrections decide", () => {
@@ -140,7 +140,7 @@ describe("category guess from the merchant (R14.4)", () => {
   });
   it("is used by the no-model path, with shopping as the fallback for a plain retailer", () => {
     const email = (from: string) => ({ subject: "Order Confirmed #1", from, date: "Sat, 12 Sep 2026 08:10:00 -0700", snippet: "", text: "Order Total: $10.00" });
-    expect(deterministicOrderExtraction(email("DoorDash Order <orders@doordash.com>"))?.category).toBe("restaurants");
+    expect(deterministicOrderExtraction(email("DoorDash Order <orders@doordash.com>"))?.category).toBe("delivery");
     expect(deterministicOrderExtraction(email("iHerb <noreply@iherb.com>"))?.category).toBe("shopping");
   });
 });

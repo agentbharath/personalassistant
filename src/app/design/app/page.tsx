@@ -29,8 +29,8 @@ export default async function DesignAppPage({ searchParams }: { searchParams: Pr
   const spendingMessages = [
     { role: "user" as const, content: "how was my spending this week?" },
     { role: "assistant" as const, content: embedCard("### Spending · Sep 20 – 27\n\n$484.99", {
-      kind: "spending", periodLabel: "Sep 20 – 27", filterLabel: null, currency: "USD", total: 48499, priorTotal: 79300, changePercent: -39,
-      comparisonLabel: "vs the week before", insight: "Down 39% vs the week before. Other is the biggest reason spending is down, off $496.50.",
+      kind: "spending", priorPeriodLabel: "Sep 12, 2026 – Sep 19, 2026", periodLabel: "Sep 20, 2026 – Sep 27, 2026", filterLabel: null, currency: "USD", total: 48499, priorTotal: 79300, changePercent: -39,
+      comparisonLabel: "vs the week before", insight: "Other had the largest change: $503.00 less than the previous period.",
       running: [{ current: 0, prior: 0 }, { current: 4200, prior: 60000 }, { current: 9800, prior: 60000 }, { current: 15600, prior: 60000 }, { current: 22400, prior: 63000 }, { current: 31200, prior: 68000 }, { current: 40100, prior: 74600 }, { current: 48499, prior: 79300 }],
       xTicks: [{ offset: 0, label: "Sun 20" }, { offset: 1, label: "Mon" }, { offset: 2, label: "Tue" }, { offset: 3, label: "Wed" }, { offset: 4, label: "Thu" }, { offset: 5, label: "Fri" }, { offset: 6, label: "Sat" }, { offset: 7, label: "Sun 27" }],
       changes: [
@@ -55,27 +55,35 @@ export default async function DesignAppPage({ searchParams }: { searchParams: Pr
   const spendingSimpleMessages = [
     { role: "user" as const, content: "how much did I spend this month?" },
     { role: "assistant" as const, content: embedCard("### Spending · September\n\n$642.00", {
-      kind: "spending", periodLabel: "September", filterLabel: null, currency: "USD", total: 64200, priorTotal: 73000, changePercent: -12,
+      kind: "spending", periodLabel: "Sep 1, 2026 – Sep 28, 2026", priorPeriodLabel: "Aug 1, 2026 – Aug 28, 2026", filterLabel: "food", currency: "USD", total: 64200, priorTotal: 73000, changePercent: -12,
       comparisonLabel: "vs last month", insight: "Under last month. Groceries are steady, delivery is where it goes.",
       running: [], xTicks: [], changes: [], topMerchants: [], actions: [],
       categories: [
         { category: "groceries", amountMinor: 31800, sharePercent: 50 },
         { category: "delivery", amountMinor: 19600, sharePercent: 30 },
         { category: "restaurants", amountMinor: 9800, sharePercent: 15 },
-        { category: "other", amountMinor: 3000, sharePercent: 5 },
+        { category: "coffee", amountMinor: 3000, sharePercent: 5 },
       ],
       count: 34, otherCurrencyCount: 0,
     }) },
+  ];
+  const emptySpendingMessages = [
+    {role:"user" as const,content:"how was my spending this week"},
+    {role:"assistant" as const,content:embedCard("This week starts Monday, Sep 28, so this covers today only. No saved expenses match today.",{
+      kind:"spending",empty:true,periodLabel:"This week · Sep 28, 2026",filterLabel:null,currency:"USD",total:0,priorTotal:0,changePercent:null,comparisonLabel:"",
+      insight:"This week starts Monday, Sep 28, so this covers today only. No saved expenses match today.",running:[],xTicks:[],changes:[],topMerchants:[],categories:[],count:0,otherCurrencyCount:0,
+      actions:[{label:"Last 7 days",query:"Show my spending for the last 7 days"},{label:"Last week",query:"Show my spending for last week"}],
+    })},
   ];
   const billsMessages = [
     { role: "user" as const, content: "what's due this week?" },
     { role: "assistant" as const, content: embedCard("### Bills outstanding\n\n$1,284.00", {
       kind: "bills", total: 128400, currency: "USD", count: 3,
-      insight: "Chase card is the one to watch. It is due Tuesday and not on autopay.",
+      insight: "Chase card is the one to watch. It is due Tuesday. Autopay status is unknown.",
       bills: [
-        { id: "1", merchant: "Chase card", amountMinor: 84600, currency: "USD", badge: { weekday: "TUE", day: 29 }, status: "Due in 2 days", overdue: false, autopay: false },
+        { id: "1", merchant: "Chase card", amountMinor: 84600, currency: "USD", badge: { weekday: "TUE", day: 29 }, status: "Due in 2 days", overdue: false, autopay: null },
         { id: "2", merchant: "PG&E", amountMinor: 13800, currency: "USD", badge: { weekday: "THU", day: 1 }, status: "Autopay on", overdue: false, autopay: true },
-        { id: "3", merchant: "Klarna", amountMinor: 30000, currency: "USD", badge: { weekday: "SAT", day: 3 }, status: "Due in 6 days", overdue: false, autopay: false },
+        { id: "3", merchant: "Klarna", amountMinor: 30000, currency: "USD", badge: { weekday: "SAT", day: 3 }, status: "Due in 6 days", overdue: false, autopay: null },
       ],
       moreCount: 0, actions: [{ label: "Mark Chase card paid", query: "I paid the Chase card bill" }],
     }) },
@@ -187,6 +195,6 @@ export default async function DesignAppPage({ searchParams }: { searchParams: Pr
     }) },
   ];
   return <AppShell title={thread ? "iHerb receipts" : "New conversation"} email="you@example.com" signOutAction={signOut} recent={MOCK_RECENT} activeConversationId={thread ? MOCK_RECENT[0].id : undefined}>
-    <Chat key={view ?? "empty"} title={thread ? "iHerb receipts" : undefined} conversationId={thread ? MOCK_RECENT[0].id : undefined} initialMessages={scan ? scanMessages : thread ? MOCK_THREAD : spending ? spendingMessages : spendingSimple ? spendingSimpleMessages : bills ? billsMessages : day ? dayMessages : email ? emailMessages : recall ? recallMessages : calendarQuery ? calendarQueryMessages : weather ? weatherMessages : []} />
+    <Chat key={view ?? "empty"} title={thread ? "iHerb receipts" : undefined} conversationId={thread ? MOCK_RECENT[0].id : undefined} initialMessages={view === "spending-empty" ? emptySpendingMessages : scan ? scanMessages : thread ? MOCK_THREAD : spending ? spendingMessages : spendingSimple ? spendingSimpleMessages : bills ? billsMessages : day ? dayMessages : email ? emailMessages : recall ? recallMessages : calendarQuery ? calendarQueryMessages : weather ? weatherMessages : []} />
   </AppShell>;
 }

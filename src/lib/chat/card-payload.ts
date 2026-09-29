@@ -9,11 +9,13 @@ const FENCE = /\n*```daylark-card\n([\s\S]*?)\n```\s*$/;
 
 export type SpendingCardPayload = {
   kind: "spending";
+  empty?: boolean;
   periodLabel: string;
   filterLabel: string | null;
   currency: string;
   total: number;
   priorTotal: number;
+  priorPeriodLabel?: string;
   changePercent: number | null;
   comparisonLabel: string;
   insight: string;
@@ -32,18 +34,21 @@ export type SpendingCardPayload = {
 };
 export type BillsCardPayload = {
   kind: "bills";
+  periodLabel?: string;
   /** Null when the outstanding bills mix currencies -- adding them would be wrong, so the hero shows just the count. */
   total: number | null;
   currency: string | null;
   count: number;
   insight: string;
   /** Past-due first, then soonest due date first -- capped; `moreCount` covers the rest. */
-  bills: { id: string; merchant: string; amountMinor: number; currency: string; badge: { weekday: string; day: number } | null; status: string; overdue: boolean; autopay: boolean }[];
+  bills: { id: string; merchant: string; amountMinor: number; currency: string; badge: { weekday: string; day: number } | null; status: string; overdue: boolean; autopay: boolean | null }[];
   moreCount: number;
   actions: { label: string; query: string }[];
 };
 export type DayCardPayload = {
   kind: "day";
+  nowMarker?: { index: number; label: string };
+  asOf?: string;
   dateLabel: string;
   count: number;
   insight: string;
@@ -97,6 +102,8 @@ export type RecallAvailabilityCardPayload = {
 };
 export type WeatherCardPayload = {
   kind: "weather";
+  appearance?: "sun" | "cloud" | "rain" | "snow" | "fog" | "night";
+  hourlyLabel?: string;
   eyebrow: string; // "Now · Sunnyvale" / "Tomorrow · 6 to 8 AM" / "Thursday · chance of rain" / "Tonight · Sunnyvale"
   /** A temperature reading ("77°") normally; a plain "Yes"/"No" when the request was a yes/no rain/snow question (weatherYesNo). */
   headline: string;

@@ -102,7 +102,9 @@ describe("the bills card (chat only)", () => {
     expect(card.bills[1].status).toBe("Autopay on");
     expect(card.bills[1].autopay).toBe(true);
     expect(card.insight).toContain("Chase card is the one to watch");
-    expect(card.insight).toContain("not on autopay");
+    expect(card.insight).not.toContain("not on autopay");
+    expect(card.insight).toContain("Autopay status is unknown");
+    expect(card.bills[0].autopay).toBeNull();
     expect(card.actions).toEqual([{ label: "Mark Chase card paid", query: "I paid the Chase card bill" }]);
   });
 
@@ -147,4 +149,18 @@ describe("dues and the background email sync (R17.8, R31)", () => {
     expect(answer).toContain("PG&E");
     expect(mocks.freshness).not.toHaveBeenCalled();
   });
+});
+
+it("filters next 15 days before totals and excludes later or undated bills", async () => {
+ vi.useFakeTimers();
+ vi.setSystemTime(new Date("2026-09-28T19:00:00Z"));
+ try {
+  mocks.bills=[bill({id:"in",merchant:"In window",dueDate:"2026-10-07"}),bill({id:"edge",merchant:"Boundary",dueDate:"2026-10-13"}),bill({id:"out",merchant:"Too late",dueDate:"2026-10-14"}),bill({id:"unknown",merchant:"Undated",dueDate:null})];
+  const answer=await runBillsCommand({type:"list"},"u1",{conversationId:"c1",input:"what's due in next 15 fays"});
+  const card=JSON.parse(answer.match(/```daylark-card\n([\s\S]*?)\n```/)![1]);
+  expect(card.count).toBe(2);
+  expect(card.total).toBe(29260);
+  expect(card.bills.map((b:{id:string})=>b.id)).toEqual(["in","edge"]);
+  expect(card.periodLabel).toBe("Next 15 days · Sep 28 – Oct 13, 2026");
+ } finally {vi.useRealTimers();}
 });

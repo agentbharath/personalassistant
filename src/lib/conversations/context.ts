@@ -1,3 +1,10 @@
+import { extractCard } from "@/lib/chat/card-payload";
+/** Cards carry machine-readable data after a complete prose answer. Keep their JSON out of routing context. */
+export function assistantConversationText(content:string) {
+  const {text,card}=extractCard(content);
+  return card && text ? text : content;
+}
+
 export type ContextTurn = { role: "user" | "assistant"; content: string; choices?: string[] };
 
 /** Keep both the task at the beginning and the question/offer at the end of a long turn. */
@@ -14,7 +21,7 @@ export function recentContext(context: ContextTurn[], limit = 12000) {
   const turns = context.filter(turn => !turn.content.startsWith("Earlier conversation summary")).slice(-12);
   const selected: ContextTurn[] = [];
   for (let i = turns.length - 1; i >= 0 && limit > 0; i--) {
-    const content = clipTurn(turns[i].content, Math.min(limit, turns[i].role === "assistant" ? 1800 : 1200));
+    const content = clipTurn(turns[i].role === "assistant" ? assistantConversationText(turns[i].content) : turns[i].content, Math.min(limit, turns[i].role === "assistant" ? 1800 : 1200));
     selected.unshift({role: turns[i].role, content, ...(turns[i].choices?.length ? {choices: turns[i].choices} : {})});
     limit -= content.length;
   }

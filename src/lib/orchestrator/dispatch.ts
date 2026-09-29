@@ -142,7 +142,7 @@ export async function dispatchDecision(decision: RouterDecision, ctx: DispatchCo
       prepareAgentStage(["finance"], "fast");
       return done(await answerFinance(input, userId, "record", context), ["finance"]);
     case "bills_list":
-      return done(await runBillsCommand({ type: "list" }, userId, { conversationId }), ["finance", "email"]);
+      return done(await runBillsCommand({ type: "list" }, userId, { conversationId, input }), ["finance", "email"]);
     case "bills_paid":
       return done(await runBillsCommand({ type: "paid", merchant: decision.merchant!, paidOn: decision.paidOn }, userId), ["finance"]);
     case "bills_autopay":

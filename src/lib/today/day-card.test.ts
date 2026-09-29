@@ -57,12 +57,31 @@ describe("the day card's timeline (free)", () => {
     expect(card!.insight).toBe("Nothing on your calendar today.");
   });
 
-  it("names the longest gap as the day's focus block when morning and afternoon are both busy", () => {
+  it("reports actual scheduled time without claiming scattered meetings occupy the day", () => {
     const view = baseView({ state: "ok", value: [
       event("Morning sync", "2026-09-28T16:00:00Z", "2026-09-28T16:30:00Z"), // 9:00-9:30 PT
       event("Afternoon review", "2026-09-28T21:00:00Z", "2026-09-28T21:30:00Z"), // 2:00-2:30 PT
     ] });
     const card = buildDayCard(view, "2026-09-28T15:00:00Z");
-    expect(card!.insight).toBe("Busy most of the day. Your longest focus block is 9:30 to 2:00.");
+    expect(card!.insight).toBe("1 hr scheduled. Longest break between events: 9:30 AM–2:00 PM (4 hr 30 min).");
   });
+});
+
+it("does not invent a free gap inside an overlapping event, or double-count busy time", () => {
+  const card=buildDayCard(baseView({state:"ok",value:[
+    event("Workshop","2026-09-28T16:00:00Z","2026-09-28T20:00:00Z"),
+    event("Quick call","2026-09-28T17:00:00Z","2026-09-28T17:15:00Z"),
+    event("Review","2026-09-28T19:00:00Z","2026-09-28T19:30:00Z"),
+  ]}),"2026-09-28T17:40:00Z")!;
+  expect(card.timeline.some(row=>row.kind==="free")).toBe(false);
+  expect(card.insight).toBe("4 hr scheduled.");
+});
+
+it("places the snapshot marker after the ongoing break and before the upcoming event", () => {
+ const card=buildDayCard(baseView({state:"ok",value:[
+   event("Standup","2026-09-28T16:00:00Z","2026-09-28T16:15:00Z"),
+   event("Review","2026-09-28T18:00:00Z","2026-09-28T19:00:00Z"),
+ ]}),"2026-09-28T17:40:00Z")!;
+ expect(card.nowMarker).toEqual({index:2,label:"10:40 AM"});
+ expect(card.timeline[2].startingIn).toBe("in 20 min");
 });

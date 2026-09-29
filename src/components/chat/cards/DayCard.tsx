@@ -1,23 +1,25 @@
+import { Fragment } from "react";
 import type { DayCardPayload } from "@/lib/chat/card-payload";
 import styles from "./DayCard.module.css";
 
-/** The "what does my day look like" card: hero meeting count, a busy/free read of the day, and a timeline of
- * today's meetings with any hour-plus gap called out as free time. Mirrors SpendingCard/BillsCard's anatomy. */
 export function DayCard({ payload }: { payload: DayCardPayload }) {
-  const { dateLabel, count, insight, timeline } = payload;
-
-  return <section className={styles.card} aria-label={`${dateLabel}, ${count} meeting${count === 1 ? "" : "s"}`}>
+  const { dateLabel, count, insight, timeline, nowMarker } = payload;
+  const marker = <div className={styles.now}><span>{nowMarker?.label}</span><i /><small>At reply</small></div>;
+  return <section className={styles.card} aria-label={`Calendar, ${dateLabel}`}>
     <p className={styles.eyebrow}>{dateLabel}</p>
-    <p className={styles.big}>{count} meeting{count === 1 ? "" : "s"}</p>
+    <p className={styles.big}>{count} event{count === 1 ? "" : "s"}</p>
     {insight && <p className={styles.insight}>{insight}</p>}
-
-    {timeline.length > 0 && <div className={styles.timeline}>{timeline.map((item, index) => <div key={index} className={`${styles.row} ${styles[item.kind]} ${item.past ? styles.past : ""} ${item.startingIn ? styles.soon : ""}`}>
-      <span className={styles.time}>{item.time}</span>
-      <span className={styles.info}>
-        <span className={styles.label}>{item.kind === "allday" && "All day · "}{item.label}</span>
-        {item.duration && <small>{item.duration}{item.location ? ` · ${item.location}` : ""}</small>}
-      </span>
-      {item.startingIn && <span className={styles.tag}>{item.startingIn}</span>}
-    </div>)}</div>}
+    <div className={styles.timeline}>{timeline.map((item, index) => <Fragment key={index}>
+      {nowMarker?.index === index && marker}
+      <div className={`${styles.row} ${styles[item.kind]} ${item.past ? styles.past : ""}`}>
+        <span className={styles.time}>{item.time}</span>
+        <div className={`${styles.info} ${item.kind === "meeting" && !item.past ? styles.upcoming : ""} ${item.startingIn ? styles.soon : ""}`}>
+          <span className={styles.label} title={item.label}>{item.kind === "allday" && "All day · "}{item.label}</span>
+          {item.duration && <small title={item.location ?? undefined}>{item.duration}{item.location && (item.past || item.kind !== "meeting") ? ` · ${item.location}` : ""}</small>}
+          {item.startingIn && <span className={styles.tag}>{item.startingIn}</span>}
+        </div>
+      </div>
+    </Fragment>)}{nowMarker?.index === timeline.length && marker}</div>
+    <p className={styles.foot}>Google Calendar{payload.asOf ? ` · snapshot at ${payload.asOf}` : " · at time of reply"}</p>
   </section>;
 }

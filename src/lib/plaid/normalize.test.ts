@@ -19,3 +19,11 @@ describe("bank money and directions", () => {
       expect(normalizeBankTransaction({ ...charge, ...change }).candidate).toBeNull();
   });
 });
+
+it.each([
+ ["FOOD_AND_DRINK_GROCERIES","groceries"],
+ ["FOOD_AND_DRINK_RESTAURANT","restaurants"],
+ ["FOOD_AND_DRINK_COFFEE","coffee"],
+])("preserves the bank's detailed food category %s",(detailed,category)=>{
+ expect(normalizeBankTransaction({...charge,personal_finance_category:{primary:"FOOD_AND_DRINK",detailed}}).candidate?.category).toBe(category);
+});

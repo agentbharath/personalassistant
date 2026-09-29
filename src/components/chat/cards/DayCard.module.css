@@ -1,27 +1,24 @@
-/* Same tokens and proportions as SpendingCard/BillsCard -- border + surface, colour reserved for status only. */
-.card { display: grid; gap: var(--s-4); padding: var(--s-5); border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--surface); box-shadow: var(--shadow-1); }
-.eyebrow { color: var(--faint); font-size: var(--text-xs); font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
-.big { font-size: clamp(1.75rem, 1.3rem + 1.6vw, 2.25rem); font-weight: 600; letter-spacing: -0.03em; line-height: 1.1; }
-.insight { margin: 0; color: var(--muted); font-size: var(--text-sm); }
-
-.timeline { display: grid; }
-.row { display: flex; align-items: center; gap: var(--s-3); padding: var(--s-3) 0; border-top: 1px solid var(--line); }
-.row:first-child { border-top: 0; padding-top: 0; }
-
-.time { flex: none; width: 3rem; color: var(--muted); font-size: var(--text-sm); font-variant-numeric: tabular-nums; text-align: right; }
-.allday .time { width: 0; }
-
-.info { flex: 1; min-width: 0; display: grid; gap: 2px; }
-.label { font-size: var(--text-sm); font-weight: 500; color: var(--ink-2); }
-.info small { color: var(--muted); font-size: var(--text-xs); }
-
-.free { color: var(--muted); }
-.free .label { font-weight: 400; font-style: italic; }
-.free .time { color: var(--faint); }
-
-.past .label, .past .time { color: var(--faint); text-decoration: line-through; text-decoration-color: var(--line-strong); }
-.past small { color: var(--faint); }
-
-.soon { padding: calc(var(--s-3) - 1px) var(--s-3); margin: 0 calc(var(--s-3) * -1); border: 1px solid var(--line-strong); border-radius: var(--r-md); }
-
-.tag { flex: none; padding: 1px var(--s-2); border-radius: var(--r-pill); background: var(--blue-soft); color: var(--blue); font-size: 0.6875rem; font-weight: 600; white-space: nowrap; }
+.card { composes: card from "./Card.module.css"; }
+.eyebrow { composes: eyebrow from "./Card.module.css"; }
+.big { composes: big from "./Card.module.css"; font-size: 2rem; }
+.insight { composes: insight from "./Card.module.css"; }
+.foot { composes: foot from "./Card.module.css"; }
+.timeline { display: grid; gap: var(--s-2); }
+.row { display: grid; grid-template-columns: 3.5rem minmax(0,1fr); gap: var(--s-3); align-items: start; }
+.time { padding-top: var(--s-3); font-size: .6875rem; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.info { display: grid; gap: var(--s-1); padding: var(--s-3); border: 1px solid transparent; background: var(--bg-sunken); border-radius: var(--r-sm); }
+.label { font-size: var(--text-sm); font-weight: 500; color: var(--ink-2); overflow-wrap: anywhere; }
+.info small { font-size: var(--text-xs); color: var(--muted); }
+.past:not(.free) .label { color: var(--faint); text-decoration: line-through; text-decoration-color: var(--line-strong); }
+.free .info { background: transparent; border-radius: 0; border-left: 1px dashed var(--line-strong); margin: var(--s-1) 0; min-height: 4rem; align-content: center; }
+.free .label { font-weight: 400; color: var(--muted); }
+.soon { border-color: var(--ink); }
+.tag { justify-self: start; padding: 1px var(--s-2); border-radius: var(--r-pill); color: var(--blue); background: var(--blue-soft); font-size: .6875rem; font-weight: 600; }
+.now { display: flex; gap: var(--s-2); align-items: center; color: var(--blue); font-size: .6875rem; font-variant-numeric: tabular-nums; }
+.now i { flex: 1; position: relative; height: 1px; background: var(--blue); }
+.now i::before { content: ""; position: absolute; width: 6px; height: 6px; border-radius: 50%; background: var(--blue); top: -2.5px; }
+.now small { font-size: inherit; }
+/* Upcoming events match the compact reference: title, duration and countdown share one row. */
+.upcoming { display: flex; align-items: center; gap: var(--s-2); min-width: 0; }
+.upcoming .label { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.upcoming small, .upcoming .tag { flex: none; white-space: nowrap; }

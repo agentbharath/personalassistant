@@ -130,3 +130,7 @@
   --shadow-2: 0 12px 32px -12px rgb(0 0 0 / 0.6), 0 2px 6px rgb(0 0 0 / 0.3);
   --shadow-3: 0 30px 80px -24px rgb(0 0 0 / 0.7);
 }
+
+/* Ordered neutral series, shared by compact financial cards. */
+:root { --chart-1: #0d1117; --chart-2: #4a5260; --chart-3: #8b929c; --chart-4: #c3c8cf; }
+[data-theme="dark"] { --chart-1: #edf0f4; --chart-2: #b4bcc8; --chart-3: #7d8796; --chart-4: #4a5360; }

@@ -187,7 +187,7 @@ describe("router v14: drafts, redirects and choices (R22, R23, R25)", () => {
   });
 
   it("is version 14, asks when in doubt, and teaches drafting, redirecting and choices", () => {
-    expect(ROUTER_VERSION).toBe("router-v39");
+    expect(ROUTER_VERSION).toBe("router-v40");
     expect(ROUTER_SYSTEM).toMatch(/When in doubt, ask/);
     expect(ROUTER_SYSTEM).toMatch(/email_draft/);
     expect(ROUTER_SYSTEM).toMatch(/Never just "I can't answer that"/);
@@ -319,5 +319,40 @@ describe("follow-up loop protection", () => {
     const sent = JSON.parse(complete.mock.calls[0][0].messages[0].content);
     expect(sent.followupExchange.assistantReply).toContain("sudoku");
     expect(ROUTER_SYSTEM).not.toContain("trust the flag over what recent contains");
+  });
+});
+
+describe("new requests after an old dismissal",()=>{
+  const context:RouterInput["context"]=[
+    {role:"user",content:"No, leave it"},
+    {role:"assistant",content:"Okay, we’ll leave it there."},
+    {role:"user",content:"what does my calendar look like today"},
+    {role:"assistant",content:"Okay, we’ll leave it there."},
+  ];
+  it.each(["dismiss","deny"])("repairs an unsupported %s instead of cancelling the fresh calendar question",async(operation)=>{
+    const complete=vi.fn().mockResolvedValueOnce(reply(out({operation,stopEvidence:"No, leave it"})))
+      .mockResolvedValueOnce(reply(out({operation:"calendar_query",stopEvidence:""})));
+    const result=await routeMessage(input("what does my calendar look like today",{context,pendingApproval:true}),{complete});
+    expect(result?.operation).toBe("calendar_query");
+    expect(complete).toHaveBeenCalledTimes(2);
+    expect(complete.mock.calls[1][0].messages[0].content).toContain('CURRENT message "what does my calendar look like today"');
+  });
+  it("does not cache or dispatch an unsupported cancellation when review also fails",async()=>{
+    const complete=vi.fn().mockResolvedValue(reply(out({operation:"dismiss",stopEvidence:"No, leave it"})));
+    const cache=cacheOf();
+    const result=await routeMessage(input("what does my calendar look like today",{context}),{complete,cache});
+    expect(result).toMatchObject({operation:"clarify",continuityBlocked:true});
+    expect(cache.store.size).toBe(0);
+  });
+  it("still accepts an explicit stop in the current message",async()=>{
+    const complete=vi.fn().mockResolvedValue(reply(out({operation:"dismiss",stopEvidence:"leave it"})));
+    expect((await routeMessage(input("No, leave it",{context}),{complete}))?.operation).toBe("dismiss");
+  });
+  it("passes readable card answers to the router without chart/timeline JSON crowding out context",()=>{
+    const content='Your calendar today has 3 events.\n\n```daylark-card\n'+JSON.stringify({kind:"day",timeline:Array.from({length:60},()=>({label:"NOISE"}))})+'\n```';
+    const sent=JSON.parse(buildRouterMessage(input("what about tomorrow",{context:[{role:"user",content:"today's calendar"},{role:"assistant",content}]})));
+    expect(sent.lastAssistantTurn).toBe("Your calendar today has 3 events.");
+    expect(sent.followupExchange.assistantReply).toBe("Your calendar today has 3 events.");
+    expect(JSON.stringify(sent)).not.toContain("NOISE");
   });
 });

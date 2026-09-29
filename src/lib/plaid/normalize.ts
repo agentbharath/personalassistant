@@ -17,7 +17,7 @@ export function normalizeBankTransaction(t: PlaidTransaction): { candidate: Tran
     FOOD_AND_DRINK: "restaurants", TRANSPORTATION: "transport", TRAVEL: "transport", GENERAL_MERCHANDISE: "shopping",
     ENTERTAINMENT: "entertainment", MEDICAL: "health", RENT_AND_UTILITIES: "utilities",
   };
-  const category = /GROCERIES/.test(detail) ? "groceries" : /RENT$/.test(detail) ? "housing" : categories[primary] || "other";
+  const category = /GROCERIES/.test(detail) ? "groceries" : /COFFEE/.test(detail) ? "coffee" : /RENT$/.test(detail) ? "housing" : categories[primary] || "other";
   return { candidate: {
     occurredOn: t.date, amountMinor: cents, currency: "USD", direction,
     merchant: t.merchant_name || t.name || "Bank transaction", category,

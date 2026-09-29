@@ -1,3 +1,4 @@
+import { formatDateRange } from "@/lib/dates/display";
 import { prepareAgentStage } from "@/lib/runtime/query-budget";
 import { Temporal } from "@js-temporal/polyfill";
 import { acknowledgeLearning } from "@/lib/learning/commands";
@@ -40,7 +41,7 @@ function billsInsight(featured: Bill, autopayMerchants: string[], todayIso: stri
     : overdue ? `was due ${weekday(featured.dueDate)}`
     : featured.dueDate === todayIso ? "is due today"
     : `is due ${weekday(featured.dueDate)}`;
-  return `${featured.merchant} is the one to watch. It ${timing}${autopay ? " and is on autopay." : " and not on autopay."}`;
+  return `${featured.merchant} is the one to watch. It ${timing}${autopay ? " and is on autopay." : ". Autopay status is unknown."}`;
 }
 
 /** Past-due first, then soonest due date -- the same ordering `renderBills` already uses for the text answer. */
@@ -69,7 +70,7 @@ function buildBillsCard(bills: Bill[], autopayMerchants: string[], todayIso: str
       badge: bill.dueDate ? { weekday: Temporal.PlainDate.from(bill.dueDate).toLocaleString("en-US", { weekday: "short" }).toUpperCase(), day: Temporal.PlainDate.from(bill.dueDate).day } : null,
       status: billStatus(bill, autopayMerchants, todayIso),
       overdue: bill.dueDate !== null && bill.dueDate < todayIso,
-      autopay: isOnAutopay(bill.merchant, autopayMerchants),
+      autopay: isOnAutopay(bill.merchant, autopayMerchants) ? true : null,
     })),
     moreCount: Math.max(0, ordered.length - shown.length),
     actions: [{ label: `Mark ${featured.merchant} paid`, query: `I paid the ${featured.merchant} bill` }],
@@ -127,24 +128,25 @@ async function findPaymentEmails(userId: string, bills: Bill[]) {
  * that sync's status and reports it, exactly as `financeFreshness` does for a spending question. A found bill or card-payment candidate is
  * reviewed on Perch, the same review card used for spending.
  */
-export async function answerBills(userId: string, conversationId?: string) {
+export async function answerBills(userId: string, conversationId?: string, input = "") {
   if (conversationId) prepareAgentStage(["finance", "email"]);
   const learnings = await loadLearnings(userId).catch(() => NO_LEARNINGS);
   const settled = await settleAutopayBills(userId, learnings);
-  const bills = await listBills(userId, "outstanding");
+  const window = billsWindow(input, today());
+  const bills = (await listBills(userId, "outstanding")).filter(bill => !window || bill.dueDate !== null && bill.dueDate >= window.from && bill.dueDate <= window.to);
   const found = conversationId ? [] : await findPaymentEmails(userId, bills);
   const auto = settled.length ? `${settled.map((bill) => `${bill.merchant} (${money(bill.amountMinor, bill.currency)})`).join(", ")} ${settled.length === 1 ? "was" : "were"} on autopay, so I counted ${settled.length === 1 ? "it" : "them"} as paid on the due date.\n\n` : "";
-  const saved = `${auto}${renderBills(bills, today(), found)}`;
+  const saved = `${window ? `Due · ${window.label}\n\n` : ""}${auto}${window && !bills.length ? "No saved bills are due in this window. Bills without a due date are not included." : renderBills(bills, today(), found)}`;
   if (!conversationId) return saved;
   const freshness = await financeFreshness(userId, conversationId).catch(() => ({ note: "Email sync is unavailable. This answer uses saved dues only.", review: false }));
   const text = [saved, freshness.note].filter(Boolean).join("\n\n");
   const card = buildBillsCard(bills, learnings.autopay, today());
-  return card ? embedCard(text, card) : text;
+  return card ? embedCard(text, { ...card, periodLabel: window?.label }) : text;
 }
 
 /** R17.5, R17.6, R17.8 */
-export async function runBillsCommand(command: BillsCommand, userId: string, options?: { conversationId?: string }) {
-  if (command.type === "list") return answerBills(userId, options?.conversationId);
+export async function runBillsCommand(command: BillsCommand, userId: string, options?: { conversationId?: string; input?: string }) {
+  if (command.type === "list") return answerBills(userId, options?.conversationId, options?.input);
 
   if (command.type === "autopay") {
     const learning = { kind: "autopay", merchant: command.merchant } as const;
@@ -164,4 +166,16 @@ export async function runBillsCommand(command: BillsCommand, userId: string, opt
   const result = await settleBill(userId, bill.id, paidOn, { type: "user_input" });
   const more = matching.length > 1 ? ` You have ${matching.length - 1} more ${bill.merchant} bill${matching.length === 2 ? "" : "s"} outstanding.` : "";
   return `Marked your ${bill.merchant} bill paid: ${money(bill.amountMinor, bill.currency)} on ${day(paidOn)}. ${bill.paymentDirection === "transfer" ? "It is recorded as a transfer, not new spending" : "It now counts as spending"}${result.duplicate ? " (it was already in your records, so nothing was added twice)" : ""}.${more}`;
+}
+
+/** Inclusive due dates: today through N days from today. Undated bills cannot be placed in a window. */
+export function billsWindow(input: string, today: string) {
+ const start=Temporal.PlainDate.from(today);
+ const n=input.match(/\b(?:next|coming|within)\s+(\d{1,3})\s*(?:days?|fays?)\b/i);
+ if(n) { const to=start.add({days:Number(n[1])}).toString(); return {from:today,to,label:`Next ${n[1]} days · ${formatDateRange(today,to)}`}; }
+ if(/\btomorrow\b/i.test(input)) {const date=start.add({days:1}).toString(); return {from:date,to:date,label:"Tomorrow"};}
+ if(/\btoday\b/i.test(input)) return {from:today,to:today,label:"Today"};
+ if(/\bthis week\b/i.test(input)) return {from:today,to:start.add({days:7-start.dayOfWeek}).toString(),label:"Rest of this week"};
+ if(/\bthis month\b/i.test(input)) return {from:today,to:start.with({day:1}).add({months:1}).subtract({days:1}).toString(),label:"Rest of this month"};
+ return null;
 }

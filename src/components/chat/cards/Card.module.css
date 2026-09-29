@@ -1,0 +1,8 @@
+.card { width: 100%; max-width: 30rem; display: grid; gap: var(--s-4); padding: var(--s-5); border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--surface); box-shadow: var(--shadow-1); animation: arrive 340ms ease-out both; }
+.eyebrow { color: var(--muted); font-size: var(--text-xs); font-weight: 600; line-height: 1.5; }
+.big { color: var(--ink); font-size: 2.5rem; font-weight: 600; letter-spacing: -.02em; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.insight { margin: 0; color: var(--ink-2); font-size: var(--text-base); line-height: 1.65; }
+.foot { margin: 0; padding-top: var(--s-3); border-top: 1px solid var(--line); color: var(--faint); font-size: var(--text-xs); line-height: 1.5; }
+@keyframes arrive { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) { .card { animation: none; } }
+@media (max-width: 420px) { .card { padding: var(--s-4); } .big { font-size: 2.25rem; } }
