@@ -13,6 +13,9 @@ export type FareOffer = {
   durationMin: number;
   price: number;
   tripType: "one_way" | "round_trip";
+  /** From SerpApi's own `best_flights` list (Google's own price+convenience-balanced pick), not `other_flights` -- never a heuristic
+   * Daylark invents itself, the same reasoning this file's own doc comment already applies to every other field here. */
+  isTopFlight: boolean;
 };
 
 export type PriceInsight = { level: "low" | "typical" | "high" | "unknown"; lowestPrice: number | null; typicalRange: [number, number] | null };
@@ -29,7 +32,7 @@ type SerpApiResponse = {
   search_metadata?: { google_flights_url?: string };
 };
 
-function toOffer(itinerary: SerpApiItinerary, tripType: "one_way" | "round_trip"): FareOffer | null {
+function toOffer(itinerary: SerpApiItinerary, tripType: "one_way" | "round_trip", isTopFlight: boolean): FareOffer | null {
   const legs = itinerary.flights ?? [];
   const first = legs[0];
   const last = legs[legs.length - 1];
@@ -45,6 +48,7 @@ function toOffer(itinerary: SerpApiItinerary, tripType: "one_way" | "round_trip"
     durationMin: itinerary.total_duration ?? 0,
     price: itinerary.price,
     tripType,
+    isTopFlight,
   };
 }
 
@@ -70,9 +74,10 @@ export async function searchFlights(params: { origin: string; destination: strin
   if (!response.ok) throw Object.assign(new Error(`SERPAPI_FLIGHTS_${response.status}`), { status: response.status });
   const body = await response.json() as SerpApiResponse;
   if (body.error) throw Object.assign(new Error("SERPAPI_FLIGHTS_ERROR"), { reason: body.error.slice(0, 200) });
-  const offers = [...(body.best_flights ?? []), ...(body.other_flights ?? [])]
-    .flatMap((itinerary) => { const offer = toOffer(itinerary, params.tripType); return offer ? [offer] : []; })
-    .sort((a, b) => a.price - b.price);
+  const offers = [
+    ...(body.best_flights ?? []).map((itinerary) => toOffer(itinerary, params.tripType, true)),
+    ...(body.other_flights ?? []).map((itinerary) => toOffer(itinerary, params.tripType, false)),
+  ].flatMap((offer) => offer ? [offer] : []).sort((a, b) => a.price - b.price);
   const insight = body.price_insights;
   const priceInsight: PriceInsight | null = insight ? {
     level: insight.price_level === "low" || insight.price_level === "high" || insight.price_level === "typical" ? insight.price_level : "unknown",

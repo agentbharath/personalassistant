@@ -6,20 +6,21 @@ import { interpretTimeForUser } from "./time-interpreter-runtime";
 const TIME_ZONE = process.env.DEFAULT_USER_TIMEZONE ?? "America/Los_Angeles";
 
 const outputSchema = z.object({
-  originCode: z.string(), destinationCode: z.string(),
+  originCode: z.string(), originStated: z.boolean(), destinationCode: z.string(),
   dateText: z.string(), tripType: z.enum(["one_way", "round_trip", "unspecified"]),
 });
 const JSON_SCHEMA = {
   type: "object", additionalProperties: false,
-  required: ["originCode", "destinationCode", "dateText", "tripType"],
+  required: ["originCode", "originStated", "destinationCode", "dateText", "tripType"],
   properties: {
-    originCode: { type: "string" }, destinationCode: { type: "string" },
+    originCode: { type: "string" }, originStated: { type: "boolean" }, destinationCode: { type: "string" },
     dateText: { type: "string" }, tripType: { type: "string", enum: ["one_way", "round_trip", "unspecified"] },
   },
 } as const;
 
 export type FlightSlots = {
-  origin: string; destination: string;
+  origin: string; originStatus: "stated" | "assumed";
+  destination: string;
   date: string; dateStatus: "stated" | "assumed";
   tripType: "one_way" | "round_trip"; tripTypeStatus: "stated" | "assumed";
 };
@@ -35,7 +36,7 @@ export async function extractFlightSlots(query: string, homeLocation: string | n
     model: "claude-haiku-4-5-20251001",
     max_tokens: 300,
     temperature: 0,
-    system: `Read a flight search request and give the two airports as IATA codes and the date as the person said it. originCode: the departure airport's IATA code. If the request names no origin, use the nearest major commercial airport to this saved home location, if given: ${homeLocation ?? "none saved"}. destinationCode: the arrival airport's IATA code for the named city or airport. Use the largest or most obviously intended commercial airport for a city with several (Los Angeles: LAX). dateText: the date or date phrase exactly as the person said it ("next Friday", "in November", ""); "" if truly no date is mentioned. tripType: one_way or round_trip if the person said which, else unspecified. Return "" for a code you cannot confidently resolve. Return JSON only.`,
+    system: `Read a flight search request and give the two airports as IATA codes and the date as the person said it. originCode: the departure airport's IATA code. If the request names no origin, use the nearest major commercial airport to this saved home location, if given: ${homeLocation ?? "none saved"}. originStated: true only when the person's own request actually named a departure city or airport; false when you had to use the saved home location or any other default. destinationCode: the arrival airport's IATA code for the named city or airport. Use the largest or most obviously intended commercial airport for a city with several (Los Angeles: LAX). dateText: the date or date phrase exactly as the person said it ("next Friday", "in November", ""); "" if truly no date is mentioned. tripType: one_way or round_trip if the person said which, else unspecified. Return "" for a code you cannot confidently resolve. Return JSON only.`,
     messages: [{ role: "user", content: query }],
     output_config: { format: { type: "json_schema", schema: JSON_SCHEMA } },
   });
@@ -62,7 +63,8 @@ export async function extractFlightSlots(query: string, homeLocation: string | n
   return {
     kind: "slots",
     slots: {
-      origin, destination, date, dateStatus,
+      origin, originStatus: output.originStated ? "stated" : "assumed",
+      destination, date, dateStatus,
       tripType: output.tripType === "round_trip" ? "round_trip" : "one_way",
       tripTypeStatus: output.tripType === "unspecified" ? "assumed" : "stated",
     },

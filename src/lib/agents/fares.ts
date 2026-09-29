@@ -65,11 +65,24 @@ export async function answerFlightFares(query: string, today: string, userId: st
   const ranked = [...result.offers].sort((a, b) => effectivePrice(a) - effectivePrice(b)).slice(0, 5);
   const cheapest = ranked[0];
   const tripLabel = slots.tripType === "round_trip" ? "round-trip" : "one-way";
+  const summarize = (offer: FareOffer) => `${plain(offer.airline, 30) || "an unlisted airline"}, ${formatDateLabel(offer.departAt)}, $${offer.price} ${tripLabel}${offer.stops === 0 ? ", nonstop" : `, ${offer.stops} stop${offer.stops > 1 ? "s" : ""}`}, ${formatDuration(offer.durationMin)}`;
   const lines: string[] = [
-    `**Cheapest real option:** ${slots.destination} on ${plain(cheapest.airline, 30) || "an unlisted airline"}, ${formatDateLabel(cheapest.departAt)}, $${cheapest.price} ${tripLabel}${cheapest.stops === 0 ? ", nonstop" : `, ${cheapest.stops} stop${cheapest.stops > 1 ? "s" : ""}`}.`,
+    `**Cheapest real option:** ${slots.origin} → ${slots.destination} on ${summarize(cheapest)}.`,
   ];
 
+  // Found live (R32): the answer only ever led with cheapest, so a nearly-identical-price but dramatically faster/fewer-stop option
+  // (Google's own "best_flights" pick, not a heuristic invented here) never got mentioned at all. Only worth a second line when it's
+  // actually a different itinerary and meaningfully faster or has fewer stops -- otherwise cheapest already IS the best pick.
+  const bestPick = result.offers.filter((offer) => offer.isTopFlight).sort((a, b) => effectivePrice(a) - effectivePrice(b))[0];
+  if (bestPick && bestPick.flightNumbers.join(",") !== cheapest.flightNumbers.join(",") && (bestPick.durationMin <= cheapest.durationMin - 60 || bestPick.stops < cheapest.stops)) {
+    lines.push(`**Best balance of price and time:** ${slots.origin} → ${slots.destination} on ${summarize(bestPick)}.`);
+  }
+
   const assumptions: string[] = [];
+  // Found live (R32): the origin was never stated anywhere in this answer when it came from the saved home location, not the request
+  // itself -- the person had no way to tell what city these fares were even from, and asked "are these from SJC?" to a repeat of the
+  // identical answer. Always naming it in the headline above fixes the common case; this flags it explicitly when it was a guess.
+  if (slots.originStatus === "assumed") assumptions.push(`flying from ${slots.origin} — your saved home location`);
   if (slots.dateStatus === "assumed") assumptions.push(`no date given — showing ${slots.date}`);
   if (slots.tripTypeStatus === "assumed") assumptions.push("one-way (not stated)");
   if (assumptions.length) lines.push(`*Assumed: ${assumptions.join("; ")}.*`);

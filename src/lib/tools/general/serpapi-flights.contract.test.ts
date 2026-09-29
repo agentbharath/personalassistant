@@ -29,8 +29,8 @@ describe("SerpApi Google Flights provider contract", () => {
     expect(url.toString()).toContain("arrival_id=LAS");
     expect(url.toString()).toContain("outbound_date=2026-11-06");
     expect(result.offers).toEqual([
-      { airline: "Frontier", flightNumbers: ["Frontier 100"], originCode: "SJC", destinationCode: "LAS", departAt: "2026-11-06 14:41", arriveAt: "2026-11-06 16:14", stops: 0, durationMin: 93, price: 71, tripType: "one_way" },
-      { airline: "Southwest", flightNumbers: ["Southwest 100", "Southwest 101"], originCode: "SJC", destinationCode: "LAS", departAt: "2026-11-06 14:41", arriveAt: "2026-11-06 16:14", stops: 1, durationMin: 93, price: 95, tripType: "one_way" },
+      { airline: "Frontier", flightNumbers: ["Frontier 100"], originCode: "SJC", destinationCode: "LAS", departAt: "2026-11-06 14:41", arriveAt: "2026-11-06 16:14", stops: 0, durationMin: 93, price: 71, tripType: "one_way", isTopFlight: true },
+      { airline: "Southwest", flightNumbers: ["Southwest 100", "Southwest 101"], originCode: "SJC", destinationCode: "LAS", departAt: "2026-11-06 14:41", arriveAt: "2026-11-06 16:14", stops: 1, durationMin: 93, price: 95, tripType: "one_way", isTopFlight: false },
     ]);
     expect(result.priceInsight).toEqual({ level: "low", lowestPrice: 71, typicalRange: [80, 150] });
     expect(result.googleFlightsUrl).toBe("https://google.com/travel/flights?x");
