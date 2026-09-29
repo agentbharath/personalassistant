@@ -9,7 +9,7 @@ vi.mock("@/lib/cache/public-query-cache", () => ({ withPublicQueryCache: (_query
 import { answerPublicSearch, sourceList } from "./general";
 
 const source = (n: number) => ({ title: `Source ${n}`, url: `https://example.com/${n}`, snippet: `evidence ${n}` });
-const places = (over: object = {}) => ({ kind: "places", intro: "Chinese restaurants in Sunnyvale:", answer: "", caveat: "", items: [
+const places = (over: object = {}) => ({ kind: "places", intro: "Chinese restaurants in Sunnyvale:", answer: "", caveat: "", sufficient: true, missingQuery: "", items: [
   { name: "Ginger Cafe", address: "", note: "Chinese with Southeast Asian influences", source: 1 },
   { name: "Asia Village", address: "747 S. Wolfe Road", note: "pickup or delivery", source: 4 },
 ], ...over });
@@ -46,6 +46,35 @@ describe("a web search answer (free)", () => {
     mocks.synthesize.mockResolvedValue(places());
     await answerPublicSearch("x");
     expect(mocks.synthesize.mock.calls[0][1]).toHaveLength(5);
+  });
+
+  it("does one more search when synthesis says its own evidence didn't answer the question, folded into the same call rather than a separate judgment step (R43)", async () => {
+    mocks.synthesize
+      .mockResolvedValueOnce(places({ sufficient: false, missingQuery: "Ginger Cafe hours 2026" }))
+      .mockResolvedValueOnce(places({ sufficient: true, missingQuery: "" }));
+    mocks.search
+      .mockResolvedValueOnce({ answer: "", sources: [1, 2, 3, 4, 5, 6].map(source) })
+      .mockResolvedValueOnce({ answer: "", sources: [{ title: "Fresh", url: "https://example.com/fresh", snippet: "new evidence" }] });
+    await answerPublicSearch("what are Ginger Cafe's hours");
+    expect(mocks.search).toHaveBeenCalledTimes(2);
+    expect(mocks.search).toHaveBeenNthCalledWith(2, "Ginger Cafe hours 2026", { depth: "advanced", maxResults: 6, snippetLength: 1500 });
+    expect(mocks.synthesize).toHaveBeenCalledTimes(2);
+    // The retry's fresh source leads the merged evidence given to the second synthesis call.
+    expect(mocks.synthesize.mock.calls[1][1][0]).toEqual({ title: "Fresh", url: "https://example.com/fresh", snippet: "new evidence" });
+  });
+
+  it("never retries a second time on the retry's own result -- at most one extra round, not a chain", async () => {
+    mocks.synthesize.mockResolvedValue(places({ sufficient: false, missingQuery: "still missing" }));
+    await answerPublicSearch("a genuinely unanswerable question");
+    expect(mocks.search).toHaveBeenCalledTimes(2);
+    expect(mocks.synthesize).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not retry when the evidence already answered it -- the common case pays no extra latency", async () => {
+    mocks.synthesize.mockResolvedValue(places());
+    await answerPublicSearch("Chinese restaurants in Sunnyvale, CA");
+    expect(mocks.search).toHaveBeenCalledTimes(1);
+    expect(mocks.synthesize).toHaveBeenCalledTimes(1);
   });
 
   it("remembers the places shown, so a follow-up can point at them", async () => {

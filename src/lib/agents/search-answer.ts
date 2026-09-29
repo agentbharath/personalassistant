@@ -19,6 +19,13 @@ export const searchAnswerSchema = z.object({
   fares: z.array(fareRowSchema),
   answer: z.string(),
   caveat: z.string(),
+  /** R43: the model's own read of whether this evidence actually supports an answer, not a separate judgment call before this one --
+   * the common case (evidence already answers it) pays no extra latency; only `sufficient: false` triggers one more search round, in
+   * general.ts, using missingQuery. True whenever answer/items/fares reflect real evidence, even an honest partial one. */
+  sufficient: z.boolean(),
+  /** A sharper, more specific search query targeting exactly the missing fact (a year, a trim, a location) -- never a repeat of the
+   * original query. "" whenever sufficient is true. */
+  missingQuery: z.string(),
 });
 export type SearchAnswer = z.infer<typeof searchAnswerSchema>;
 export type FareRow = z.infer<typeof fareRowSchema>;
@@ -41,8 +48,10 @@ export const SEARCH_ANSWER_JSON_SCHEMA = {
     } },
     answer: { type: "string" },
     caveat: { type: "string" },
+    sufficient: { type: "boolean" },
+    missingQuery: { type: "string" },
   },
-  required: ["kind", "intro", "items", "fares", "answer", "caveat"],
+  required: ["kind", "intro", "items", "fares", "answer", "caveat", "sufficient", "missingQuery"],
   additionalProperties: false,
 } as const;
 
