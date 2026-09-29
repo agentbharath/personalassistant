@@ -77,6 +77,19 @@ describe("a web search answer (free)", () => {
     expect(mocks.synthesize).toHaveBeenCalledTimes(1);
   });
 
+  it("strips a citation whose sentence states a number the cited source doesn't actually contain (R44), for kind \"answer\" only", async () => {
+    mocks.synthesize.mockResolvedValue({ kind: "answer", intro: "", items: [], fares: [], caveat: "", sufficient: true, missingQuery: "",
+      answer: "The starting price is $99,999 [1]. It's a popular choice [2]." });
+    mocks.search.mockResolvedValue({ answer: "", sources: [
+      { title: "Review", url: "https://example.com/1", snippet: "A well-reviewed midsize sedan." },
+      { title: "Guide", url: "https://example.com/2", snippet: "It's a popular choice among commuters." },
+    ] });
+    const answer = await answerPublicSearch("x");
+    expect(answer).toContain("The starting price is $99,999.");
+    expect(answer).not.toContain("$99,999 [1]");
+    expect(answer).toContain("It's a popular choice [2]."); // this citation's claim has no number to check, so it's untouched
+  });
+
   it("remembers the places shown, so a follow-up can point at them", async () => {
     mocks.synthesize.mockResolvedValue(places());
     const remember = vi.fn().mockResolvedValue(undefined);
@@ -88,9 +101,9 @@ describe("a web search answer (free)", () => {
   });
 
   it("remembers nothing for a plain answer, and a failed save never fails the answer", async () => {
-    mocks.synthesize.mockResolvedValue({ kind: "answer", intro: "", items: [], answer: "It opens at 9 [1].", caveat: "" });
+    mocks.synthesize.mockResolvedValue({ kind: "answer", intro: "", items: [], answer: "It opens soon [1].", caveat: "" });
     const remember = vi.fn();
-    expect(await answerPublicSearch("when does it open", remember)).toContain("It opens at 9 [1].");
+    expect(await answerPublicSearch("when does it open", remember)).toContain("It opens soon [1].");
     expect(remember).not.toHaveBeenCalled();
     mocks.synthesize.mockResolvedValue(places());
     await expect(answerPublicSearch("y", vi.fn().mockRejectedValue(new Error("db")))).resolves.toContain("Ginger Cafe");

@@ -2,13 +2,17 @@ import { searchPublicWeb } from "@/lib/tools/general/tavily-search";
 import { synthesizeSearchResults } from "@/lib/model/claude";
 import { cleanModelText, renderSearchAnswer, plain } from "./search-answer";
 import { withPublicQueryCache } from "@/lib/cache/public-query-cache";
+import { groundCitedNumbers } from "./claim-grounding";
 
 // v2: general search moved from basic-depth, 500-char-truncated evidence to advanced depth with real per-source chunks (R42, found live:
 // thin/stale-reading answers traced to evidence that never had the answer in it, not a synthesis-prompt problem). See evals/search.jsonl.
 // v3: one capped re-search round (R43) when synthesis's own "sufficient" field says the first search didn't actually answer the question --
 // folded into the existing synthesis call (a new sufficient/missingQuery field on the same response), not a separate judgment call before
 // it, so the common case (evidence already answers it) pays no extra latency at all; only a genuine gap pays for the retry round.
-export const GENERAL_SEARCH_VERSION = "general-search-v3";
+// v4: claim-level grounding (R44) -- a cited [n] whose sentence states a number not actually in source n's own evidence loses that
+// citation (never the sentence itself), the same "only trust what the evidence itself shows" principle amount-grounding.ts already
+// applies to money, generalized to any cited figure. Deterministic, code-only: no extra model call, no extra latency.
+export const GENERAL_SEARCH_VERSION = "general-search-v4";
 
 export type SearchPlaces = Array<{ name: string; address: string; note: string }>;
 /** Called with what the search showed, so a follow-up can point at it. Best effort. */
@@ -55,6 +59,9 @@ async function loadAnswer(query: string, memoryContext: string, today?: string, 
     }
   }
 
+  // Only kind "answer" has free-flowing prose with inline [n] citations to check this way; "places"/"fares" pair each item/row with its
+  // own single source field already, a different (and already separately grounded, R32) shape.
+  if (structured?.kind === "answer") structured = { ...structured, answer: groundCitedNumbers(structured.answer, evidence) };
   const answer = structured ? renderSearchAnswer(structured, query, evidence.length) : cleanModelText(research.answer ?? "");
   const text = [answer, sourceList(answer, evidence)].filter(Boolean).join("\n\n") || "I couldn’t find reliable current results for that query.";
   const places = structured?.kind === "places" ? structured.items.slice(0, 5).map((item) => ({ name: plain(item.name, 80), address: plain(item.address, 120), note: plain(item.note, 140) })).filter((place) => place.name) : [];
