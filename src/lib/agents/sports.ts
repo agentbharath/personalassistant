@@ -60,6 +60,26 @@ export function buildSportsCard(summary: TeamSummary, sport: string, league: str
   };
 }
 
+/** ESPN packs a cricket score into one string ("300/2 (41.4/50 ov, target 296)"). The card's design puts only the runs/wickets in the big
+ * mono slot and the overs small beside it, so the string is split here; the target is dropped because the summary line ("India require
+ * 48 runs") already carries it. */
+function splitCricketScore(raw: string): { score: string; detail: string } {
+  const parsed = /^(\S+)\s*(?:\((.*)\))?$/.exec(raw.trim());
+  if (!parsed) return { score: raw || "—", detail: "" };
+  const overs = (parsed[2] ?? "").split(",").map((part) => part.trim()).find((part) => part && !part.startsWith("target")) ?? "";
+  return { score: parsed[1], detail: overs };
+}
+
+/** "1st ODI · Thiruvananthapuram · Sep 27": stage, venue, date, as the design shows it. ESPN's description is "1st ODI,  (D/N) at
+ * Thiruvananthapuram" -- the day/night marker and the stray comma are noise. */
+function cricketEventLabel(description: string, iso: string): string {
+  const parsed = /^(.*?),?\s*(?:\([^)]*\)\s*)?(?:at\s+(.+))?$/.exec(description.trim());
+  const stage = parsed?.[1]?.trim() ?? "";
+  const venue = parsed?.[2]?.trim() ?? "";
+  const { month, day } = dateTile(iso);
+  return [stage, venue, `${month[0]}${month.slice(1).toLowerCase()} ${day}`].filter(Boolean).join(" · ");
+}
+
 /** Cricket has no equivalent of "the score" (a single number), no fixed win-by-higher-number rule (by wickets, by runs, by an innings, or
  * no result), and no readily-available season record the way a club or franchise does -- so this never reuses buildSportsCard's number
  * comparisons, only the same card shape and status-chip convention. Its own plain-English result sentence (from ESPN, never composed
@@ -80,10 +100,10 @@ export function buildCricketCard(summary: CricketTeamSummary): SportsCardPayload
     };
   }
 
-  const mySide: SportsSide = { name: teamName, score: match.myScore || "—", detail: "", winner: match.result === "win" };
-  const oppSide: SportsSide = { name: match.opponent, score: match.opponentScore || "—", detail: "", winner: match.result === "loss" };
+  const mySide: SportsSide = { name: teamName, ...splitCricketScore(match.myScore), winner: match.result === "win" };
+  const oppSide: SportsSide = { name: match.opponent, ...splitCricketScore(match.opponentScore), winner: match.result === "loss" };
   const sides: [SportsSide, SportsSide] = match.isHome ? [oppSide, mySide] : [mySide, oppSide];
-  const eventLabel = `Cricket${match.description ? ` · ${match.description}` : ""}`;
+  const eventLabel = cricketEventLabel(match.description, match.date);
 
   if (match.status === "in_progress") {
     return {
@@ -91,9 +111,12 @@ export function buildCricketCard(summary: CricketTeamSummary): SportsCardPayload
       eventLabel, statusTag: { label: match.statusDetail || "Live", tone: "live" }, event: { final: false, sides, outcome: "" }, upcoming: null,
     };
   }
+  // The design puts the result itself in the status tag ("India won by 8 wkts", green) rather than a generic "Final" plus a line below;
+  // ESPN's trailing "(50b rem)" balls-remaining note is dropped. A loss or no-result is never green.
+  const result = match.summary.replace(/\s*\([^)]*\)\s*$/, "").trim();
   return {
     kind: "sports", kindLabel, freshness: "", summary: "", attribution,
-    eventLabel, statusTag: { label: "Final", tone: "neutral" }, event: { final: true, sides, outcome: match.summary }, upcoming: null,
+    eventLabel, statusTag: { label: result || "Final", tone: match.result === "win" ? "good" : "neutral" }, event: { final: true, sides, outcome: "" }, upcoming: null,
   };
 }
 

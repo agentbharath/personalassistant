@@ -78,36 +78,41 @@ describe("the sports card (free)", () => {
 });
 
 describe("the cricket card (free)", () => {
-  it("shows a win with the real ESPN result summary as the outcome line, never a runs/wickets comparison invented here", () => {
-    const card = buildCricketCard(cricketSummary());
+  it("lays a win out as the design does: stage · venue · date, runs big with overs beside, the result in a green tag", () => {
+    const card = buildCricketCard(cricketSummary({ match: cricketMatch({ description: "1st ODI,  (D/N) at Thiruvananthapuram" }) }));
     expect(card.kindLabel).toBe("Cricket score");
-    expect(card.eventLabel).toBe("Cricket · 1st ODI");
+    expect(card.eventLabel).toBe("1st ODI · Thiruvananthapuram · Sep 27");
+    expect(card.statusTag).toEqual({ label: "India won by 8 wkts", tone: "good" });
     expect(card.event).toEqual({
       final: true,
       sides: [
         { name: "West Indies", score: "295/7", detail: "", winner: false },
-        { name: "India", score: "300/2 (41.4/50 ov, target 296)", detail: "", winner: true },
+        { name: "India", score: "300/2", detail: "41.4/50 ov", winner: true },
       ],
-      outcome: "India won by 8 wkts (50b rem)",
+      outcome: "",
     });
   });
 
-  it("shows a loss, never dressed up as a win", () => {
+  it("copes with a description that has no venue", () => {
+    expect(buildCricketCard(cricketSummary()).eventLabel).toBe("1st ODI · Sep 27");
+  });
+
+  it("shows a loss, never dressed up as a win or a green tag", () => {
     const card = buildCricketCard(cricketSummary({ match: cricketMatch({ result: "loss", summary: "West Indies won by 5 runs", isHome: false }) }));
     expect(card.event?.sides.find((side) => side.name === "West Indies")?.winner).toBe(true);
-    expect(card.event?.outcome).toBe("West Indies won by 5 runs");
+    expect(card.statusTag).toEqual({ label: "West Indies won by 5 runs", tone: "neutral" });
   });
 
   it("shows a rained-off no-result match plainly, never forcing a winner", () => {
     const card = buildCricketCard(cricketSummary({ match: cricketMatch({ result: "no_result", summary: "Match abandoned, no result" }) }));
     expect(card.event?.sides.every((side) => !side.winner)).toBe(true);
-    expect(card.event?.outcome).toBe("Match abandoned, no result");
+    expect(card.statusTag).toEqual({ label: "Match abandoned, no result", tone: "neutral" });
   });
 
   it("shows a live match with a live tag, never claiming a final result mid-match", () => {
     const card = buildCricketCard(cricketSummary({ match: cricketMatch({ status: "in_progress", statusDetail: "Live", myScore: "120/4 (30 ov)", opponentScore: "", result: null, summary: "" }) }));
     expect(card.statusTag).toEqual({ label: "Live", tone: "live" });
-    expect(card.event?.sides.find((side) => side.name === "India")?.score).toBe("120/4 (30 ov)");
+    expect(card.event?.sides.find((side) => side.name === "India")).toMatchObject({ score: "120/4", detail: "30 ov" });
     expect(card.summary).toBe("Live now, vs West Indies.");
   });
 
