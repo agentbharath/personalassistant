@@ -1,11 +1,24 @@
 import { extractCards } from "@/lib/chat/card-payload";
+/** The follow-up buttons a card offered, as the exact messages tapping them sends. Score cards' link chips open a page instead, so only
+ * the chips that send a message count. */
+export function offeredChips(content: string): string[] {
+  return extractCards(content).segments.flatMap((segment) => {
+    const chips = segment.card && "chips" in segment.card ? segment.card.chips as Array<string | { text?: string }> : [];
+    return chips.flatMap((chip) => { const text = typeof chip === "string" ? chip : chip.text; return text?.trim() ? [text.trim()] : []; });
+  });
+}
+
 /** Cards carry machine-readable data after a complete prose answer. Keep their JSON out of routing context. */
 export function assistantConversationText(content:string) {
   const {text,segments}=extractCards(content);
   if (!(segments.some(segment=>segment.card) && text)) return content;
-  // The card's own JSON is kept out of routing, but what KIND of answer it was isn't noise: a follow-up like "are they good?" only makes
-  // sense to route once the router can see the last answer was a list of suggested options.
-  return segments.some(segment=>segment.card?.kind==="suggestion") ? `${text}\n\n[Daylark showed this as a suggestions card: a top pick plus alternatives.]` : text;
+  // The card's own JSON is kept out of routing, but what KIND of answer it was, and which buttons it offered, isn't noise: a follow-up like
+  // "are they good?" only makes sense to route once the router can see the last answer was a list of suggested options, and a message that
+  // is exactly one of the offered buttons is a tap -- a complete request, never a question back (found live: "Half-zip vs quarter-zip styles"
+  // tapped from a card several turns up came back as "are you asking about the difference, or should I search?").
+  const kind = segments.some(segment=>segment.card?.kind==="suggestion") ? "\n\n[Daylark showed this as a suggestions card: a top pick plus alternatives.]" : "";
+  const chips = offeredChips(content).map((chip) => chip.slice(0, 160));
+  return `${text}${kind}${chips.length ? `\n\n[Tappable follow-ups this answer offered: ${chips.map((chip) => JSON.stringify(chip)).join(" | ")}]` : ""}`;
 }
 
 export type ContextTurn = { role: "user" | "assistant"; content: string; choices?: string[] };

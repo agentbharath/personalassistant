@@ -187,7 +187,7 @@ describe("router v14: drafts, redirects and choices (R22, R23, R25)", () => {
   });
 
   it("is version 14, asks when in doubt, and teaches drafting, redirecting and choices", () => {
-    expect(ROUTER_VERSION).toBe("router-v54");
+    expect(ROUTER_VERSION).toBe("router-v55");
     expect(ROUTER_SYSTEM).toMatch(/When in doubt, ask/);
     expect(ROUTER_SYSTEM).toMatch(/email_draft/);
     expect(ROUTER_SYSTEM).toMatch(/Never just "I can't answer that"/);
@@ -354,5 +354,19 @@ describe("new requests after an old dismissal",()=>{
     expect(sent.lastAssistantTurn).toBe("Your calendar today has 3 events.");
     expect(sent.followupExchange.assistantReply).toBe("Your calendar today has 3 events.");
     expect(JSON.stringify(sent)).not.toContain("NOISE");
+  });
+});
+
+describe("isOfferedChip (free)", () => {
+  it("is true only for a message that is, word for word, a button an earlier assistant turn offered", async () => {
+    const { isOfferedChip } = await import("./router");
+    const { embedCard } = await import("@/lib/chat/card-payload");
+    const card = embedCard("### Jackets", { kind: "suggestion", kindLabel: "Jackets", freshness: "", topPick: { name: "A", meta: "", metric: "$24", edgeTag: null, reason: "", actionLabel: "", actionUrl: "" }, rows: [], limit: "", sources: [], chips: ["Half-zip vs quarter-zip styles"] });
+    const context = [{ role: "assistant" as const, content: card }, { role: "user" as const, content: "something else" }, { role: "assistant" as const, content: "ok" }];
+    expect(isOfferedChip("Half-zip vs quarter-zip styles", context)).toBe(true);
+    expect(isOfferedChip("  half-zip VS quarter-zip styles ", context)).toBe(true);
+    expect(isOfferedChip("Half-zip", context)).toBe(false);
+    expect(isOfferedChip("", context)).toBe(false);
+    expect(isOfferedChip("Half-zip vs quarter-zip styles", [{ role: "user", content: "Half-zip vs quarter-zip styles" }])).toBe(false);
   });
 });
