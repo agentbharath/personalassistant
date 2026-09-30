@@ -15,6 +15,11 @@ describe("sports slot extraction (R47)", () => {
     expect(outcome).toEqual({ kind: "slots", slots: { sport: "cricket", league: "", team: "india" } });
   });
 
+  it("resolves an AFL club, unlike rugby or other unsupported sports", async () => {
+    const outcome = await extractSportsSlots("did Collingwood win", complete({ resolved: true, sport: "australian-football", league: "afl", team: "COLL" }));
+    expect(outcome).toEqual({ kind: "slots", slots: { sport: "australian-football", league: "afl", team: "coll" } });
+  });
+
   it("stays unresolved for a whole-league question, never forcing a single-team answer onto it", async () => {
     const outcome = await extractSportsSlots("what were last night's NBA scores", complete({ resolved: false, sport: "", league: "", team: "" }));
     expect(outcome).toEqual({ kind: "unresolved" });

@@ -5,7 +5,7 @@ import { extractSportsSlotsForUser } from "./sports-query-runtime";
 import { answerPublicSearch } from "./general";
 
 const LEAGUE_LABELS: Record<string, string> = {
-  nfl: "NFL", nba: "NBA", wnba: "WNBA", mlb: "MLB", nhl: "NHL",
+  nfl: "NFL", nba: "NBA", wnba: "WNBA", mlb: "MLB", nhl: "NHL", afl: "AFL",
   "eng.1": "Premier League", "esp.1": "La Liga", "ger.1": "Bundesliga", "ita.1": "Serie A", "fra.1": "Ligue 1", "usa.1": "MLS",
 };
 function leagueLabel(league: string) { return LEAGUE_LABELS[league] ?? league.toUpperCase(); }
