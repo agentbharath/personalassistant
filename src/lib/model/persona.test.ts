@@ -11,4 +11,8 @@ describe("Daylark persona guardrails", () => {
     expect(DAYLARK_PERSONA).toContain("self-harm risk");
     expect(DAYLARK_PERSONA).toContain("immediate danger");
   });
+
+  it("never comments on a repeated question, found live: \"I notice you've asked this three times now\" read as irritated, not helpful", () => {
+    expect(DAYLARK_PERSONA).toContain("Never comment on how many times the person has asked something");
+  });
 });
