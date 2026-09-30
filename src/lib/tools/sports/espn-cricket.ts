@@ -44,7 +44,14 @@ type EspnCricketCompetitor = { team?: EspnCricketTeamRef; homeAway?: string; sco
 type EspnCricketStatus = { type?: { state?: string; description?: string; shortDetail?: string }; summary?: string; featuredAthletes?: Array<{ abbreviation?: string; athlete?: { displayName?: string } }> };
 type EspnCricketEvent = { id?: string; date?: string; links?: Array<{ rel?: string[]; href?: string }>; competitions?: Array<{ status?: EspnCricketStatus; competitors?: EspnCricketCompetitor[]; description?: string; shortDescription?: string }> };
 type EspnCricketScoreboard = { events?: EspnCricketEvent[] };
-type EspnHeaderLeague = { id?: string; name?: string; abbreviation?: string; smartdates?: string[]; events?: Array<{ competitors?: Array<{ displayName?: string; abbreviation?: string }> }> };
+type EspnHeaderEvent = {
+  class?: { internationalClassId?: string };
+  /** The real result/chase/start-time line lives here; the event's own top-level `summary` is only "Result" or "Scheduled". */
+  fullStatus?: { summary?: string };
+  date?: string; description?: string; name?: string; status?: string; summary?: string;
+  competitors?: Array<{ displayName?: string; abbreviation?: string; score?: string; winner?: boolean | string; order?: number }>;
+};
+type EspnHeaderLeague = { id?: string; name?: string; abbreviation?: string; smartdates?: string[]; events?: EspnHeaderEvent[] };
 type EspnLeaderEntry = { displayValue?: string; athlete?: { displayName?: string } };
 type EspnSummary = {
   notes?: Array<{ type?: string; text?: string }>;
@@ -163,4 +170,52 @@ export async function fetchCricketTeamSummary(teamQuery: string): Promise<Cricke
   const next = match ? upcoming.find((candidate) => candidate.date > match.date) ?? null : null;
   const details = match && match.status !== "scheduled" ? await fetchMatchDetails(series.leagueId, match.eventId) : null;
   return { teamName: match?.teamName ?? teamQuery, match, next, details };
+}
+
+/** One match in a roundup of what's on -- exactly what ESPN's own header feed carries for each currently-active series' matches. */
+export type CricketRoundupEvent = {
+  stage: string; // "2nd ODI"
+  venue: string; // "Guwahati"
+  date: string; // ISO
+  status: "final" | "in_progress" | "scheduled";
+  /** A full international (men's or women's) rather than a domestic, A-team or development match -- ESPN's own `internationalClassId`. */
+  international: boolean;
+  summary: string; // ESPN's own result/chase line
+  /** "14:00 local" when ESPN says when a not-yet-started match begins (in the venue's own time, never guessed at a timezone). */
+  startsAt: string;
+  sides: Array<{ name: string; score: string; winner: boolean }>;
+};
+
+/** Every cricket match ESPN lists as live, finishing within the last day, or starting within the next day -- the real answer to "what
+ * cricket is on today", from the same header feed the team lookup already reads. Null only when ESPN itself can't be reached; an empty list
+ * means nothing is on. */
+export async function fetchCricketRoundup(now: Date = new Date()): Promise<CricketRoundupEvent[] | null> {
+  assertToolAllowed("general", "web.search_sports");
+  const response = await resilientFetch("espn", "https://site.api.espn.com/apis/personalized/v2/scoreboard/header?sport=cricket", {}, { timeoutMs: 8_000, maxAttempts: 2 });
+  if (!response.ok) return null;
+  const body = await response.json().catch(() => null) as EspnHeaderResponse | null;
+  if (!body) return null;
+  const earliest = now.getTime() - 20 * 3_600_000;
+  const latest = now.getTime() + 30 * 3_600_000;
+  const events: CricketRoundupEvent[] = [];
+  for (const league of body.sports?.[0]?.leagues ?? []) {
+    for (const event of league.events ?? []) {
+      const status: CricketRoundupEvent["status"] = event.status === "post" ? "final" : event.status === "in" ? "in_progress" : "scheduled";
+      const time = event.date ? Date.parse(event.date) : NaN;
+      if (!Number.isFinite(time) || (status !== "in_progress" && (time < earliest || time > latest))) continue;
+      const sides = [...(event.competitors ?? [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+        .map((side) => ({ name: side.displayName ?? "", score: side.score ?? "", winner: typeof side.winner === "string" ? side.winner === "true" : side.winner === true }));
+      if (sides.length < 2 || sides.some((side) => !side.name)) continue;
+      const description = event.description ?? "";
+      const summary = event.fullStatus?.summary ?? "";
+      events.push({
+        stage: (description.split(",")[0] ?? "").replace(/\s*\([^)]*\)/g, "").trim(),
+        venue: /\bat ([^,]+),/.exec(description)?.[1]?.trim() ?? "",
+        date: event.date!, status, international: Boolean(event.class?.internationalClassId && event.class.internationalClassId !== "0"), summary,
+        startsAt: status === "scheduled" && /Starts at (\d{1,2}:\d{2}) local time/.test(summary) ? `${/Starts at (\d{1,2}:\d{2})/.exec(summary)![1]} local` : "",
+        sides: [sides[0], sides[1]],
+      });
+    }
+  }
+  return events;
 }

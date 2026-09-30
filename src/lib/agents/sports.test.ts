@@ -1,14 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ slots: vi.fn(), summary: vi.fn(), cricketSummary: vi.fn(), publicSearch: vi.fn() }));
+const mocks = vi.hoisted(() => ({ slots: vi.fn(), summary: vi.fn(), cricketSummary: vi.fn(), cricketRoundup: vi.fn(), publicSearch: vi.fn() }));
 vi.mock("./sports-query-runtime", () => ({ extractSportsSlotsForUser: mocks.slots }));
 vi.mock("@/lib/tools/sports/espn", () => ({ fetchTeamSummary: mocks.summary }));
-vi.mock("@/lib/tools/sports/espn-cricket", () => ({ fetchCricketTeamSummary: mocks.cricketSummary }));
+vi.mock("@/lib/tools/sports/espn-cricket", () => ({ fetchCricketTeamSummary: mocks.cricketSummary, fetchCricketRoundup: mocks.cricketRoundup }));
 vi.mock("./general", () => ({ answerPublicSearch: mocks.publicSearch }));
 
-import { answerSports, buildCricketCard, buildCricketScoreCard, buildSportsCard } from "./sports";
+import { answerSports, buildCricketCard, buildCricketRoundupCard, buildCricketScoreCard, buildSportsCard } from "./sports";
 import type { TeamGame, TeamSummary } from "@/lib/tools/sports/espn";
-import type { CricketMatch, CricketTeamSummary } from "@/lib/tools/sports/espn-cricket";
+import type { CricketMatch, CricketRoundupEvent, CricketTeamSummary } from "@/lib/tools/sports/espn-cricket";
 
 const game = (over: Partial<TeamGame> = {}): TeamGame => ({
   opponent: "Arizona Cardinals", isHome: true, date: "2026-09-27T00:00Z",
@@ -28,7 +28,7 @@ const cricketSummary = (over: Partial<CricketTeamSummary> = {}): CricketTeamSumm
 const details = { toss: "India, elected to field first", seriesNote: "India led the 3-match series 1-0", batters: [{ player: "Virat Kohli", team: "India", value: 139 }], bowlers: [{ player: "Kuldeep Yadav", team: "India", value: 4 }] };
 const nextMatch = cricketMatch({ status: "scheduled", description: "2nd ODI,  (D/N) at Guwahati", date: "2026-09-30T08:30Z", myScore: "", opponentScore: "", result: null, summary: "" });
 
-beforeEach(() => { mocks.slots.mockReset(); mocks.summary.mockReset(); mocks.cricketSummary.mockReset(); mocks.publicSearch.mockReset().mockResolvedValue("fallback text"); });
+beforeEach(() => { mocks.slots.mockReset(); mocks.summary.mockReset(); mocks.cricketSummary.mockReset(); mocks.cricketRoundup.mockReset(); mocks.publicSearch.mockReset().mockResolvedValue("fallback text"); });
 
 describe("the sports card (free)", () => {
   it("shows a win, home team second (matching the away-then-home reading order), with the real score and a computed margin", () => {
@@ -178,6 +178,45 @@ describe("the cricket score card (free)", () => {
   });
 });
 
+const roundupEvent = (over: Partial<CricketRoundupEvent> = {}): CricketRoundupEvent => ({
+  stage: "2nd ODI", venue: "Guwahati", date: "2026-09-30T08:30Z", status: "in_progress", international: true, summary: "India require 34 runs", startsAt: "",
+  sides: [{ name: "West Indies", score: "405/7", winner: false }, { name: "India", score: "372/2 (40/50 ov, target 406)", winner: false }],
+  ...over,
+});
+
+describe("the cricket roundup card (free)", () => {
+  it("orders live first, then upcoming soonest-first, then finished latest-first, and caps at six", () => {
+    const card = buildCricketRoundupCard([
+      roundupEvent({ status: "final", stage: "1st ODI", venue: "Thiruvananthapuram", date: "2026-09-27T08:30Z", summary: "India won by 8 wkts (50b rem)", sides: [{ name: "West Indies", score: "295/7", winner: false }, { name: "India", score: "300/2 (41.4/50 ov)", winner: true }] }),
+      roundupEvent({ status: "scheduled", stage: "3rd ODI", venue: "Potchefstroom", date: "2026-09-30T11:30Z", summary: "Starts at 14:00 local time", startsAt: "14:00 local", sides: [{ name: "South Africa", score: "", winner: false }, { name: "Australia", score: "", winner: false }] }),
+      roundupEvent(),
+    ])!;
+    expect(card.events.map((event) => event.label)).toEqual(["Cricket · 2nd ODI · Guwahati", "Cricket · 3rd ODI · Potchefstroom", "Cricket · 1st ODI · Thiruvananthapuram"]);
+    expect(card.events[0]).toMatchObject({ tag: { label: "Live", tone: "live" }, outcome: "" });
+    expect(card.events[1]).toMatchObject({ tag: { label: "Sep 30 · 14:00 local", tone: "highlight" } });
+    expect(card.events[1].sides.every((side) => side.score === "")).toBe(true);
+    expect(card.events[2]).toMatchObject({ tag: { label: "Final", tone: "neutral" }, outcome: "India won by 8 wickets" });
+    expect(card.events[2].sides[1]).toEqual({ name: "India", score: "300/2", detail: "41.4/50 ov", lead: true });
+    expect(buildCricketRoundupCard(Array.from({ length: 9 }, () => roundupEvent()))!.events).toHaveLength(6);
+  });
+
+  it("shows a finished match with no winner as amber no-result, and keeps a multi-day score whole", () => {
+    const card = buildCricketRoundupCard([roundupEvent({ status: "final", summary: "Match abandoned", sides: [{ name: "A", score: "364 & 134/2 (27.5 ov)", winner: false }, { name: "B", score: "", winner: false }] })])!;
+    expect(card.events[0].tag).toEqual({ label: "No result", tone: "catch" });
+    expect(card.events[0].sides[0]).toMatchObject({ score: "364 & 134/2", detail: "27.5 ov" });
+  });
+
+  it("shows only full internationals when any are on, and domestic matches only when there are none", () => {
+    const domestic = roundupEvent({ international: false, stage: "13th Match", venue: "Abbottabad" });
+    expect(buildCricketRoundupCard([domestic, roundupEvent()])!.events.map((event) => event.label)).toEqual(["Cricket · 2nd ODI · Guwahati"]);
+    expect(buildCricketRoundupCard([domestic])!.events.map((event) => event.label)).toEqual(["Cricket · 13th Match · Abbottabad"]);
+  });
+
+  it("is null when nothing is on, so the caller falls back to a plain search", () => {
+    expect(buildCricketRoundupCard([])).toBeNull();
+  });
+});
+
 describe("answerSports (free)", () => {
   it("routes a cricket team to the cricket lookup, not the club-schedule one, and embeds a real card", async () => {
     mocks.slots.mockResolvedValue({ kind: "slots", slots: { sport: "cricket", league: "", team: "india" } });
@@ -188,6 +227,22 @@ describe("answerSports (free)", () => {
     expect(answer).toContain("India won by 8 wickets");
     expect(mocks.summary).not.toHaveBeenCalled();
     expect(mocks.publicSearch).not.toHaveBeenCalled();
+  });
+
+  it("answers a cricket roundup from ESPN's list of matches, never the team lookup", async () => {
+    mocks.slots.mockResolvedValue({ kind: "slots", slots: { sport: "cricket", league: "", team: "", roundup: true } });
+    mocks.cricketRoundup.mockResolvedValue([roundupEvent()]);
+    const answer = await answerSports("what other cricket matches are on today", "u1");
+    expect(answer).toContain('"kind":"scores"');
+    expect(mocks.cricketSummary).not.toHaveBeenCalled();
+    expect(mocks.publicSearch).not.toHaveBeenCalled();
+  });
+
+  it("falls back to general search when nothing is on, or ESPN can't be reached, for a roundup", async () => {
+    mocks.slots.mockResolvedValue({ kind: "slots", slots: { sport: "cricket", league: "", team: "", roundup: true } });
+    mocks.cricketRoundup.mockResolvedValueOnce([]).mockResolvedValueOnce(null);
+    expect(await answerSports("what cricket is on", "u1")).toBe("fallback text");
+    expect(await answerSports("what cricket is on", "u1")).toBe("fallback text");
   });
 
   it("falls back to general search when no currently active cricket series names the team", async () => {

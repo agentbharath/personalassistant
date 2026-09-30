@@ -24,6 +24,7 @@ export default async function DesignAppPage({ searchParams }: { searchParams: Pr
   const weather = view === "weather";
   const stock = view === "stock";
   const score = view === "score";
+  const scores = view === "scores";
   const scanMessages = [
     { role: "user" as const, content: "Import my spending from the last 30 days" },
     { role: "assistant" as const, status: "waiting_for_user", content: "### Review 2 imports\n\n1. **iHerb** — $35.53 · Sep 16\n2. **Discover** — $250.00 · Sep 11 · card payment\n\n500 email summaries checked. **Scan paused** in Primary and Updates. Progress is saved for 7 days. 62 known emails remain; more pages may follow. Choose **Continue scan** to resume where this scan stopped. Continuing does not import anything.\n\nChoose **Confirm** to import the reviewed items or **Cancel**." },
@@ -221,6 +222,18 @@ export default async function DesignAppPage({ searchParams }: { searchParams: Pr
       chips: [{ label: "Other cricket today", text: "What other cricket matches are on today?" }],
     }) },
   ];
+  const scoresMessages = [
+    { role: "user" as const, content: "What other cricket matches are on today?" },
+    { role: "assistant" as const, content: embedCard("### Cricket scores today", {
+      kind: "scores", kindLabel: "Cricket scores today", freshness: "",
+      events: [
+        { label: "Cricket · 2nd ODI · Guwahati", tag: { label: "Live", tone: "live" }, sides: [{ name: "West Indies", score: "405/7", detail: "", lead: false }, { name: "India", score: "372/2", detail: "40/50 ov", lead: true }], outcome: "" },
+        { label: "Cricket · 3rd ODI · Potchefstroom", tag: { label: "Sep 30 · 14:00 local", tone: "highlight" }, sides: [{ name: "South Africa", score: "", detail: "", lead: false }, { name: "Australia", score: "", detail: "", lead: false }], outcome: "" },
+        { label: "Cricket · 1st ODI · Thiruvananthapuram", tag: { label: "Final", tone: "neutral" }, sides: [{ name: "West Indies", score: "295/7", detail: "", lead: false }, { name: "India", score: "300/2", detail: "41.4/50 ov", lead: true }], outcome: "India won by 8 wickets" },
+      ],
+      sources: [{ label: "espn.com", url: "https://www.espn.com/cricket/scores" }],
+    }) },
+  ];
   const stockMessages = [
     { role: "user" as const, content: "what's Apple stock at" },
     { role: "assistant" as const, content: embedCard("### AAPL · Apple Inc\n\n$254.32 +$1.24 (0.49%)", {
@@ -238,6 +251,6 @@ export default async function DesignAppPage({ searchParams }: { searchParams: Pr
     }) },
   ];
   return <AppShell title={thread ? "iHerb receipts" : "New conversation"} email="you@example.com" signOutAction={signOut} recent={MOCK_RECENT} activeConversationId={thread ? MOCK_RECENT[0].id : undefined}>
-    <Chat key={view ?? "empty"} title={thread ? "iHerb receipts" : undefined} conversationId={thread ? MOCK_RECENT[0].id : undefined} initialMessages={view === "spending-empty" ? emptySpendingMessages : scan ? scanMessages : thread ? MOCK_THREAD : spending ? spendingMessages : spendingSimple ? spendingSimpleMessages : bills ? billsMessages : day ? dayMessages : email ? emailMessages : recall ? recallMessages : calendarQuery ? calendarQueryMessages : weather ? weatherMessages : stock ? stockMessages : score ? scoreMessages : []} />
+    <Chat key={view ?? "empty"} title={thread ? "iHerb receipts" : undefined} conversationId={thread ? MOCK_RECENT[0].id : undefined} initialMessages={view === "spending-empty" ? emptySpendingMessages : scan ? scanMessages : thread ? MOCK_THREAD : spending ? spendingMessages : spendingSimple ? spendingSimpleMessages : bills ? billsMessages : day ? dayMessages : email ? emailMessages : recall ? recallMessages : calendarQuery ? calendarQueryMessages : weather ? weatherMessages : stock ? stockMessages : score ? scoreMessages : scores ? scoresMessages : []} />
   </AppShell>;
 }

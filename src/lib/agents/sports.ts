@@ -1,6 +1,6 @@
-import { embedCard, type ScoreCardPayload, type SportsCardPayload, type SportsSide } from "@/lib/chat/card-payload";
+import { embedCard, type ScoreCardPayload, type ScoresCardPayload, type SportsCardPayload, type SportsSide } from "@/lib/chat/card-payload";
 import { fetchTeamSummary, type TeamSummary } from "@/lib/tools/sports/espn";
-import { fetchCricketTeamSummary, type CricketMatch, type CricketTeamSummary } from "@/lib/tools/sports/espn-cricket";
+import { fetchCricketRoundup, fetchCricketTeamSummary, type CricketMatch, type CricketRoundupEvent, type CricketTeamSummary } from "@/lib/tools/sports/espn-cricket";
 import { extractSportsSlotsForUser } from "./sports-query-runtime";
 import { answerPublicSearch } from "./general";
 
@@ -156,8 +156,8 @@ export function buildCricketCard(summary: CricketTeamSummary): SportsCardPayload
 
 /** Split "372/2 (40/50 ov, target 406)" into the big runs/wickets and the small overs beside it (the target is in the chase line). */
 function scoreTeam(name: string, raw: string, lead: boolean): ScoreCardPayload["teams"][number] {
-  const parsed = /^(\S+)\s*(?:\((.*)\))?$/.exec(raw.trim());
-  if (!parsed) return { name, score: raw || "—", detail: "", lead };
+  const parsed = /^(.*?)\s*(?:\((.*)\))?$/.exec(raw.trim());
+  if (!parsed || !parsed[1]) return { name, score: raw || "—", detail: "", lead };
   const overs = (parsed[2] ?? "").split(",").map((part) => part.trim()).find((part) => part && !part.startsWith("target")) ?? "";
   return { name, score: parsed[1], detail: overs, lead };
 }
@@ -199,6 +199,39 @@ export function buildCricketScoreCard(summary: CricketTeamSummary, match: Cricke
   };
 }
 
+/** ESPN's "India won by 8 wkts (50b rem)" as "India won by 8 wickets". */
+function spellOutResult(raw: string) {
+  return raw.replace(/\s*\([^)]*\)\s*$/, "").replace(/\bwkts\b/g, "wickets").replace(/\bwkt\b/g, "wicket").trim();
+}
+
+/** A roundup of the cricket matches on today: full internationals only when any are on (found live, 2026-09-30: six domestic and A-team
+ * matches filled the card and pushed India v West Indies off it), domestic ones only as a fallback when there are none. Live first, then the ones still to start (soonest first), then the ones that finished
+ * (latest first), at most six. Every value is ESPN's own; null when nothing is on, so the caller falls back to a plain search. */
+export function buildCricketRoundupCard(events: CricketRoundupEvent[]): ScoresCardPayload | null {
+  const rank = { in_progress: 0, scheduled: 1, final: 2 } as const;
+  const internationals = events.filter((event) => event.international);
+  const ordered = [...(internationals.length ? internationals : events)].sort((a, b) => rank[a.status] - rank[b.status] || (a.status === "final" ? b.date.localeCompare(a.date) : a.date.localeCompare(b.date))).slice(0, 6);
+  if (!ordered.length) return null;
+  const cards = ordered.map((event): ScoresCardPayload["events"][number] => {
+    const label = ["Cricket", event.stage, event.venue].filter(Boolean).join(" · ");
+    if (event.status === "scheduled") {
+      const when = [shortDate(event.date), event.startsAt].filter(Boolean).join(" · ");
+      return { label, tag: { label: when, tone: "highlight" }, sides: event.sides.map((side) => ({ name: side.name, score: "", detail: "", lead: false })) as [ScoreCardPayload["teams"][0], ScoreCardPayload["teams"][0]], outcome: "" };
+    }
+    const sides = event.sides.map((side) => scoreTeam(side.name, side.score, event.status === "final" && side.winner)) as [ScoreCardPayload["teams"][0], ScoreCardPayload["teams"][0]];
+    if (event.status === "in_progress") return { label, tag: { label: "Live", tone: "live" }, sides, outcome: "" };
+    const decided = event.sides.some((side) => side.winner);
+    return decided
+      ? { label, tag: { label: "Final", tone: "neutral" }, sides, outcome: spellOutResult(event.summary) }
+      : { label, tag: { label: "No result", tone: "catch" }, sides, outcome: event.summary };
+  });
+  return { kind: "scores", kindLabel: "Cricket scores today", freshness: "", events: cards, sources: [{ label: "espn.com", url: "https://www.espn.com/cricket/scores" }] };
+}
+
+function renderScoresText(card: ScoresCardPayload): string {
+  return [`### ${card.kindLabel}`, ...card.events.map((event) => `${event.label}: ${event.sides.map((side) => `${side.name}${side.score ? ` ${side.score}` : ""}`).join(" · ")}${event.outcome ? ` — ${event.outcome}` : ""}`)].join("\n\n");
+}
+
 function renderScoreText(card: ScoreCardPayload): string {
   return [`### ${card.match}`, card.teams.map((team) => `${team.name} ${team.score}${team.detail ? ` (${team.detail})` : ""}`).join(" · "), card.outcome?.text ?? ""].filter(Boolean).join("\n\n");
 }
@@ -222,6 +255,11 @@ export async function answerSports(query: string, userId: string, memoryContext 
   try {
     const outcome = await extractSportsSlotsForUser(query, userId);
     if (outcome.kind !== "slots") return fallback();
+    if (outcome.slots.sport === "cricket" && outcome.slots.roundup) {
+      const card = buildCricketRoundupCard(await fetchCricketRoundup() ?? []);
+      if (!card) return fallback();
+      return embedCard(renderScoresText(card), card);
+    }
     if (outcome.slots.sport === "cricket") {
       const summary = await fetchCricketTeamSummary(outcome.slots.team);
       if (!summary) return fallback();

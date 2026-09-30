@@ -171,6 +171,21 @@ export type ScoreCardPayload = {
   /** `url` opens a real page; `text` is sent as a follow-up message; `act` marks the one that hands off to another agent (blue). */
   chips: { label: string; url?: string; text?: string; act?: boolean }[];
 };
+/** A roundup of several matches at once ("what cricket is on today"): the shared event blocks stacked in one card, most relevant first.
+ * A side with an empty score is a not-yet-started match, shown as names only. */
+export type ScoresEvent = {
+  label: string; // "Cricket · 1st ODI · Thiruvananthapuram"
+  tag: { label: string; tone: "good" | "highlight" | "neutral" | "catch" | "live" };
+  sides: [ScoreTeam, ScoreTeam];
+  outcome: string; // a finished match's result line, "" otherwise
+};
+export type ScoresCardPayload = {
+  kind: "scores";
+  kindLabel: string; // "Cricket scores today"
+  freshness: string;
+  events: ScoresEvent[];
+  sources: { label: string; url: string }[];
+};
 /** A tone tag used across the answer-card family: good = green, highlight = blue, neutral = gray, catch = amber. */
 export type CardTag = { label: string; tone: "good" | "highlight" | "neutral" | "catch" };
 export type SuggestionRow = { name: string; meta: string; metric: string; roleTag: CardTag };
@@ -187,13 +202,13 @@ export type SuggestionCardPayload = {
    * generically from the answer's kind (see chat/types.ts's own `followUps`, deliberately a no-op for exactly that reason). */
   chips: string[];
 };
-export type CardPayload = SpendingCardPayload | BillsCardPayload | DayCardPayload | EmailCardPayload | RecallAvailabilityCardPayload | WeatherCardPayload | StockCardPayload | SportsCardPayload | ScoreCardPayload | SuggestionCardPayload;
+export type CardPayload = SpendingCardPayload | BillsCardPayload | DayCardPayload | EmailCardPayload | RecallAvailabilityCardPayload | WeatherCardPayload | StockCardPayload | SportsCardPayload | ScoreCardPayload | ScoresCardPayload | SuggestionCardPayload;
 
 export function embedCard(text: string, payload: CardPayload): string {
   return `${text}\n\n\`\`\`daylark-card\n${JSON.stringify(payload)}\n\`\`\``;
 }
 
-const KNOWN_KINDS = new Set(["spending", "bills", "day", "email", "recall-availability", "weather", "stock", "sports", "score", "suggestion"]);
+const KNOWN_KINDS = new Set(["spending", "bills", "day", "email", "recall-availability", "weather", "stock", "sports", "score", "scores", "suggestion"]);
 
 export type CardSegment = { text: string; card: CardPayload | null };
 
