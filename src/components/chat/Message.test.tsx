@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { AssistantMessage, UserMessage } from "./Message";
-import { embedCard, type SpendingCardPayload, type SportsCardPayload, type StockCardPayload } from "@/lib/chat/card-payload";
+import { embedCard, type SpendingCardPayload, type SportsCardPayload, type StockCardPayload, type SuggestionCardPayload } from "@/lib/chat/card-payload";
 
 describe("the buttons under your own message (free)", () => {
   it("offers Copy and Ask again", () => {
@@ -80,5 +80,21 @@ describe("a message carrying a card payload (free)", () => {
     expect(html).toContain("San Francisco 49ers won by 6");
     expect(html).not.toContain("daylark-card");
     expect(html).not.toContain('"kind":"sports"');
+  });
+
+  it("renders a suggestion card instead of markdown, and never leaks the raw JSON fence into the page", () => {
+    const suggestion: SuggestionCardPayload = {
+      kind: "suggestion", kindLabel: "Men's fleece jackets, size M", freshness: "Just now",
+      topPick: { name: "Cotopaxi Abrazo", meta: "REI · Medium weight · 4.7 (135)", metric: "$74.83", edgeTag: { label: "44-50% off", tone: "good" }, reason: "Biggest real discount among well-reviewed jackets.", actionLabel: "View at rei.com", actionUrl: "https://rei.com/1" },
+      rows: [{ name: "REI Trailmade", meta: "REI · Heavier, tall sizes · 4.6", metric: "$69.95", roleTag: { label: "Cheapest solid", tone: "highlight" } }],
+      limit: "Coupons, member prices and cashback aren't included.",
+      sources: [{ label: "rei.com", url: "https://rei.com/1" }],
+      chips: ["Under $40", "Are they good?"],
+    };
+    const html = renderToStaticMarkup(<AssistantMessage>{embedCard("### Men's fleece jackets, size M\n\nCotopaxi Abrazo", suggestion)}</AssistantMessage>);
+    expect(html).toContain("Cotopaxi Abrazo");
+    expect(html).toContain("REI Trailmade");
+    expect(html).not.toContain("daylark-card");
+    expect(html).not.toContain('"kind":"suggestion"');
   });
 });

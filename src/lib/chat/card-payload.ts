@@ -153,13 +153,29 @@ export type SportsCardPayload = {
   upcoming: { month: string; day: string; matchup: string; detail: string } | null;
   attribution: string; // footer: "espn.com"
 };
-export type CardPayload = SpendingCardPayload | BillsCardPayload | DayCardPayload | EmailCardPayload | RecallAvailabilityCardPayload | WeatherCardPayload | StockCardPayload | SportsCardPayload;
+/** A tone tag used across the answer-card family: good = green, highlight = blue, neutral = gray, catch = amber. */
+export type CardTag = { label: string; tone: "good" | "highlight" | "neutral" | "catch" };
+export type SuggestionRow = { name: string; meta: string; metric: string; roleTag: CardTag };
+export type SuggestionCardPayload = {
+  kind: "suggestion";
+  kindLabel: string; // "Men's fleece jackets, size M" -- header, sentence case
+  freshness: string; // "Prices as of 2:14 PM"
+  topPick: { name: string; meta: string; metric: string; edgeTag: CardTag | null; reason: string; actionLabel: string; actionUrl: string };
+  /** 1 to 3 more options, each with its own single verdict tag -- never the top pick repeated. */
+  rows: SuggestionRow[];
+  limit: string; // "Coupons, member prices and cashback aren't included. Confirm size M is in stock at checkout."
+  sources: { label: string; url: string }[];
+  /** Up to 4 tap-to-send follow-ups this specific answer suggests, decided by the same extraction that built the card -- never inferred
+   * generically from the answer's kind (see chat/types.ts's own `followUps`, deliberately a no-op for exactly that reason). */
+  chips: string[];
+};
+export type CardPayload = SpendingCardPayload | BillsCardPayload | DayCardPayload | EmailCardPayload | RecallAvailabilityCardPayload | WeatherCardPayload | StockCardPayload | SportsCardPayload | SuggestionCardPayload;
 
 export function embedCard(text: string, payload: CardPayload): string {
   return `${text}\n\n\`\`\`daylark-card\n${JSON.stringify(payload)}\n\`\`\``;
 }
 
-const KNOWN_KINDS = new Set(["spending", "bills", "day", "email", "recall-availability", "weather", "stock", "sports"]);
+const KNOWN_KINDS = new Set(["spending", "bills", "day", "email", "recall-availability", "weather", "stock", "sports", "suggestion"]);
 
 export type CardSegment = { text: string; card: CardPayload | null };
 
