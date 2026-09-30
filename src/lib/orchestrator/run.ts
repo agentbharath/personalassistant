@@ -7,9 +7,23 @@ import { loadEmailState } from "@/lib/conversations/email-state";
 import { loadSearchState, loadRecentSearchStates, searchRecallContext } from "@/lib/conversations/search-state";
 import { loadRecentResearchStates, researchRecallContext } from "@/lib/conversations/research-state";
 import { loadRecentSuggestionStates, suggestionRecallContext } from "@/lib/conversations/suggestion-state";
+import { saveConversationAnswerState, loadRecentConversationAnswerStates, conversationAnswerRecallContext } from "@/lib/conversations/conversation-state";
+import { extractCards } from "@/lib/chat/card-payload";
 import { hasPendingApproval } from "@/lib/workflows/pending";
 import { NOTHING_PENDING, answerApproval, dispatchDecision } from "./dispatch";
 import { routeForUser } from "./router-runtime";
+
+/** Operations whose answer is itself information worth recalling later ("what did you tell me about X"), as opposed to a transactional
+ * action (a calendar event created, a draft saved, an approval) or a non-answer (a clarifying question, casual chat, a redirect) --
+ * found live, R47, after chasing recall one feature at a time left a real gap each time ("it doesn't matter which classification, it
+ * should remember"): this is deliberately an allowlist of what's worth saving, not a denylist of what to skip, since a denylist would
+ * silently stop covering a brand new operation the same way per-feature persistence already did twice. "research" and "web_search" with
+ * searchKind "places"/"suggestions" already have their own richer, structured persistence (research-state.ts etc.) -- skipped here so
+ * the same answer isn't saved twice under two different shapes. */
+const RECALLABLE_OPERATIONS = new Set([
+  "general_answer", "web_search", "multi", "plan", "status_lookup", "finance_spending",
+  "bills_list", "bills_paid", "daily_view", "calendar_query", "email_important",
+]);
 
 export interface OrchestratorResult {
   requestId: string;
@@ -67,7 +81,12 @@ export async function runOrchestrator(input: string, userId: string, context: Co
   // asking "which air purifier did you recommend" (research mode), then later "which product did you suggest for strawberry skin"
   // (the suggestions card), each had nothing to recall from at all, since neither had any persistence before this.
   const recalled = context.length <= 4
-    ? [searchRecallContext(await loadRecentSearchStates(userId)), researchRecallContext(await loadRecentResearchStates(userId)), suggestionRecallContext(await loadRecentSuggestionStates(userId))].filter(Boolean).join("\n")
+    ? [
+        searchRecallContext(await loadRecentSearchStates(userId)),
+        researchRecallContext(await loadRecentResearchStates(userId)),
+        suggestionRecallContext(await loadRecentSuggestionStates(userId)),
+        conversationAnswerRecallContext(await loadRecentConversationAnswerStates(userId)),
+      ].filter(Boolean).join("\n")
     : "";
   if (recalled) context = [{ role: "assistant", content: `Earlier conversation summary:\n${context.filter(turn => turn.content.startsWith("Earlier conversation summary")).map(turn => turn.content).join("\n")}\n${recalled}` }, ...context.filter(turn => !turn.content.startsWith("Earlier conversation summary"))];
 
@@ -101,5 +120,10 @@ export async function runOrchestrator(input: string, userId: string, context: Co
   console.info("router", JSON.stringify({ requestId, operation: routed.operation, confidence: routed.confidence, source: routed.source }));
   if (routed.continuityBlocked) return { requestId, answer: routed.clarification!, agents: [], confidence: 0, status: "partially_completed", operation: routed.operation };
   const result = await dispatchDecision(routed, { requestId, input: routed.resolvedInput || input, userId, context, conversationId });
+  const skipDuplicateResearch = routed.operation === "research" || (routed.operation === "web_search" && (routed.searchKind === "places" || routed.searchKind === "suggestions"));
+  if (result?.status === "completed" && conversationId && RECALLABLE_OPERATIONS.has(routed.operation) && !skipDuplicateResearch) {
+    const { text } = extractCards(result.answer);
+    if (text.trim()) await saveConversationAnswerState(userId, conversationId, { query: input, answer: text }).catch(() => undefined);
+  }
   return { ...(result ?? { requestId, answer: NOT_SURE, agents: [], confidence: routed.confidence, status: "waiting_for_user" as const }), operation: routed.operation };
 }

@@ -2,11 +2,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { RouterDecision } from "./router";
 
 const mocks = vi.hoisted(() => ({
-  history: vi.fn(), recalled: vi.fn(), resume: vi.fn(), route: vi.fn(), dispatch: vi.fn(), approval: vi.fn(), pending: vi.fn(), emailState: vi.fn(),
+  history: vi.fn(), recalled: vi.fn(), resume: vi.fn(), route: vi.fn(), dispatch: vi.fn(), approval: vi.fn(), pending: vi.fn(), emailState: vi.fn(), saveAnswer: vi.fn(),
 }));
 vi.mock("@/lib/conversations/history", () => ({ recallConversation: mocks.history }));
 vi.mock("@/lib/agents/email-finance-import", () => ({continueEmailFinanceImport: mocks.resume}));
 vi.mock("@/lib/conversations/search-state", async original => ({ ...await original<typeof import("@/lib/conversations/search-state")>(), loadRecentSearchStates: mocks.recalled, loadSearchState: vi.fn(async () => null) }));
+vi.mock("@/lib/conversations/conversation-state", async original => ({ ...await original<typeof import("@/lib/conversations/conversation-state")>(), saveConversationAnswerState: mocks.saveAnswer, loadRecentConversationAnswerStates: vi.fn(async () => []) }));
 vi.mock("./router-runtime", () => ({ routeForUser: mocks.route }));
 vi.mock("./dispatch", () => ({ dispatchDecision: mocks.dispatch, answerApproval: mocks.approval, NOTHING_PENDING: "NOTHING PENDING" }));
 vi.mock("@/lib/workflows/pending", () => ({ hasPendingApproval: mocks.pending }));
@@ -21,6 +22,7 @@ beforeEach(() => {
   mocks.recalled.mockResolvedValue([]);
   mocks.pending.mockResolvedValue(false);
   mocks.emailState.mockResolvedValue(null);
+  mocks.saveAnswer.mockResolvedValue(undefined);
 });
 
 describe("no rules interpret a message, ever (R20.5)", () => {
@@ -157,4 +159,50 @@ it("never dispatches or approves an action when context repair remains blocked",
   expect(result.status).toBe("partially_completed");
   expect(mocks.dispatch).not.toHaveBeenCalled();
   expect(mocks.approval).not.toHaveBeenCalled();
+});
+
+describe("every completed answer is remembered, whatever it routes to (R47: 'it doesn't matter which classification, it should remember')", () => {
+  it("saves a plain informational answer under the router's own operation", async () => {
+    mocks.route.mockResolvedValue(decision({ operation: "general_answer" }));
+    mocks.dispatch.mockResolvedValue({ answer: "AAPL is at $254.32", agents: [], status: "completed" });
+    await runOrchestrator("what's Apple stock at", "u1", [], "c1");
+    expect(mocks.saveAnswer).toHaveBeenCalledWith("u1", "c1", { query: "what's Apple stock at", answer: "AAPL is at $254.32" });
+  });
+
+  it.each(["casual", "calendar_create", "clarify"] as const)("never saves a %s answer -- it isn't information worth recalling later", async operation => {
+    mocks.route.mockResolvedValue(decision({ operation }));
+    mocks.dispatch.mockResolvedValue({ answer: "Done.", agents: [], status: "completed" });
+    await runOrchestrator("hi", "u1", [], "c1");
+    expect(mocks.saveAnswer).not.toHaveBeenCalled();
+  });
+
+  it("skips research and web_search/places/suggestions, which already have their own richer persistence, so the same answer is never saved twice", async () => {
+    for (const routed of [decision({ operation: "research" }), decision({ operation: "web_search", searchKind: "places" }), decision({ operation: "web_search", searchKind: "suggestions" })]) {
+      mocks.route.mockResolvedValue(routed);
+      mocks.dispatch.mockResolvedValue({ answer: "Here you go", agents: [], status: "completed" });
+      await runOrchestrator("find me something", "u1", [], "c1");
+    }
+    expect(mocks.saveAnswer).not.toHaveBeenCalled();
+  });
+
+  it("never attempts a save without a conversationId to attach it to", async () => {
+    mocks.route.mockResolvedValue(decision({ operation: "general_answer" }));
+    mocks.dispatch.mockResolvedValue({ answer: "AAPL is at $254.32", agents: [], status: "completed" });
+    await runOrchestrator("what's Apple stock at", "u1", []);
+    expect(mocks.saveAnswer).not.toHaveBeenCalled();
+  });
+
+  it("never saves an answer that isn't actually completed (waiting on the person, or only partly done)", async () => {
+    mocks.route.mockResolvedValue(decision({ operation: "general_answer" }));
+    mocks.dispatch.mockResolvedValue({ answer: "Which account did you mean?", agents: [], status: "waiting_for_user" });
+    await runOrchestrator("what's my balance", "u1", [], "c1");
+    expect(mocks.saveAnswer).not.toHaveBeenCalled();
+  });
+
+  it("saves a card-bearing answer's own plain text, not the raw fenced card JSON", async () => {
+    mocks.route.mockResolvedValue(decision({ operation: "general_answer" }));
+    mocks.dispatch.mockResolvedValue({ answer: "AAPL is at $254.32\n\n```daylark-card\n{\"kind\":\"stock\"}\n```", agents: [], status: "completed" });
+    await runOrchestrator("what's Apple stock at", "u1", [], "c1");
+    expect(mocks.saveAnswer).toHaveBeenCalledWith("u1", "c1", { query: "what's Apple stock at", answer: "AAPL is at $254.32" });
+  });
 });

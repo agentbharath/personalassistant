@@ -4,9 +4,10 @@ import type { EmailState } from "./email-state";
 import type { SearchState } from "./search-state";
 import type { ResearchState } from "./research-state";
 import type { SuggestionState } from "./suggestion-state";
-export type ConversationReference = { id: string; createdAt: string } & ({ kind: "email_results"; state: EmailState } | { kind: "place_results"; state: SearchState } | { kind: "research_results"; state: ResearchState } | { kind: "suggestion_results"; state: SuggestionState });
+import type { ConversationAnswerState } from "./conversation-state";
+export type ConversationReference = { id: string; createdAt: string } & ({ kind: "email_results"; state: EmailState } | { kind: "place_results"; state: SearchState } | { kind: "research_results"; state: ResearchState } | { kind: "suggestion_results"; state: SuggestionState } | { kind: "answer_results"; state: ConversationAnswerState });
 
-export async function saveConversationReference(userId: string, conversationId: string, kind: ConversationReference["kind"], state: EmailState | SearchState | ResearchState | SuggestionState) {
+export async function saveConversationReference(userId: string, conversationId: string, kind: ConversationReference["kind"], state: EmailState | SearchState | ResearchState | SuggestionState | ConversationAnswerState) {
   const admin = createAdminClient();
   const { data: owner, error: ownerError } = await admin.from("conversations").select("id").eq("id", conversationId).eq("user_id", userId).maybeSingle();
   if (ownerError) throw ownerError;
@@ -22,6 +23,7 @@ export function decodeReference(row: { id: string; kind: string; payload_ciphert
     if (row.kind === "place_results" && Array.isArray(state.places)) return { id: row.id, kind: row.kind, state, createdAt: row.created_at };
     if (row.kind === "research_results" && typeof state.recommendation === "string") return { id: row.id, kind: row.kind, state, createdAt: row.created_at };
     if (row.kind === "suggestion_results" && typeof state.topPick === "string") return { id: row.id, kind: row.kind, state, createdAt: row.created_at };
+    if (row.kind === "answer_results" && typeof state.answer === "string") return { id: row.id, kind: row.kind, state, createdAt: row.created_at };
   } catch { /* A corrupt snapshot cannot supply references. */ }
   return null;
 }
