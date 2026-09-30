@@ -61,13 +61,47 @@ describe("ESPN team schedule, replacing search-snippet guesses for a live/recent
     expect(summary?.game?.opponent).toBe("Lakers");
   });
 
-  it("returns null for a team ESPN doesn't recognize (a real 404), so the caller can fall back to a plain search", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("", { status: 404 })));
+  it("returns null for a team ESPN doesn't recognize even after the team-list fallback, so the caller can fall back to a plain search", async () => {
+    vi.stubGlobal("fetch", vi.fn()
+      .mockResolvedValueOnce(new Response("", { status: 404 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ sports: [{ leagues: [{ teams: [] }] }] }), { status: 200 })));
     expect(await fetchTeamSummary("football", "nfl", "zzz")).toBeNull();
   });
 
   it("throws on a real transport/server failure, never silently returning null as if the team just wasn't found", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("", { status: 500 })));
     await expect(fetchTeamSummary("football", "nfl", "sf")).rejects.toThrow("ESPN_500");
+  });
+
+  it("falls back to the league's own team list when the direct lookup 400s (found live: soccer's own /teams/{x}/schedule needs an internal numeric id, not the abbreviation or short name the resolver gives -- unlike the major US leagues, which accept that string directly)", async () => {
+    vi.stubGlobal("fetch", vi.fn()
+      .mockResolvedValueOnce(new Response("", { status: 400 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        sports: [{ leagues: [{ teams: [
+          { team: { id: "86", abbreviation: "RMA", displayName: "Real Madrid", shortDisplayName: "Real Madrid", name: "Real Madrid", location: "" } },
+          { team: { id: "83", abbreviation: "BAR", displayName: "Barcelona", shortDisplayName: "Barcelona", name: "Barcelona", location: "" } },
+        ] }] }],
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        team: { id: "86", displayName: "Real Madrid", recordSummary: "" },
+        events: [event({ myId: "86", myName: "Real Madrid", opponent: "Sevilla", opponentId: "243", date: "2026-09-27T00:00Z", state: "post", myScore: 2, opponentScore: 1, isHome: true })],
+      }), { status: 200 })));
+    const summary = await fetchTeamSummary("soccer", "esp.1", "real-madrid");
+    expect(summary?.teamName).toBe("Real Madrid");
+    expect(summary?.game).toMatchObject({ opponent: "Sevilla", result: "win" });
+  });
+
+  it("matches the team list by a partial name when there's no exact match, but still returns null rather than guessing when nothing is close", async () => {
+    vi.stubGlobal("fetch", vi.fn()
+      .mockResolvedValueOnce(new Response("", { status: 400 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        sports: [{ leagues: [{ teams: [{ team: { id: "382", abbreviation: "MNC", displayName: "Manchester City", shortDisplayName: "Man City", name: "City", location: "Manchester" } }] }] }],
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        team: { id: "382", displayName: "Manchester City", recordSummary: "" },
+        events: [event({ myId: "382", myName: "Manchester City", opponent: "Arsenal", opponentId: "359", date: "2026-09-27T00:00Z", state: "post", myScore: 3, opponentScore: 1, isHome: true })],
+      }), { status: 200 })));
+    const summary = await fetchTeamSummary("soccer", "eng.1", "manchester");
+    expect(summary?.teamName).toBe("Manchester City");
   });
 });
