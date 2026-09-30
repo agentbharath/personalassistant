@@ -220,7 +220,9 @@ export type DigestTile = { month: string; day: string; name: string; meta: strin
 export type DigestSection =
   | { kind: "events"; title: string; events: ScoresEvent[] }
   | { kind: "list"; title: string; rows: { name: string; meta: string; tag: CardTag }[] }
-  | { kind: "tiles"; title: string; tiles: DigestTile[] };
+  | { kind: "tiles"; title: string; tiles: DigestTile[] }
+  /** Headlines from a news search, each linking to its article, with where and how long ago it was published. */
+  | { kind: "stories"; title: string; stories: { headline: string; meta: string; url: string }[] };
 export type DigestCardPayload = {
   kind: "digest";
   kindLabel: string; // "Cricket news"

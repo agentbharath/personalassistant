@@ -66,9 +66,10 @@ describe("the verdict card (free)", () => {
     expect(card?.kind === "verdict" && card.sources).toEqual([]);
   });
 
-  it("searches for reviews of the exact earlier options", async () => {
+  it("searches for reviews of the exact earlier options, including what the question asked about", async () => {
     await answerVerdict("are they good?", context, reply(output));
     expect(mocks.search.mock.calls[0][0]).toContain("Cotopaxi Abrazo, REI Trailmade, Amazon fleece");
+    expect(mocks.search.mock.calls[0][0]).toContain("are they good?");
   });
 
   it("falls back to a plain search with no earlier suggestions, no evidence, or no usable verdict", async () => {

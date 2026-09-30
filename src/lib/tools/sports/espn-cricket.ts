@@ -45,7 +45,7 @@ type EspnCricketStatus = { type?: { state?: string; description?: string; shortD
 type EspnCricketEvent = { id?: string; date?: string; links?: Array<{ rel?: string[]; href?: string }>; competitions?: Array<{ status?: EspnCricketStatus; competitors?: EspnCricketCompetitor[]; description?: string; shortDescription?: string }> };
 type EspnCricketScoreboard = { events?: EspnCricketEvent[] };
 type EspnHeaderEvent = {
-  class?: { internationalClassId?: string };
+  class?: { internationalClassId?: string; eventType?: string };
   /** The real result/chase/start-time line lives here; the event's own top-level `summary` is only "Result" or "Scheduled". */
   fullStatus?: { summary?: string };
   date?: string; description?: string; name?: string; status?: string; summary?: string;
@@ -181,6 +181,8 @@ export type CricketRoundupEvent = {
   status: "final" | "in_progress" | "scheduled";
   /** A full international (men's or women's) rather than a domestic, A-team or development match -- ESPN's own `internationalClassId`. */
   international: boolean;
+  /** ESPN's own event type: "ODI", "T20", "Test" -- used to give a calendar event a realistic length. */
+  format: string;
   summary: string; // ESPN's own result/chase line
   /** "14:00 local" when ESPN says when a not-yet-started match begins (in the venue's own time, never guessed at a timezone). */
   startsAt: string;
@@ -213,7 +215,7 @@ export async function fetchCricketRoundup(now: Date = new Date(), window: { back
         stage: (description.split(",")[0] ?? "").replace(/\s*\([^)]*\)/g, "").trim(),
         series: league.name ?? "",
         venue: /\bat ([^,]+),/.exec(description)?.[1]?.trim() ?? "",
-        date: event.date!, status, international: Boolean(event.class?.internationalClassId && event.class.internationalClassId !== "0"), summary,
+        date: event.date!, status, international: Boolean(event.class?.internationalClassId && event.class.internationalClassId !== "0"), format: event.class?.eventType ?? "", summary,
         startsAt: status === "scheduled" && /Starts at (\d{1,2}:\d{2}) local time/.test(summary) ? `${/Starts at (\d{1,2}:\d{2})/.exec(summary)![1]} local` : "",
         sides: [sides[0], sides[1]],
       });

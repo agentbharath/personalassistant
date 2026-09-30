@@ -82,6 +82,26 @@ export function shortDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 }
 
+/** An unambiguous moment for the calendar step ("Oct 1, 2026 at 10:30 PM America/Los_Angeles"): it needs a year, a clock time and a zone
+ * before it will prepare an event -- found live, the chips used to send only "on Oct 1" and got "I need a reliable start time". ESPN's own
+ * ISO start is converted to the zone the rest of the app already assumes for this person. */
+export function calendarMoment(iso: string): string {
+  const zone = process.env.DEFAULT_USER_TIMEZONE ?? "America/Los_Angeles";
+  const when = new Date(iso);
+  const date = when.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: zone });
+  const time = when.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: zone });
+  return `${date} at ${time} ${zone}`;
+}
+
+/** The whole request for the calendar chips, worded the one way the calendar step reliably accepts: a title, a full date-time with its zone,
+ * and a length. Found live: "Add X at Y on Oct 1 to my calendar" got "I need a reliable start time", and even with a time it read as a
+ * public event to look up and found nothing; stating it as a titled event with a start and a duration works. A format it knows the length
+ * of (an ODI runs about 8 hours, a T20 about 4) gets that length; anything else leaves the calendar step's own default. */
+export function calendarRequest(title: string, venue: string, iso: string, format: string): string {
+  const hours = /\bODI\b/i.test(format) ? 8 : /T20/i.test(format) ? 4 : 0;
+  return `Create a calendar event titled "${title}"${venue ? ` at ${venue}` : ""} on ${calendarMoment(iso)}${hours ? ` for ${hours} hours` : ""}`;
+}
+
 /** "1st ODI · Thiruvananthapuram · Sep 27": stage, venue, date. */
 function cricketEventLabel(description: string, iso: string): string {
   const { stage, venue } = cricketStageVenue(description);
@@ -187,7 +207,7 @@ export function buildCricketScoreCard(summary: CricketTeamSummary, match: Cricke
 
   const chips: ScoreCardPayload["chips"] = [];
   if (match.scorecardUrl) chips.push({ label: "Full scorecard", url: match.scorecardUrl });
-  if (next && nextStage?.stage) chips.push({ label: `Add ${nextStage.stage} to calendar`, act: true, text: `Add ${summary.teamName} vs ${next.opponent}, ${nextStage.stage}${nextStage.venue ? ` at ${nextStage.venue}` : ""} on ${shortDate(next.date)} to my calendar` });
+  if (next && nextStage?.stage) chips.push({ label: `Add ${nextStage.stage} to calendar`, act: true, text: calendarRequest(`${summary.teamName} vs ${next.opponent}, ${nextStage.stage}`, nextStage.venue, next.date, nextStage.stage) });
   chips.push({ label: "Other cricket today", text: "Any cricket scores today?" });
 
   return {

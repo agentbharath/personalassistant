@@ -3,7 +3,7 @@ import type Anthropic from "@anthropic-ai/sdk";
 import { searchPublicWeb } from "@/lib/tools/general/tavily-search";
 import { fetchCricketRoundup, type CricketRoundupEvent } from "@/lib/tools/sports/espn-cricket";
 import { embedCard, type DigestCardPayload, type DigestSection, type ScoresEvent } from "@/lib/chat/card-payload";
-import { scoreTeam, shortDate, spellOutResult } from "./sports";
+import { calendarRequest, scoreTeam, shortDate, spellOutResult } from "./sports";
 import { plain } from "./search-answer";
 import { answerPublicSearch } from "./general";
 import { reportFailure } from "@/lib/observability/report";
@@ -61,7 +61,7 @@ function buildChips(events: CricketRoundupEvent[]): DigestCardPayload["chips"] {
   const live = pool.find((event) => event.status === "in_progress");
   if (live) chips.push({ label: `Live score, ${live.stage}`, text: `What's the live ${live.sides[0].name} vs ${live.sides[1].name} cricket score` });
   const next = pool.filter((event) => event.status === "scheduled").sort((a, b) => a.date.localeCompare(b.date))[0];
-  if (next) chips.push({ label: `Add ${next.stage} to calendar`, act: true, text: `Add ${matchup(next)}, ${next.stage}${next.venue ? ` at ${next.venue}` : ""} on ${shortDate(next.date)} to my calendar` });
+  if (next) chips.push({ label: `Add ${next.stage} to calendar`, act: true, text: calendarRequest(`${matchup(next)}, ${next.stage}`, next.venue, next.date, next.format || next.stage) });
   chips.push({ label: "Other cricket today", text: "Any cricket scores today?" });
   return chips;
 }
@@ -77,7 +77,7 @@ function renderDigestText(card: DigestCardPayload): string {
   for (const section of card.sections) {
     if (section.kind === "events") lines.push(`**${section.title}:** ${section.events.map((event) => `${event.sides.map((side) => `${side.name} ${side.score}`.trim()).join(" v ")} (${event.tag.label})`).join("; ")}`);
     else if (section.kind === "list") lines.push(`**${section.title}:** ${section.rows.map((row) => `${row.name} (${row.tag.label})`).join("; ")}`);
-    else lines.push(`**${section.title}:** ${section.tiles.map((tile) => `${tile.name}, ${tile.month} ${tile.day}`).join("; ")}`);
+    else if (section.kind === "tiles") lines.push(`**${section.title}:** ${section.tiles.map((tile) => `${tile.name}, ${tile.month} ${tile.day}`).join("; ")}`);
   }
   return lines.join("\n\n");
 }

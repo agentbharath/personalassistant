@@ -152,7 +152,7 @@ describe("the cricket score card (free)", () => {
       { label: "Series", value: "India led the 3-match series 1-0 · Next: 2nd ODI Sep 30, Guwahati" },
     ]);
     expect(card.chips.map((chip) => chip.label)).toEqual(["Full scorecard", "Add 2nd ODI to calendar", "Other cricket today"]);
-    expect(card.chips[1]).toMatchObject({ act: true, text: expect.stringContaining("2nd ODI at Guwahati on Sep 30") });
+    expect(card.chips[1]).toMatchObject({ act: true, text: expect.stringMatching(/^Create a calendar event titled "India vs West Indies, 2nd ODI" at Guwahati on Sep 30, 2026 at .+ for 8 hours$/) });
   });
 
   it("puts a live chase's balls left and run rates in the outcome line, and the batting side in ink", () => {
@@ -179,7 +179,7 @@ describe("the cricket score card (free)", () => {
 });
 
 const roundupEvent = (over: Partial<CricketRoundupEvent> = {}): CricketRoundupEvent => ({
-  stage: "2nd ODI", series: "West Indies tour of India", venue: "Guwahati", date: "2026-09-30T08:30Z", status: "in_progress", international: true, summary: "India require 34 runs", startsAt: "",
+  stage: "2nd ODI", series: "West Indies tour of India", venue: "Guwahati", date: "2026-09-30T08:30Z", status: "in_progress", international: true, format: "ODI", summary: "India require 34 runs", startsAt: "",
   sides: [{ name: "West Indies", score: "405/7", winner: false }, { name: "India", score: "372/2 (40/50 ov, target 406)", winner: false }],
   ...over,
 });

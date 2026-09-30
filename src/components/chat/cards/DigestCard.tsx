@@ -39,6 +39,13 @@ export function DigestCard({ payload, onFollowUp, busy }: { payload: DigestCardP
           <div className={styles.rowEnd}><span className={`${styles.tag} ${styles[row.tag.tone]}`}>{row.tag.label}</span></div>
         </div>)}</div>}
 
+        {section.kind === "stories" && <div className={styles.list}>{section.stories.map((story) => <a key={story.url} className={styles.row} href={story.url} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none" }}>
+          <div className={styles.rowMain}>
+            <span className={styles.name}>{story.headline}</span>
+            {story.meta && <span className={styles.meta}>{story.meta}</span>}
+          </div>
+        </a>)}</div>}
+
         {section.kind === "tiles" && <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(14rem, 1fr))", gap: "var(--s-3)" }}>{section.tiles.map((tile) => <div key={tile.name} className={styles.event} style={{ flexDirection: "row", alignItems: "center", gap: "var(--s-4)" }}>
           <div className={`${styles.dateTile} ${tile.next ? styles.dateTileNext : ""}`}>
             <span className={styles.dateMonth}>{tile.month}</span>

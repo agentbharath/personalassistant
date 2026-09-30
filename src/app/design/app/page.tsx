@@ -27,6 +27,8 @@ export default async function DesignAppPage({ searchParams }: { searchParams: Pr
   const scores = view === "scores";
   const verdict = view === "verdict";
   const digest = view === "digest";
+  const suggestion = view === "suggestion";
+  const news = view === "news";
   const scanMessages = [
     { role: "user" as const, content: "Import my spending from the last 30 days" },
     { role: "assistant" as const, status: "waiting_for_user", content: "### Review 2 imports\n\n1. **iHerb** — $35.53 · Sep 16\n2. **Discover** — $250.00 · Sep 11 · card payment\n\n500 email summaries checked. **Scan paused** in Primary and Updates. Progress is saved for 7 days. 62 known emails remain; more pages may follow. Choose **Continue scan** to resume where this scan stopped. Continuing does not import anything.\n\nChoose **Confirm** to import the reviewed items or **Cancel**." },
@@ -266,6 +268,34 @@ export default async function DesignAppPage({ searchParams }: { searchParams: Pr
       chips: [{ label: "Live score, 2nd ODI", text: "What's the live India vs West Indies cricket score" }, { label: "Add 2nd ODI to calendar", text: "Add the 2nd ODI to my calendar", act: true }, { label: "Other cricket today", text: "Any cricket scores today?" }],
     }) },
   ];
+  const suggestionMessages = [
+    { role: "user" as const, content: "Can you find some best offers on men fleece jackets medium size?" },
+    { role: "assistant" as const, content: embedCard("### Men's fleece jackets, medium", {
+      kind: "suggestion", kindLabel: "Men's fleece jackets, medium size", freshness: "Just now",
+      topPick: { name: "REI Co-op Trailmade Fleece Jacket - Men's", meta: "REI, medium weight, 4.6 \u2605 from 273 reviews", metric: "$69.95", edgeTag: { label: "Best value", tone: "good" }, reason: "Best rating for the price among well-reviewed jackets.", actionLabel: "View at rei.com", actionUrl: "https://www.rei.com" },
+      rows: [
+        { name: "Marmot '94 E.C.O. Recycled Fleece Jacket - Men's", meta: "Marmot, recycled material, 4.6 \u2605 34 reviews", metric: "$75.67 41% off", roleTag: { label: "Budget pick", tone: "good" } },
+        { name: "Arc'teryx Covert Cardigan - Men's", meta: "Arc'teryx, medium weight, 4.3 \u2605 102 reviews", metric: "$126.93-$144.93 19% off", roleTag: { label: "Lightweight option", tone: "neutral" } },
+        { name: "Patagonia Better Sweater", meta: "REI, medium weight", metric: "$169", roleTag: { label: "Premium", tone: "neutral" } },
+      ],
+      limit: "Coupons, member prices and cashback aren\u2019t included. Confirm size M is in stock at checkout.", sources: [{ label: "rei.com", url: "https://www.rei.com" }],
+      chips: ["Under $40", "Are they good?", "Compare top 2", "Medium fit reviews and sizing"],
+    }) },
+  ];
+  const newsMessages = [
+    { role: "user" as const, content: "Any tech news?" },
+    { role: "assistant" as const, content: embedCard("### Tech news", {
+      kind: "digest", kindLabel: "Tech news", freshness: "As of Sep 30, 11:57 AM",
+      summary: "AI safety concerns dominate the industry as companies clash over development pace, while the Trump administration signs voluntary AI controls with tech leaders.",
+      sections: [{ kind: "stories", title: "Top stories", stories: [
+        { headline: "Trump and tech leaders sign AI constitution with voluntary controls", meta: "cbsnews.com \u00b7 22h ago", url: "https://www.cbsnews.com" },
+        { headline: "Anthropic warns AI could pose existential risks in IPO filing", meta: "techcrunch.com \u00b7 Sep 29", url: "https://techcrunch.com" },
+        { headline: "OpenAI unveils low-cost AI model after shelving Astra upgrade", meta: "techxplore.com \u00b7 Sep 29", url: "https://techxplore.com" },
+      ] }],
+      sources: [{ label: "cbsnews.com", url: "https://www.cbsnews.com" }, { label: "techcrunch.com", url: "https://techcrunch.com" }],
+      chips: [{ label: "Anthropic IPO details", text: "Anthropic IPO details" }, { label: "AI constitution explained", text: "AI constitution explained" }],
+    }) },
+  ];
   const stockMessages = [
     { role: "user" as const, content: "what's Apple stock at" },
     { role: "assistant" as const, content: embedCard("### AAPL · Apple Inc\n\n$254.32 +$1.24 (0.49%)", {
@@ -283,6 +313,6 @@ export default async function DesignAppPage({ searchParams }: { searchParams: Pr
     }) },
   ];
   return <AppShell title={thread ? "iHerb receipts" : "New conversation"} email="you@example.com" signOutAction={signOut} recent={MOCK_RECENT} activeConversationId={thread ? MOCK_RECENT[0].id : undefined}>
-    <Chat key={view ?? "empty"} title={thread ? "iHerb receipts" : undefined} conversationId={thread ? MOCK_RECENT[0].id : undefined} initialMessages={view === "spending-empty" ? emptySpendingMessages : scan ? scanMessages : thread ? MOCK_THREAD : spending ? spendingMessages : spendingSimple ? spendingSimpleMessages : bills ? billsMessages : day ? dayMessages : email ? emailMessages : recall ? recallMessages : calendarQuery ? calendarQueryMessages : weather ? weatherMessages : stock ? stockMessages : score ? scoreMessages : scores ? scoresMessages : verdict ? verdictMessages : digest ? digestMessages : []} />
+    <Chat key={view ?? "empty"} title={thread ? "iHerb receipts" : undefined} conversationId={thread ? MOCK_RECENT[0].id : undefined} initialMessages={view === "spending-empty" ? emptySpendingMessages : scan ? scanMessages : thread ? MOCK_THREAD : spending ? spendingMessages : spendingSimple ? spendingSimpleMessages : bills ? billsMessages : day ? dayMessages : email ? emailMessages : recall ? recallMessages : calendarQuery ? calendarQueryMessages : weather ? weatherMessages : stock ? stockMessages : score ? scoreMessages : scores ? scoresMessages : verdict ? verdictMessages : digest ? digestMessages : suggestion ? suggestionMessages : news ? newsMessages : []} />
   </AppShell>;
 }

@@ -11,7 +11,7 @@ import { extractCards } from "@/lib/chat/card-payload";
 import type { CricketRoundupEvent } from "@/lib/tools/sports/espn-cricket";
 
 const event = (over: Partial<CricketRoundupEvent> = {}): CricketRoundupEvent => ({
-  stage: "1st ODI", series: "West Indies tour of India", venue: "Thiruvananthapuram", date: "2026-09-27T08:30Z", status: "final", international: true,
+  stage: "1st ODI", series: "West Indies tour of India", venue: "Thiruvananthapuram", date: "2026-09-27T08:30Z", status: "final", international: true, format: "ODI",
   summary: "India won by 8 wkts (50b rem)", startsAt: "",
   sides: [{ name: "West Indies", score: "295/7", winner: false }, { name: "India", score: "300/2 (41.4/50 ov)", winner: true }],
   ...over,
@@ -63,7 +63,7 @@ describe("the cricket news digest (free)", () => {
     if (card?.kind !== "digest") throw new Error("not a digest");
     expect(card.sources).toEqual([{ label: "hindustantimes.com", url: "https://www.hindustantimes.com/a" }, { label: "espn.com", url: "https://www.espn.com/cricket/" }]);
     expect(card.chips).toEqual([
-      { label: "Add 2nd ODI to calendar", act: true, text: expect.stringContaining("2nd ODI at Guwahati on Sep 30") },
+      { label: "Add 2nd ODI to calendar", act: true, text: expect.stringMatching(/^Create a calendar event titled "India vs West Indies, 2nd ODI" at Guwahati on Sep 30, 2026 at .+ for 8 hours$/) },
       { label: "Other cricket today", text: "Any cricket scores today?" },
     ]);
   });

@@ -66,9 +66,10 @@
 
 .row {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
-  gap: var(--s-4);
+  gap: var(--s-2) var(--s-4);
   padding: var(--s-3) var(--s-4);
 }
 
@@ -76,11 +77,14 @@
   border-top: 1px solid var(--line);
 }
 
+/* A long product name gets a real column to wrap in; when the tag and price don't fit beside it they drop to their own line instead of
+ * squeezing the name to a word per line (found live on a phone). */
 .rowMain {
   display: flex;
   flex-direction: column;
   gap: 2px;
   min-width: 0;
+  flex: 1 1 12rem;
 }
 
 .rowEnd {
@@ -382,4 +386,5 @@
   .heroTop { flex-direction: column; }
   .heroEnd { flex-direction: row; align-items: center; }
   .row { align-items: flex-start; }
+  .rowEnd { flex-basis: 100%; flex-wrap: wrap; justify-content: space-between; }
 }
