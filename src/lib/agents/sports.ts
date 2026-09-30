@@ -1,6 +1,6 @@
-import { embedCard, type SportsCardPayload, type SportsSide } from "@/lib/chat/card-payload";
+import { embedCard, type ScoreCardPayload, type SportsCardPayload, type SportsSide } from "@/lib/chat/card-payload";
 import { fetchTeamSummary, type TeamSummary } from "@/lib/tools/sports/espn";
-import { fetchCricketTeamSummary, type CricketTeamSummary } from "@/lib/tools/sports/espn-cricket";
+import { fetchCricketTeamSummary, type CricketMatch, type CricketTeamSummary } from "@/lib/tools/sports/espn-cricket";
 import { extractSportsSlotsForUser } from "./sports-query-runtime";
 import { answerPublicSearch } from "./general";
 
@@ -70,14 +70,48 @@ function splitCricketScore(raw: string): { score: string; detail: string } {
   return { score: parsed[1], detail: overs };
 }
 
-/** "1st ODI · Thiruvananthapuram · Sep 27": stage, venue, date, as the design shows it. ESPN's description is "1st ODI,  (D/N) at
- * Thiruvananthapuram" -- the day/night marker and the stray comma are noise. */
-function cricketEventLabel(description: string, iso: string): string {
+/** ESPN's description is "1st ODI,  (D/N) at Thiruvananthapuram" -- the day/night marker and the stray comma are noise. */
+function cricketStageVenue(description: string): { stage: string; venue: string } {
   const parsed = /^(.*?),?\s*(?:\([^)]*\)\s*)?(?:at\s+(.+))?$/.exec(description.trim());
-  const stage = parsed?.[1]?.trim() ?? "";
-  const venue = parsed?.[2]?.trim() ?? "";
+  return { stage: parsed?.[1]?.trim() ?? "", venue: parsed?.[2]?.trim() ?? "" };
+}
+
+function shortDate(iso: string) {
   const { month, day } = dateTile(iso);
-  return [stage, venue, `${month[0]}${month.slice(1).toLowerCase()} ${day}`].filter(Boolean).join(" · ");
+  return `${month[0]}${month.slice(1).toLowerCase()} ${day}`;
+}
+
+/** "1st ODI · Thiruvananthapuram · Sep 27": stage, venue, date. */
+function cricketEventLabel(description: string, iso: string): string {
+  const { stage, venue } = cricketStageVenue(description);
+  return [stage, venue, shortDate(iso)].filter(Boolean).join(" · ");
+}
+
+/** "300/2 (41.4/50 ov, target 296)" -> runs, balls bowled, balls in the innings; null when there's no "x/y ov" to work from. */
+function cricketBalls(raw: string): { runs: number; used: number; total: number } | null {
+  const parsed = /^(\d+)(?:\/\d+)?\s*\((\d+)(?:\.(\d))?\/(\d+)\s*ov/.exec(raw.trim());
+  return parsed ? { runs: Number(parsed[1]), used: Number(parsed[2]) * 6 + Number(parsed[3] ?? 0), total: Number(parsed[4]) * 6 } : null;
+}
+
+/** The line under the scoreboard. Final: ESPN's own result with "wkts" spelled out and its "(50b rem)" turned into "with 50 balls left".
+ * Live chase: "India need 34 from 60 balls" -- the runs are ESPN's, the balls are plain arithmetic on its overs -- with the current and
+ * required run rate, plain arithmetic too. Anything that doesn't parse falls back to ESPN's own words, never a guess. */
+function cricketOutcome(match: CricketMatch): ScoreCardPayload["outcome"] {
+  const raw = match.summary.trim();
+  if (!raw) return null;
+  if (match.status === "final") {
+    const text = raw.replace(/\s*\([^)]*\)\s*$/, "").replace(/\bwkts\b/g, "wickets").replace(/\bwkt\b/g, "wicket");
+    const left = /\((\d+)b rem\)/.exec(raw)?.[1];
+    return { kind: "result", text, detail: left ? `with ${left} balls left` : "", rates: [] };
+  }
+  const need = /^(.+?) require (\d+) runs?/i.exec(raw);
+  const chasing = cricketBalls(match.battingNow ? match.myScore : match.opponentScore);
+  if (need && chasing && chasing.total > chasing.used && chasing.used > 0) {
+    const left = chasing.total - chasing.used;
+    const required = Number(need[2]);
+    return { kind: "chase", text: `${need[1]} need ${required} from ${left} ball${left === 1 ? "" : "s"}`, detail: "", rates: [`CRR ${(chasing.runs / (chasing.used / 6)).toFixed(2)}`, `RRR ${(required / (left / 6)).toFixed(2)}`] };
+  }
+  return { kind: "chase", text: raw, detail: "", rates: [] };
 }
 
 /** Cricket has no equivalent of "the score" (a single number), no fixed win-by-higher-number rule (by wickets, by runs, by an innings, or
@@ -120,6 +154,55 @@ export function buildCricketCard(summary: CricketTeamSummary): SportsCardPayload
   };
 }
 
+/** Split "372/2 (40/50 ov, target 406)" into the big runs/wickets and the small overs beside it (the target is in the chase line). */
+function scoreTeam(name: string, raw: string, lead: boolean): ScoreCardPayload["teams"][number] {
+  const parsed = /^(\S+)\s*(?:\((.*)\))?$/.exec(raw.trim());
+  if (!parsed) return { name, score: raw || "—", detail: "", lead };
+  const overs = (parsed[2] ?? "").split(",").map((part) => part.trim()).find((part) => part && !part.startsWith("target")) ?? "";
+  return { name, score: parsed[1], detail: overs, lead };
+}
+
+/** The one-match score card (finished, live or rained-off): every value comes from ESPN's responses, the only arithmetic being balls left
+ * and run rates on a live chase. Stat tables are runs and wickets only -- ESPN has no balls faced, strike rate or economy. */
+export function buildCricketScoreCard(summary: CricketTeamSummary, match: CricketMatch): ScoreCardPayload {
+  const { next, details } = summary;
+  const { stage, venue } = cricketStageVenue(match.description);
+  const live = match.status === "in_progress";
+  const mine = scoreTeam(summary.teamName, match.myScore, live ? match.battingNow : match.result === "win");
+  const theirs = scoreTeam(match.opponent, match.opponentScore, live ? !match.battingNow : match.result === "loss");
+  const teams: ScoreCardPayload["teams"] = match.isHome ? [theirs, mine] : [mine, theirs];
+
+  const tables: ScoreCardPayload["tables"] = [];
+  if (details?.batters.length) tables.push({ title: "Top batters", columns: ["Runs"], rows: details.batters.map((stat) => ({ player: stat.player, side: stat.team, stats: [String(stat.value)] })) });
+  if (details?.bowlers.length) tables.push({ title: "Top bowlers", columns: ["Wickets"], rows: details.bowlers.map((stat) => ({ player: stat.player, side: stat.team, stats: [String(stat.value)] })) });
+
+  const facts: ScoreCardPayload["facts"] = [];
+  if (match.playerOfMatch) facts.push({ label: "Player of the match", value: match.playerOfMatch });
+  if (details?.toss) facts.push({ label: "Toss", value: details.toss });
+  const nextStage = next ? cricketStageVenue(next.description) : null;
+  const seriesNext = next && nextStage ? `Next: ${[nextStage.stage, shortDate(next.date)].filter(Boolean).join(" ")}${nextStage.venue ? `, ${nextStage.venue}` : ""}` : "";
+  const series = [details?.seriesNote, seriesNext].filter(Boolean).join(" · ");
+  if (series) facts.push({ label: "Series", value: series });
+
+  const chips: ScoreCardPayload["chips"] = [];
+  if (match.scorecardUrl) chips.push({ label: "Full scorecard", url: match.scorecardUrl });
+  if (next && nextStage?.stage) chips.push({ label: `Add ${nextStage.stage} to calendar`, act: true, text: `Add ${summary.teamName} vs ${next.opponent}, ${nextStage.stage}${nextStage.venue ? ` at ${nextStage.venue}` : ""} on ${shortDate(next.date)} to my calendar` });
+  chips.push({ label: "Other cricket today", text: "What other cricket matches are on today?" });
+
+  return {
+    kind: "score",
+    match: `${[stage, venue].filter(Boolean).join(", ")} · ${shortDate(match.date)}`,
+    status: live ? { label: "Live", tone: "live" } : match.result === "no_result" ? { label: match.summary || "No result", tone: "disrupted" } : { label: "Final", tone: "final" },
+    teams, outcome: cricketOutcome(match), tables, facts,
+    sources: [{ label: "espn.com", url: match.scorecardUrl || "https://www.espn.com/cricket/" }],
+    chips,
+  };
+}
+
+function renderScoreText(card: ScoreCardPayload): string {
+  return [`### ${card.match}`, card.teams.map((team) => `${team.name} ${team.score}${team.detail ? ` (${team.detail})` : ""}`).join(" · "), card.outcome?.text ?? ""].filter(Boolean).join("\n\n");
+}
+
 function renderSportsText(card: SportsCardPayload): string {
   const lines = [`### ${card.kindLabel}`];
   if (card.summary) lines.push(card.summary);
@@ -142,6 +225,10 @@ export async function answerSports(query: string, userId: string, memoryContext 
     if (outcome.slots.sport === "cricket") {
       const summary = await fetchCricketTeamSummary(outcome.slots.team);
       if (!summary) return fallback();
+      if (summary.match && summary.match.status !== "scheduled") {
+        const card = buildCricketScoreCard(summary, summary.match);
+        return embedCard(renderScoreText(card), card);
+      }
       const card = buildCricketCard(summary);
       return embedCard(renderSportsText(card), card);
     }

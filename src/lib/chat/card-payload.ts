@@ -153,6 +153,24 @@ export type SportsCardPayload = {
   upcoming: { month: string; day: string; matchup: string; detail: string } | null;
   attribution: string; // footer: "espn.com"
 };
+/** The one-match score card (cricket is the reference layout): a scoreboard, the result or live chase under it, stat tables, match facts,
+ * sources and follow-up chips. Covers a finished, live or disrupted match; a not-yet-started one stays a SportsCardPayload upcoming tile,
+ * since there is nothing to put on a scoreboard before the game starts. */
+export type ScoreTeam = { name: string; score: string; detail: string; /** The winner, or the batting side while live. */ lead: boolean };
+export type ScoreCardPayload = {
+  kind: "score";
+  match: string; // "1st ODI, Thiruvananthapuram · Sep 27"
+  status: { label: string; tone: "final" | "live" | "upcoming" | "disrupted" };
+  teams: [ScoreTeam, ScoreTeam];
+  /** Under the scoreboard: a finished match's result ("India won by 8 wickets" / "with 50 balls left"), or a live chase ("India need 34
+   * from 60 balls" with current/required run rate). Null when ESPN has nothing to say. */
+  outcome: { kind: "result" | "chase"; text: string; detail: string; rates: string[] } | null;
+  tables: { title: string; columns: string[]; rows: { player: string; side: string; stats: string[] }[] }[];
+  facts: { label: string; value: string }[];
+  sources: { label: string; url: string }[];
+  /** `url` opens a real page; `text` is sent as a follow-up message; `act` marks the one that hands off to another agent (blue). */
+  chips: { label: string; url?: string; text?: string; act?: boolean }[];
+};
 /** A tone tag used across the answer-card family: good = green, highlight = blue, neutral = gray, catch = amber. */
 export type CardTag = { label: string; tone: "good" | "highlight" | "neutral" | "catch" };
 export type SuggestionRow = { name: string; meta: string; metric: string; roleTag: CardTag };
@@ -169,13 +187,13 @@ export type SuggestionCardPayload = {
    * generically from the answer's kind (see chat/types.ts's own `followUps`, deliberately a no-op for exactly that reason). */
   chips: string[];
 };
-export type CardPayload = SpendingCardPayload | BillsCardPayload | DayCardPayload | EmailCardPayload | RecallAvailabilityCardPayload | WeatherCardPayload | StockCardPayload | SportsCardPayload | SuggestionCardPayload;
+export type CardPayload = SpendingCardPayload | BillsCardPayload | DayCardPayload | EmailCardPayload | RecallAvailabilityCardPayload | WeatherCardPayload | StockCardPayload | SportsCardPayload | ScoreCardPayload | SuggestionCardPayload;
 
 export function embedCard(text: string, payload: CardPayload): string {
   return `${text}\n\n\`\`\`daylark-card\n${JSON.stringify(payload)}\n\`\`\``;
 }
 
-const KNOWN_KINDS = new Set(["spending", "bills", "day", "email", "recall-availability", "weather", "stock", "sports", "suggestion"]);
+const KNOWN_KINDS = new Set(["spending", "bills", "day", "email", "recall-availability", "weather", "stock", "sports", "score", "suggestion"]);
 
 export type CardSegment = { text: string; card: CardPayload | null };
 

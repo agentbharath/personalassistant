@@ -16,16 +16,40 @@ export type CricketMatch = {
   myScore: string; // "300/2 (41.4/50 ov, target 296)" -- a formatted string, not a single number: cricket has no equivalent of "the score"
   opponentScore: string;
   result: "win" | "loss" | "no_result" | null;
+  eventId: string;
+  /** ESPN's own scorecard page for this match, when it lists one -- the "Full scorecard" chip's real destination. */
+  scorecardUrl: string;
+  /** Player of the match, once ESPN has named one (only after the match ends). */
+  playerOfMatch: string;
+  /** Whether this team is the one currently batting (live only) -- the scoreboard's "lead" emphasis while a match is on. */
+  battingNow: boolean;
 };
 
-export type CricketTeamSummary = { teamName: string; match: CricketMatch | null };
+/** Extra match detail from ESPN's per-match summary. Every field is optional/empty when ESPN doesn't have it: this endpoint only
+ * carries each innings' top run-scorers and wicket-takers as a single number each (no balls faced, strike rate, runs conceded or
+ * economy -- checked live, 2026-09-30), so the tables here are runs and wickets only, never invented columns. */
+export type CricketPlayerStat = { player: string; team: string; value: number };
+export type CricketMatchDetails = { toss: string; seriesNote: string; batters: CricketPlayerStat[]; bowlers: CricketPlayerStat[] };
+
+export type CricketTeamSummary = {
+  teamName: string;
+  match: CricketMatch | null;
+  /** The next match still to be played in this series after `match`, for the "Add … to calendar" chip and the series fact. */
+  next: CricketMatch | null;
+  details: CricketMatchDetails | null;
+};
 
 type EspnCricketTeamRef = { id?: string; displayName?: string; abbreviation?: string };
-type EspnCricketCompetitor = { team?: EspnCricketTeamRef; homeAway?: string; score?: string; winner?: boolean | string };
-type EspnCricketStatus = { type?: { state?: string; description?: string; shortDetail?: string }; summary?: string };
-type EspnCricketEvent = { date?: string; competitions?: Array<{ status?: EspnCricketStatus; competitors?: EspnCricketCompetitor[]; description?: string; shortDescription?: string }> };
+type EspnCricketCompetitor = { team?: EspnCricketTeamRef; homeAway?: string; score?: string; winner?: boolean | string; linescores?: Array<{ isBatting?: boolean; isCurrent?: number | boolean }> };
+type EspnCricketStatus = { type?: { state?: string; description?: string; shortDetail?: string }; summary?: string; featuredAthletes?: Array<{ abbreviation?: string; athlete?: { displayName?: string } }> };
+type EspnCricketEvent = { id?: string; date?: string; links?: Array<{ rel?: string[]; href?: string }>; competitions?: Array<{ status?: EspnCricketStatus; competitors?: EspnCricketCompetitor[]; description?: string; shortDescription?: string }> };
 type EspnCricketScoreboard = { events?: EspnCricketEvent[] };
 type EspnHeaderLeague = { id?: string; name?: string; abbreviation?: string; smartdates?: string[]; events?: Array<{ competitors?: Array<{ displayName?: string; abbreviation?: string }> }> };
+type EspnLeaderEntry = { displayValue?: string; athlete?: { displayName?: string } };
+type EspnSummary = {
+  notes?: Array<{ type?: string; text?: string }>;
+  leaders?: Array<{ team?: { displayName?: string }; linescores?: Array<{ isBatting?: boolean; leaders?: Array<{ name?: string; leaders?: EspnLeaderEntry[] }> }> }>;
+};
 type EspnHeaderResponse = { sports?: Array<{ leagues?: EspnHeaderLeague[] }> };
 
 const normalize = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -78,7 +102,40 @@ function toMatch(event: EspnCricketEvent, teamQuery: string): CricketMatch | nul
     myScore: me.score ?? "",
     opponentScore: opponent.score ?? "",
     result,
+    eventId: event.id ?? "",
+    scorecardUrl: event.links?.find((link) => link.rel?.includes("scorecard"))?.href ?? "",
+    playerOfMatch: comp?.status?.featuredAthletes?.find((entry) => entry.abbreviation === "POTM")?.athlete?.displayName ?? "",
+    battingNow: status === "in_progress" && Boolean(me.linescores?.some((line) => line.isBatting && Boolean(line.isCurrent))),
   };
+}
+
+/** Top run-scorers and wicket-takers, plus the toss and series notes, from ESPN's per-match summary. Null on any failure: the card
+ * just has no tables/facts then, never a wrong or partial one. A team's batters are its batting innings' "runs" leaders; its bowlers
+ * are its *other* innings' "wickets" leaders (the innings it bowled in). */
+async function fetchMatchDetails(leagueId: string, eventId: string): Promise<CricketMatchDetails | null> {
+  if (!eventId) return null;
+  try {
+    const response = await resilientFetch("espn", `https://site.api.espn.com/apis/site/v2/sports/cricket/${leagueId}/summary?event=${eventId}`, {}, { timeoutMs: 8_000, maxAttempts: 2 });
+    if (!response.ok) return null;
+    const body = await response.json() as EspnSummary;
+    const batters: CricketPlayerStat[] = [];
+    const bowlers: CricketPlayerStat[] = [];
+    for (const team of body.leaders ?? []) {
+      for (const line of team.linescores ?? []) {
+        for (const category of line.leaders ?? []) {
+          const target = category.name === "runs" ? batters : category.name === "wickets" ? bowlers : null;
+          if (!target) continue;
+          for (const entry of category.leaders ?? []) {
+            const value = Number(entry.displayValue);
+            if (entry.athlete?.displayName && team.team?.displayName && Number.isFinite(value)) target.push({ player: entry.athlete.displayName, team: team.team.displayName, value });
+          }
+        }
+      }
+    }
+    const note = (type: string) => body.notes?.find((item) => item.type === type)?.text?.replace(/\s+,/g, ",").trim() ?? "";
+    const top = (list: CricketPlayerStat[], count: number) => list.filter((stat) => stat.value > 0).sort((a, b) => b.value - a.value).slice(0, count);
+    return { toss: note("toss"), seriesNote: note("seriesnote"), batters: top(batters, 3), bowlers: top(bowlers, 2) };
+  } catch { return null; }
 }
 
 /** A named team's most relevant cricket match (live right now, else the most recent final, else the next scheduled one) from ESPN's own
@@ -103,5 +160,7 @@ export async function fetchCricketTeamSummary(teamQuery: string): Promise<Cricke
   const finals = matches.filter((match) => match.status === "final").sort((a, b) => b.date.localeCompare(a.date));
   const upcoming = matches.filter((match) => match.status === "scheduled").sort((a, b) => a.date.localeCompare(b.date));
   const match = inProgress ?? finals[0] ?? upcoming[0] ?? null;
-  return { teamName: match?.teamName ?? teamQuery, match };
+  const next = match ? upcoming.find((candidate) => candidate.date > match.date) ?? null : null;
+  const details = match && match.status !== "scheduled" ? await fetchMatchDetails(series.leagueId, match.eventId) : null;
+  return { teamName: match?.teamName ?? teamQuery, match, next, details };
 }

@@ -23,6 +23,7 @@ export default async function DesignAppPage({ searchParams }: { searchParams: Pr
   const calendarQuery = view === "calendar-query";
   const weather = view === "weather";
   const stock = view === "stock";
+  const score = view === "score";
   const scanMessages = [
     { role: "user" as const, content: "Import my spending from the last 30 days" },
     { role: "assistant" as const, status: "waiting_for_user", content: "### Review 2 imports\n\n1. **iHerb** — $35.53 · Sep 16\n2. **Discover** — $250.00 · Sep 11 · card payment\n\n500 email summaries checked. **Scan paused** in Primary and Updates. Progress is saved for 7 days. 62 known emails remain; more pages may follow. Choose **Continue scan** to resume where this scan stopped. Continuing does not import anything.\n\nChoose **Confirm** to import the reviewed items or **Cancel**." },
@@ -195,6 +196,31 @@ export default async function DesignAppPage({ searchParams }: { searchParams: Pr
       attribution: "open-meteo.com · updated 2 min ago",
     }) },
   ];
+  const scoreMessages = [
+    { role: "user" as const, content: "India vs West Indies score?" },
+    { role: "assistant" as const, content: embedCard("### 1st ODI, Thiruvananthapuram · Sep 27", {
+      kind: "score", match: "1st ODI, Thiruvananthapuram · Sep 27", status: { label: "Final", tone: "final" },
+      teams: [{ name: "West Indies", score: "295/7", detail: "50 ov", lead: false }, { name: "India", score: "300/2", detail: "41.4 ov", lead: true }],
+      outcome: { kind: "result", text: "India won by 8 wickets", detail: "with 50 balls left", rates: [] },
+      tables: [
+        { title: "Top batters", columns: ["Runs"], rows: [{ player: "Virat Kohli", side: "India", stats: ["139"] }, { player: "Shubman Gill", side: "India", stats: ["110"] }, { player: "Justin Greaves", side: "West Indies", stats: ["101"] }] },
+        { title: "Top bowlers", columns: ["Wickets"], rows: [{ player: "Kuldeep Yadav", side: "India", stats: ["4"] }, { player: "Prasidh Krishna", side: "India", stats: ["2"] }] },
+      ],
+      facts: [{ label: "Player of the match", value: "Kuldeep Yadav" }, { label: "Toss", value: "India, elected to field first" }, { label: "Series", value: "India led the 3-match series 1-0 · Next: 2nd ODI Sep 30, Guwahati" }],
+      sources: [{ label: "espn.com", url: "https://www.espn.com/cricket/" }],
+      chips: [{ label: "Full scorecard", url: "https://www.espn.com/cricket/" }, { label: "Add 2nd ODI to calendar", act: true, text: "Add the 2nd ODI to my calendar" }, { label: "Other cricket today", text: "What other cricket matches are on today?" }],
+    }) },
+    { role: "user" as const, content: "What's the live Ind vs Wi cricket score" },
+    { role: "assistant" as const, content: embedCard("### 2nd ODI, Guwahati · Sep 30", {
+      kind: "score", match: "2nd ODI, Guwahati · Sep 30", status: { label: "Live", tone: "live" },
+      teams: [{ name: "West Indies", score: "405/7", detail: "", lead: false }, { name: "India", score: "372/2", detail: "40/50 ov", lead: true }],
+      outcome: { kind: "chase", text: "India need 34 from 60 balls", detail: "", rates: ["CRR 9.30", "RRR 3.40"] },
+      tables: [{ title: "Top batters", columns: ["Runs"], rows: [{ player: "Shubman Gill", side: "India", stats: ["216"] }, { player: "Amir Jangoo", side: "West Indies", stats: ["114"] }] }],
+      facts: [{ label: "Toss", value: "India, elected to field first" }],
+      sources: [{ label: "espn.com", url: "https://www.espn.com/cricket/" }],
+      chips: [{ label: "Other cricket today", text: "What other cricket matches are on today?" }],
+    }) },
+  ];
   const stockMessages = [
     { role: "user" as const, content: "what's Apple stock at" },
     { role: "assistant" as const, content: embedCard("### AAPL · Apple Inc\n\n$254.32 +$1.24 (0.49%)", {
@@ -212,6 +238,6 @@ export default async function DesignAppPage({ searchParams }: { searchParams: Pr
     }) },
   ];
   return <AppShell title={thread ? "iHerb receipts" : "New conversation"} email="you@example.com" signOutAction={signOut} recent={MOCK_RECENT} activeConversationId={thread ? MOCK_RECENT[0].id : undefined}>
-    <Chat key={view ?? "empty"} title={thread ? "iHerb receipts" : undefined} conversationId={thread ? MOCK_RECENT[0].id : undefined} initialMessages={view === "spending-empty" ? emptySpendingMessages : scan ? scanMessages : thread ? MOCK_THREAD : spending ? spendingMessages : spendingSimple ? spendingSimpleMessages : bills ? billsMessages : day ? dayMessages : email ? emailMessages : recall ? recallMessages : calendarQuery ? calendarQueryMessages : weather ? weatherMessages : stock ? stockMessages : []} />
+    <Chat key={view ?? "empty"} title={thread ? "iHerb receipts" : undefined} conversationId={thread ? MOCK_RECENT[0].id : undefined} initialMessages={view === "spending-empty" ? emptySpendingMessages : scan ? scanMessages : thread ? MOCK_THREAD : spending ? spendingMessages : spendingSimple ? spendingSimpleMessages : bills ? billsMessages : day ? dayMessages : email ? emailMessages : recall ? recallMessages : calendarQuery ? calendarQueryMessages : weather ? weatherMessages : stock ? stockMessages : score ? scoreMessages : []} />
   </AppShell>;
 }

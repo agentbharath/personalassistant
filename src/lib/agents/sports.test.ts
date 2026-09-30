@@ -6,7 +6,7 @@ vi.mock("@/lib/tools/sports/espn", () => ({ fetchTeamSummary: mocks.summary }));
 vi.mock("@/lib/tools/sports/espn-cricket", () => ({ fetchCricketTeamSummary: mocks.cricketSummary }));
 vi.mock("./general", () => ({ answerPublicSearch: mocks.publicSearch }));
 
-import { answerSports, buildCricketCard, buildSportsCard } from "./sports";
+import { answerSports, buildCricketCard, buildCricketScoreCard, buildSportsCard } from "./sports";
 import type { TeamGame, TeamSummary } from "@/lib/tools/sports/espn";
 import type { CricketMatch, CricketTeamSummary } from "@/lib/tools/sports/espn-cricket";
 
@@ -21,9 +21,12 @@ const cricketMatch = (over: Partial<CricketMatch> = {}): CricketMatch => ({
   teamName: "India", opponent: "West Indies", isHome: true, date: "2026-09-27T08:30Z", description: "1st ODI",
   status: "final", statusDetail: "Final", summary: "India won by 8 wkts (50b rem)",
   myScore: "300/2 (41.4/50 ov, target 296)", opponentScore: "295/7", result: "win",
+  eventId: "1529227", scorecardUrl: "https://www.espn.in/cricket/scorecard/1529227", playerOfMatch: "Kuldeep Yadav", battingNow: false,
   ...over,
 });
-const cricketSummary = (over: Partial<CricketTeamSummary> = {}): CricketTeamSummary => ({ teamName: "India", match: cricketMatch(), ...over });
+const cricketSummary = (over: Partial<CricketTeamSummary> = {}): CricketTeamSummary => ({ teamName: "India", match: cricketMatch(), next: null, details: null, ...over });
+const details = { toss: "India, elected to field first", seriesNote: "India led the 3-match series 1-0", batters: [{ player: "Virat Kohli", team: "India", value: 139 }], bowlers: [{ player: "Kuldeep Yadav", team: "India", value: 4 }] };
+const nextMatch = cricketMatch({ status: "scheduled", description: "2nd ODI,  (D/N) at Guwahati", date: "2026-09-30T08:30Z", myScore: "", opponentScore: "", result: null, summary: "" });
 
 beforeEach(() => { mocks.slots.mockReset(); mocks.summary.mockReset(); mocks.cricketSummary.mockReset(); mocks.publicSearch.mockReset().mockResolvedValue("fallback text"); });
 
@@ -130,13 +133,59 @@ describe("the cricket card (free)", () => {
   });
 });
 
+describe("the cricket score card (free)", () => {
+  it("lays a finished match out as the design does: scoreboard with the winner in ink, the result spelled out, facts, chips", () => {
+    const summary = cricketSummary({ match: cricketMatch({ description: "1st ODI,  (D/N) at Thiruvananthapuram" }), next: nextMatch, details });
+    const card = buildCricketScoreCard(summary, summary.match!);
+    expect(card.match).toBe("1st ODI, Thiruvananthapuram · Sep 27");
+    expect(card.status).toEqual({ label: "Final", tone: "final" });
+    expect(card.teams).toEqual([
+      { name: "West Indies", score: "295/7", detail: "", lead: false },
+      { name: "India", score: "300/2", detail: "41.4/50 ov", lead: true },
+    ]);
+    expect(card.outcome).toEqual({ kind: "result", text: "India won by 8 wickets", detail: "with 50 balls left", rates: [] });
+    expect(card.tables.map((table) => table.title)).toEqual(["Top batters", "Top bowlers"]);
+    expect(card.tables[0].rows[0]).toEqual({ player: "Virat Kohli", side: "India", stats: ["139"] });
+    expect(card.facts).toEqual([
+      { label: "Player of the match", value: "Kuldeep Yadav" },
+      { label: "Toss", value: "India, elected to field first" },
+      { label: "Series", value: "India led the 3-match series 1-0 · Next: 2nd ODI Sep 30, Guwahati" },
+    ]);
+    expect(card.chips.map((chip) => chip.label)).toEqual(["Full scorecard", "Add 2nd ODI to calendar", "Other cricket today"]);
+    expect(card.chips[1]).toMatchObject({ act: true, text: expect.stringContaining("2nd ODI at Guwahati on Sep 30") });
+  });
+
+  it("puts a live chase's balls left and run rates in the outcome line, and the batting side in ink", () => {
+    const match = cricketMatch({ status: "in_progress", myScore: "372/2 (40/50 ov, target 406)", opponentScore: "405/7", result: null, summary: "India require 34 runs", battingNow: true, playerOfMatch: "" });
+    const card = buildCricketScoreCard(cricketSummary({ match }), match);
+    expect(card.status).toEqual({ label: "Live", tone: "live" });
+    expect(card.teams.find((team) => team.lead)?.name).toBe("India");
+    expect(card.outcome).toEqual({ kind: "chase", text: "India need 34 from 60 balls", detail: "", rates: ["CRR 9.30", "RRR 3.40"] });
+  });
+
+  it("falls back to ESPN's own words when a live line can't be worked out, never a guess", () => {
+    const match = cricketMatch({ status: "in_progress", myScore: "120/4 (30 ov)", opponentScore: "", result: null, summary: "Day 1: India batting", battingNow: true });
+    expect(buildCricketScoreCard(cricketSummary({ match }), match).outcome).toEqual({ kind: "chase", text: "Day 1: India batting", detail: "", rates: [] });
+  });
+
+  it("shows a rained-off match as disrupted with no lead side, and leaves out tables/facts ESPN didn't give", () => {
+    const match = cricketMatch({ result: "no_result", summary: "Match abandoned, no result", playerOfMatch: "" });
+    const card = buildCricketScoreCard(cricketSummary({ match }), match);
+    expect(card.status).toEqual({ label: "Match abandoned, no result", tone: "disrupted" });
+    expect(card.teams.every((team) => !team.lead)).toBe(true);
+    expect(card.tables).toEqual([]);
+    expect(card.facts).toEqual([]);
+  });
+});
+
 describe("answerSports (free)", () => {
   it("routes a cricket team to the cricket lookup, not the club-schedule one, and embeds a real card", async () => {
     mocks.slots.mockResolvedValue({ kind: "slots", slots: { sport: "cricket", league: "", team: "india" } });
     mocks.cricketSummary.mockResolvedValue(cricketSummary());
     const answer = await answerSports("did India win", "u1");
     expect(answer).toContain("```daylark-card");
-    expect(answer).toContain("India won by 8 wkts");
+    expect(answer).toContain('"kind":"score"');
+    expect(answer).toContain("India won by 8 wickets");
     expect(mocks.summary).not.toHaveBeenCalled();
     expect(mocks.publicSearch).not.toHaveBeenCalled();
   });

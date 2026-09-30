@@ -12,6 +12,7 @@ import { EmailCard } from "./cards/EmailCard";
 import { RecallAvailabilityCard } from "./cards/RecallAvailabilityCard";
 import { WeatherCard } from "./cards/WeatherCard";
 import { StockCard } from "./cards/StockCard";
+import { ScoreCard } from "./cards/ScoreCard";
 import { SportsCard } from "./cards/SportsCard";
 import { SuggestionCard } from "./cards/SuggestionCard";
 import styles from "./Message.module.css";
@@ -31,6 +32,7 @@ function CardSegmentView({ segment, onFollowUp, busy }: { segment: CardSegment; 
   if (card?.kind === "weather") return <WeatherCard payload={card} />;
   if (card?.kind === "stock") return <StockCard payload={card} />;
   if (card?.kind === "sports") return <SportsCard payload={card} />;
+  if (card?.kind === "score") return <ScoreCard payload={card} onFollowUp={onFollowUp} busy={busy} />;
   if (card?.kind === "suggestion") return <SuggestionCard payload={card} onFollowUp={onFollowUp} busy={busy} />;
   return text ? <Markdown>{text}</Markdown> : null;
 }
