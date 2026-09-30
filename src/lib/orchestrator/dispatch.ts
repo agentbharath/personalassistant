@@ -15,6 +15,8 @@ import { answerWeather } from "@/lib/agents/weather";
 import { answerStock } from "@/lib/agents/stocks";
 import { answerSports } from "@/lib/agents/sports";
 import { answerSuggestionsForUser } from "@/lib/agents/suggestions-runtime";
+import type { RememberSuggestion } from "@/lib/agents/suggestions";
+import { saveSuggestionState } from "@/lib/conversations/suggestion-state";
 import { runBillsCommand } from "@/lib/agents/bills-agent";
 import { answerStatusLookup } from "@/lib/agents/status-lookup";
 import { acknowledgeLearning } from "@/lib/learning/commands";
@@ -228,6 +230,7 @@ export async function dispatchDecision(decision: RouterDecision, ctx: DispatchCo
       const searchMemory = buildMemoryContext(await listMemories(userId).catch(() => []));
       const homeRegion = (await loadLearnings(userId).catch(() => NO_LEARNINGS)).homeLocation;
       const remember = conversationId ? (state: Parameters<RememberSearch>[0]) => saveSearchState(userId, conversationId, state) : undefined;
+      const rememberSuggestion = conversationId ? (state: Parameters<RememberSuggestion>[0]) => saveSuggestionState(userId, conversationId, state) : undefined;
       // Which real source actually has the answer, decided before research runs (R32): a place or a fare needs a structured API, not a
       // Tavily snippet no formatting can turn into real hours or a real price.
       const runOne = (query: string, index: number) => {
@@ -236,7 +239,7 @@ export async function dispatchDecision(decision: RouterDecision, ctx: DispatchCo
         if (decision.searchKind === "weather") return answerWeather(input, query || homeRegion || "", userId, Boolean(decision.weatherYesNo), context, today, searchMemory);
         if (decision.searchKind === "stocks") return answerStock(query, searchMemory, today);
         if (decision.searchKind === "sports") return answerSports(query, userId, searchMemory, today);
-        if (decision.searchKind === "suggestions") return answerSuggestionsForUser(query, userId, searchMemory, today);
+        if (decision.searchKind === "suggestions") return answerSuggestionsForUser(query, userId, searchMemory, today, index === 0 ? rememberSuggestion : undefined);
         return answerPublicSearch(query, index === 0 ? remember : undefined, searchMemory, today, homeRegion);
       };
       // Two or three genuinely separate subjects each get their own search and their own real answer, instead of one being shortchanged

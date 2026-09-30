@@ -71,4 +71,20 @@ describe("answerSuggestions (R47)", () => {
     expect(await answerSuggestions("q", malformed)).toBe("fallback text");
     expect(await answerSuggestions("q", vi.fn().mockResolvedValue({ content: [] }))).toBe("fallback text");
   });
+
+  it("hands the finished card to `remember`, so a later chat can recall it (found live, R47: the suggestions card had no persistence at all before this)", async () => {
+    const remember = vi.fn().mockResolvedValue(undefined);
+    await answerSuggestions("best offers on men's fleece jackets, medium size", complete(output()), "", undefined, remember);
+    expect(remember).toHaveBeenCalledWith({ subject: "Men's fleece jackets, size M", topPick: "Cotopaxi Abrazo", alternatives: ["REI Trailmade", "Patagonia Better Sweater"] });
+  });
+
+  it("never calls `remember` when there's nothing real to save, and a failure saving never breaks the answer", async () => {
+    const remember = vi.fn().mockResolvedValue(undefined);
+    await answerSuggestions("q", complete(output({ topPick: { ...output().topPick, name: "" } })), "", undefined, remember);
+    expect(remember).not.toHaveBeenCalled();
+
+    const failing = vi.fn().mockRejectedValue(new Error("db down"));
+    const answer = await answerSuggestions("q", complete(output()), "", undefined, failing);
+    expect(answer).toContain("Cotopaxi Abrazo");
+  });
 });

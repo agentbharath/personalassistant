@@ -6,6 +6,7 @@ import { Temporal } from "@js-temporal/polyfill";
 import { loadEmailState } from "@/lib/conversations/email-state";
 import { loadSearchState, loadRecentSearchStates, searchRecallContext } from "@/lib/conversations/search-state";
 import { loadRecentResearchStates, researchRecallContext } from "@/lib/conversations/research-state";
+import { loadRecentSuggestionStates, suggestionRecallContext } from "@/lib/conversations/suggestion-state";
 import { hasPendingApproval } from "@/lib/workflows/pending";
 import { NOTHING_PENDING, answerApproval, dispatchDecision } from "./dispatch";
 import { routeForUser } from "./router-runtime";
@@ -62,10 +63,11 @@ export async function runOrchestrator(input: string, userId: string, context: Co
   // built up its own real context (a multi-turn trip being planned, say), a pile of unrelated saved restaurant searches only competes with
   // it for the model's attention and can dilute a plain "the trip we're already discussing" reference. R29's own "list everything" answer
   // does not depend on this block being present: it re-reads the saved records directly, so nothing is lost by skipping this when it
-  // would only be noise. Research comparisons (R47) get the same treatment -- found live: a brand new conversation asking "which air
-  // purifier did you recommend" had nothing to recall from at all, since research mode had no persistence before this.
+  // would only be noise. Research comparisons and suggestions (R47) get the same treatment -- found live twice: a brand new conversation
+  // asking "which air purifier did you recommend" (research mode), then later "which product did you suggest for strawberry skin"
+  // (the suggestions card), each had nothing to recall from at all, since neither had any persistence before this.
   const recalled = context.length <= 4
-    ? [searchRecallContext(await loadRecentSearchStates(userId)), researchRecallContext(await loadRecentResearchStates(userId))].filter(Boolean).join("\n")
+    ? [searchRecallContext(await loadRecentSearchStates(userId)), researchRecallContext(await loadRecentResearchStates(userId)), suggestionRecallContext(await loadRecentSuggestionStates(userId))].filter(Boolean).join("\n")
     : "";
   if (recalled) context = [{ role: "assistant", content: `Earlier conversation summary:\n${context.filter(turn => turn.content.startsWith("Earlier conversation summary")).map(turn => turn.content).join("\n")}\n${recalled}` }, ...context.filter(turn => !turn.content.startsWith("Earlier conversation summary"))];
 

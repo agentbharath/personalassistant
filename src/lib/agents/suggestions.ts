@@ -44,6 +44,11 @@ const JSON_SCHEMA = {
 
 type Source = { title: string; url: string; snippet: string };
 
+/** So a later chat can recall this suggestion ("which product did you suggest for strawberry skin") -- optional and never required: a
+ * live eval or any other caller with no conversation to save against simply omits it, the same convention research.ts's own
+ * RememberResearch already established. */
+export type RememberSuggestion = (state: { subject: string; topPick: string; alternatives: string[] }) => Promise<void>;
+
 function actionLabelFor(url: string) {
   try { return `View at ${new URL(url).hostname.replace(/^www\./, "")}`; } catch { return "View source"; }
 }
@@ -87,7 +92,7 @@ function renderSuggestionText(card: SuggestionCardPayload): string {
  * prose paragraph: one search, one extraction call, grounded in real cited sources throughout. Falls back to the existing Tavily-backed
  * general search whenever there's nothing to extract from, the same fallback stocks/weather/sports/fares already use.
  */
-export async function answerSuggestions(query: string, complete: (params: Anthropic.MessageCreateParamsNonStreaming) => Promise<Anthropic.Message>, memoryContext = "", today?: string): Promise<string> {
+export async function answerSuggestions(query: string, complete: (params: Anthropic.MessageCreateParamsNonStreaming) => Promise<Anthropic.Message>, memoryContext = "", today?: string, remember?: RememberSuggestion): Promise<string> {
   const fallback = () => answerPublicSearch(query, undefined, memoryContext, today);
   try {
     const research = await searchPublicWeb(query, { depth: "advanced", maxResults: 8, snippetLength: 1200 });
@@ -108,6 +113,7 @@ export async function answerSuggestions(query: string, complete: (params: Anthro
     const output = outputSchema.parse(JSON.parse(block.text));
     if (!output.topPick.name.trim()) return fallback();
     const card = buildCard(query, output, sources);
+    if (remember) await remember({ subject: card.kindLabel, topPick: card.topPick.name, alternatives: card.rows.map((row) => row.name) }).catch(() => undefined);
     return embedCard(renderSuggestionText(card), card);
   } catch (error) {
     reportFailure("suggestions_failed", error, { query });
