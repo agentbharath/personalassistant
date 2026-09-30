@@ -7,6 +7,7 @@ import { extendRequestBudget } from "@/lib/runtime/request-context";
 import { DAYLARK_PERSONA } from "@/lib/model/persona";
 import { plain } from "./search-answer";
 import { reportFailure } from "@/lib/observability/report";
+import { embedCard, type SuggestionCardPayload, type SuggestionRow } from "@/lib/chat/card-payload";
 
 /** Same shape as `callClaude`'s own (operation, params) -- the same deps-injection R20.5/R32 already uses for the time interpreter and the
  * trip planner, so this can be verified live without forcing it through this session's per-call SpendMeter framework blind. */
@@ -33,7 +34,10 @@ const RESEARCH_BUDGET = { totalMs: 100_000, costLimitUsd: 0.6 } as const;
  */
 // v2: found live, the composer literally wrote "fact 12"/"fact 3" inline in reasoning prose instead of stating the number or claim
 // itself -- composerSystem now explicitly forbids writing the word "fact" or a bare source number in recommendation/reasoning.
-export const RESEARCH_VERSION = "research-v2";
+// v3: found live, R47: research's own answer had no card at all (a markdown wall of text), inconsistent with the newer, smaller
+// suggestions.ts. The composer now also names recommendedIndex, so code knows which option is the actual pick without re-parsing prose,
+// and the final answer embeds a real card (reusing SuggestionCardPayload) alongside the same full markdown as before.
+export const RESEARCH_VERSION = "research-v3";
 
 type Source = { title: string; url: string; snippet: string };
 
@@ -100,11 +104,14 @@ async function extractFacts(subject: string, options: string[], sources: Source[
 const comparisonSchema = z.object({
   recommendation: z.string(), reasoning: z.string(),
   options: z.array(z.object({ name: z.string(), facts: z.array(z.object({ detail: z.string(), source: z.number() })) })),
+  /** Which entry in `options` is the actual pick `recommendation` names -- found live, R47: without this, code had no reliable way to
+   * tell WHICH option a card's "top pick" hero should show, short of re-parsing the recommendation sentence's own prose. */
+  recommendedIndex: z.number(),
   caveat: z.string(),
 });
 export type Comparison = z.infer<typeof comparisonSchema>;
 const COMPARISON_JSON_SCHEMA = {
-  type: "object", additionalProperties: false, required: ["recommendation", "reasoning", "options", "caveat"],
+  type: "object", additionalProperties: false, required: ["recommendation", "reasoning", "options", "recommendedIndex", "caveat"],
   properties: {
     recommendation: { type: "string" }, reasoning: { type: "string" },
     options: { type: "array", items: {
@@ -114,6 +121,7 @@ const COMPARISON_JSON_SCHEMA = {
         properties: { detail: { type: "string" }, source: { type: "number" } },
       } } },
     } },
+    recommendedIndex: { type: "number" },
     caveat: { type: "string" },
   },
 } as const;
@@ -126,6 +134,7 @@ You compose one decisive comparison from real facts already extracted from searc
 recommendation: one direct sentence naming the actual pick ("Go with the Coway AP-1512HH"), never a hedge ("it depends") or a tie -- if the evidence is genuinely split, still name the one that best fits what was actually asked, and say why in reasoning.
 reasoning: 2 to 4 sentences, the actual deciding factors, each stating a real number or claim (a price, a spec, an expert's own verdict) plainly in prose, never generic praise. Never write the word "fact" or a bare source number in recommendation or reasoning -- state the number or claim itself ("2,400W solar input"), not a reference to where it came from; a reader-facing citation only ever belongs next to an option's own facts below, never inline in prose.
 options: one entry per option actually compared (every option named in the request, plus any others the evidence surfaced worth mentioning), each with 2 to 5 of its own most relevant facts, in the person's or evidence's own name for it, and source (the fact's own source number -- cite only numbers 1 to ${sourceCount}, never invent one).
+recommendedIndex: the 0-based index into options of the exact option recommendation names -- always a real index, never -1 or out of range.
 caveat: one short line only when something matters (prices vary by retailer, a spec wasn't confirmed across all sources), else "".
 
 Voice: commit, specific details only, no filler adjectives (stunning, magical, must-see, hidden gem, world-class, unforgettable, iconic, perfect, amazing, incredible), no opener like "Here's a comparison". Return JSON only.`;
@@ -159,6 +168,9 @@ export function critiqueComparison(comparison: Comparison, sourceCount: number):
       if (!Number.isInteger(fact.source) || fact.source < 1 || fact.source > sourceCount) issues.push(`"${option.name}"'s fact "${fact.detail}" cites source ${fact.source}, which is not one of the 1-${sourceCount} real sources given.`);
     }
   }
+  if (!Number.isInteger(comparison.recommendedIndex) || comparison.recommendedIndex < 0 || comparison.recommendedIndex >= comparison.options.length) {
+    issues.push(`recommendedIndex ${comparison.recommendedIndex} is not a real index into options (0-${comparison.options.length - 1}).`);
+  }
   return issues;
 }
 
@@ -180,6 +192,66 @@ function renderComparison(comparison: Comparison, subject: string, sources: Sour
   if (comparison.caveat.trim()) lines.push(`*${plain(comparison.caveat, 200)}*`);
   if (sources.length) lines.push(`### Sources\n${sources.map((source, index) => `- **${index + 1}** · [${plain(source.title, 120)}](${source.url})`).join("\n")}`);
   return lines.filter(Boolean).join("\n\n");
+}
+
+type OptionFact = Comparison["options"][number]["facts"][number];
+
+/** A price token ("$449.99") reads naturally in the card's big metric slot; anything else (a spec, a verdict) would look odd in that
+ * numeric-styled spot, so this only ever extracts the price ITSELF out of whichever fact has one -- never the fact's whole sentence,
+ * found live to run well past the slot's own short length and get cut off mid-word. Returns the matched fact too, so its full sentence
+ * can be excluded from the option's own meta line instead of appearing twice. null when no fact has a price at all. */
+function priceFact(facts: OptionFact[]): { fact: OptionFact; metric: string } | null {
+  for (const fact of facts) {
+    const match = fact.detail.match(/\$[\d][\d,]*(?:\.\d{1,2})?/);
+    if (match) return { fact, metric: match[0] };
+  }
+  return null;
+}
+
+/** Joins whole facts up to a character budget, never splitting one apart -- found live: a hard `plain(..., 120)` slice on an already-
+ * joined string cut a fact off mid-word and left a dangling " · " separator with nothing after it, the same "truncate the whole thing,
+ * never a piece of it" principle this file's own recommendation/reasoning fields already learned the hard way. */
+function joinFacts(details: string[], max = 220): string {
+  const parts: string[] = [];
+  let length = 0;
+  for (const detail of details) {
+    // 120, not the usual short cap: a single fact is meant to be one specific detail, not multiple sentences, but found live even one
+    // fact alone can run past a tight cap ("...video call" cut mid-word) -- this is still a real bound, just one long enough that an
+    // ordinarily-sized fact is never the thing that gets cut.
+    const clean = plain(detail, 120);
+    if (!clean) continue;
+    const cost = clean.length + (parts.length ? 3 : 0); // " · " separator
+    if (length + cost > max) break;
+    parts.push(clean);
+    length += cost;
+  }
+  return parts.join(" · ");
+}
+
+/** Found live, R47: "suggest a used mac under $500" reads as an open "best X" question, the exact shape research.ts already handles --
+ * but research had no card at all, only a markdown wall of text, while the newer, smaller suggestions.ts (a request too small for this
+ * whole pipeline) got a real card. Same underlying shape of answer (a decisive pick plus real alternatives, each with real facts) as
+ * SuggestionCardPayload already models, so this reuses that type directly rather than inventing a second, near-identical card kind. */
+function buildResearchCard(comparison: Comparison, subject: string, sources: Source[]): SuggestionCardPayload {
+  const topOption = comparison.options[comparison.recommendedIndex] ?? comparison.options[0];
+  const others = comparison.options.filter((option) => option !== topOption).slice(0, 3);
+  const toRow = (option: Comparison["options"][number]) => {
+    const price = priceFact(option.facts);
+    const meta = joinFacts(option.facts.filter((fact) => fact !== price?.fact).map((fact) => fact.detail));
+    return { name: plain(option.name, 80), meta, metric: price?.metric ?? "" };
+  };
+  const top = toRow(topOption);
+  const rows: SuggestionRow[] = others.map((option) => ({ ...toRow(option), roleTag: { label: "Alternative", tone: "neutral" as const } }));
+  return {
+    kind: "suggestion",
+    kindLabel: plain(subject, 100),
+    freshness: "Just now",
+    topPick: { ...top, edgeTag: null, reason: plain(comparison.reasoning, 300), actionLabel: "", actionUrl: "" },
+    rows,
+    limit: plain(comparison.caveat, 200),
+    sources: sources.slice(0, 6).map((source) => ({ label: plain(new URL(source.url).hostname.replace(/^www\./, ""), 60), url: source.url })),
+    chips: [],
+  };
 }
 
 /** The whole pipeline: research, extract, compose, check, repair once, render. Never the single-shot search-and-summarize path
@@ -216,5 +288,11 @@ export async function runResearch(subject: string, options: string[], deps: Rese
     if (remaining.length) reportFailure("research_unrepaired", new Error(remaining.join(" ")), { version: RESEARCH_VERSION });
   }
   if (remember) await remember({ subject, recommendation: comparison.recommendation, options: comparison.options.map((option) => option.name) }).catch(() => undefined);
-  return renderComparison(comparison, subject, sources);
+  // Found live, R47: "suggest a used mac under $500" (an open "best X" question, exactly research's own scope) rendered as a wall of
+  // markdown with no card at all, while the smaller, newer suggestions.ts got a real one -- inconsistent from the person's own point of
+  // view, who has no reason to know these are two different pipelines. The full markdown (with every option's own fact list) still
+  // exists as the embedded text -- what "Copy answer" copies, and what a client with no card rendering falls back to -- the card is the
+  // compact version a card-aware client actually shows.
+  const card = buildResearchCard(comparison, subject, sources);
+  return embedCard(renderComparison(comparison, subject, sources), card);
 }

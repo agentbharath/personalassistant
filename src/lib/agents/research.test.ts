@@ -27,7 +27,7 @@ const comparison = (over: Partial<Comparison> = {}): Comparison => ({
     { name: "Coway Airmega 400", facts: [{ detail: "$649 MSRP", source: 1 }] },
     { name: "Levoit Core 600S", facts: [{ detail: "$239.99 MSRP", source: 2 }] },
   ],
-  caveat: "",
+  recommendedIndex: 1, caveat: "",
   ...over,
 });
 
@@ -55,6 +55,10 @@ describe("the comparison critic checks shape only, never the model's judgment (R
   });
   it("passes a well-formed comparison", () => {
     expect(critiqueComparison(comparison(), 2)).toEqual([]);
+  });
+  it("flags a recommendedIndex that doesn't point at a real option, found live: code had no reliable way to tell which option a card's top pick should show, short of re-parsing prose", () => {
+    expect(critiqueComparison(comparison({ recommendedIndex: 5 }), 2).some((issue) => issue.includes("recommendedIndex"))).toBe(true);
+    expect(critiqueComparison(comparison({ recommendedIndex: -1 }), 2).some((issue) => issue.includes("recommendedIndex"))).toBe(true);
   });
 });
 
@@ -91,6 +95,33 @@ describe("the full pipeline (research -> extract -> compose -> critique -> rende
     });
     const answer = await research("air purifiers", ["Coway Airmega 400", "Levoit Core 600S"]);
     expect(answer).toContain(long);
+  });
+
+  it("embeds a real card whose top pick matches recommendedIndex, not just the first option (found live, R47: research's own answer had no card at all, unlike the newer, smaller suggestions.ts)", async () => {
+    const answer = await research("air purifiers", ["Coway Airmega 400", "Levoit Core 600S"]);
+    expect(answer).toContain("```daylark-card");
+    const card = JSON.parse(answer.match(/```daylark-card\n([\s\S]*?)\n```/)![1]);
+    expect(card.kind).toBe("suggestion");
+    expect(card.topPick.name).toBe("Levoit Core 600S"); // recommendedIndex: 1 in the fixture, not options[0]
+    expect(card.rows.map((row: { name: string }) => row.name)).toEqual(["Coway Airmega 400"]);
+    expect(card.sources).toHaveLength(2);
+  });
+
+  it("extracts just the price token for the card's metric, never the fact's whole sentence, and never shows it twice (found live: a metric slot showed a full sentence, truncated mid-word, with a dangling separator left in meta from a broken exclusion)", async () => {
+    mocks.complete.mockImplementation(async (operation: string) => {
+      if (operation === "research_fact_extraction") return modelReply(facts);
+      return modelReply(comparison({
+        options: [
+          { name: "Coway Airmega 400", facts: [{ detail: "Available for around $649 on the used market", source: 1 }, { detail: "Covers 1,560 sq ft", source: 1 }] },
+          { name: "Levoit Core 600S", facts: [{ detail: "Costs $239.99, best value for the size", source: 2 }, { detail: "Covers 562 sq ft", source: 2 }] },
+        ],
+      }));
+    });
+    const answer = await research("air purifiers", ["Coway Airmega 400", "Levoit Core 600S"]);
+    const card = JSON.parse(answer.match(/```daylark-card\n([\s\S]*?)\n```/)![1]);
+    expect(card.topPick.metric).toBe("$239.99");
+    expect(card.topPick.meta).toBe("Covers 562 sq ft");
+    expect(card.topPick.meta).not.toContain("$239.99");
   });
 
   it("says so plainly instead of guessing when research turns up nothing", async () => {
