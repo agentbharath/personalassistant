@@ -10,6 +10,11 @@ describe("sports slot extraction (R47)", () => {
     expect(outcome).toEqual({ kind: "slots", slots: { sport: "football", league: "nfl", team: "sf" } });
   });
 
+  it("resolves a cricket national team with no league slug needed, unlike every other sport here", async () => {
+    const outcome = await extractSportsSlots("did India win", complete({ resolved: true, sport: "cricket", league: "", team: "India" }));
+    expect(outcome).toEqual({ kind: "slots", slots: { sport: "cricket", league: "", team: "india" } });
+  });
+
   it("stays unresolved for a whole-league question, never forcing a single-team answer onto it", async () => {
     const outcome = await extractSportsSlots("what were last night's NBA scores", complete({ resolved: false, sport: "", league: "", team: "" }));
     expect(outcome).toEqual({ kind: "unresolved" });

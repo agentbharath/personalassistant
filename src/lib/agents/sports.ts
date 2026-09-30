@@ -1,5 +1,6 @@
 import { embedCard, type SportsCardPayload } from "@/lib/chat/card-payload";
 import { fetchTeamSummary, type TeamSummary } from "@/lib/tools/sports/espn";
+import { fetchCricketTeamSummary, type CricketTeamSummary } from "@/lib/tools/sports/espn-cricket";
 import { extractSportsSlotsForUser } from "./sports-query-runtime";
 import { answerPublicSearch } from "./general";
 
@@ -43,6 +44,38 @@ export function buildSportsCard(summary: TeamSummary): SportsCardPayload {
   };
 }
 
+/** Cricket has no equivalent of "the score" (a single number), no fixed win-by-higher-number rule (by wickets, by runs, by an innings, or
+ * no result), and no readily-available season record the way a club or franchise does -- so this never reuses buildSportsCard's number
+ * comparisons, only the same card shape and status-chip convention. */
+export function buildCricketCard(summary: CricketTeamSummary): SportsCardPayload {
+  const { teamName, match } = summary;
+  if (!match) {
+    return {
+      kind: "sports", eyebrow: teamName, headline: "No match found", statusLabel: "", resultDirection: "flat",
+      opponentLabel: "", insight: "No recent or upcoming match came back for this team.", stats: [], attribution: "espn.com · updated just now",
+    };
+  }
+  const opponentLabel = `${match.isHome ? "vs" : "at"} ${match.opponent}`;
+  if (match.status === "scheduled") {
+    return {
+      kind: "sports", eyebrow: teamName, headline: opponentLabel, statusLabel: match.statusDetail, resultDirection: "flat",
+      opponentLabel, insight: `Their next match is ${match.isHome ? "at home" : "on the road"} against ${match.opponent}.`, stats: [], attribution: "espn.com · updated just now",
+    };
+  }
+  const headline = `${match.myScore || "—"} vs ${match.opponentScore || "—"}`;
+  if (match.status === "in_progress") {
+    return {
+      kind: "sports", eyebrow: teamName, headline, statusLabel: match.statusDetail || "Live", resultDirection: "flat",
+      opponentLabel, insight: match.summary || `Live now, ${opponentLabel}.`, stats: [], attribution: "espn.com · updated just now",
+    };
+  }
+  const direction = match.result === "win" ? "up" : match.result === "loss" ? "down" : "flat";
+  return {
+    kind: "sports", eyebrow: teamName, headline, statusLabel: `Final${match.result === "win" ? " · W" : match.result === "loss" ? " · L" : ""}`,
+    resultDirection: direction, opponentLabel, insight: match.summary || `${opponentLabel}.`, stats: [], attribution: "espn.com · updated just now",
+  };
+}
+
 function renderSportsText(card: SportsCardPayload): string {
   return `### ${card.eyebrow}\n\n${card.headline}${card.statusLabel ? ` · ${card.statusLabel}` : ""}\n\n${card.insight}`;
 }
@@ -58,6 +91,12 @@ export async function answerSports(query: string, userId: string, memoryContext 
   try {
     const outcome = await extractSportsSlotsForUser(query, userId);
     if (outcome.kind !== "slots") return fallback();
+    if (outcome.slots.sport === "cricket") {
+      const summary = await fetchCricketTeamSummary(outcome.slots.team);
+      if (!summary) return fallback();
+      const card = buildCricketCard(summary);
+      return embedCard(renderSportsText(card), card);
+    }
     const summary = await fetchTeamSummary(outcome.slots.sport, outcome.slots.league, outcome.slots.team);
     if (!summary) return fallback();
     const card = buildSportsCard(summary);
