@@ -16,6 +16,7 @@ import { ScoreCard } from "./cards/ScoreCard";
 import { ScoresCard } from "./cards/ScoresCard";
 import { SportsCard } from "./cards/SportsCard";
 import { SuggestionCard } from "./cards/SuggestionCard";
+import { VerdictCard } from "./cards/VerdictCard";
 import styles from "./Message.module.css";
 
 /** One segment of a possibly-multi-part answer (a compound question, or several agents in one turn): its own
@@ -35,6 +36,7 @@ function CardSegmentView({ segment, onFollowUp, busy }: { segment: CardSegment; 
   if (card?.kind === "sports") return <SportsCard payload={card} />;
   if (card?.kind === "scores") return <ScoresCard payload={card} />;
   if (card?.kind === "score") return <ScoreCard payload={card} onFollowUp={onFollowUp} busy={busy} />;
+  if (card?.kind === "verdict") return <VerdictCard payload={card} onFollowUp={onFollowUp} busy={busy} />;
   if (card?.kind === "suggestion") return <SuggestionCard payload={card} onFollowUp={onFollowUp} busy={busy} />;
   return text ? <Markdown>{text}</Markdown> : null;
 }

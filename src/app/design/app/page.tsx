@@ -25,6 +25,7 @@ export default async function DesignAppPage({ searchParams }: { searchParams: Pr
   const stock = view === "stock";
   const score = view === "score";
   const scores = view === "scores";
+  const verdict = view === "verdict";
   const scanMessages = [
     { role: "user" as const, content: "Import my spending from the last 30 days" },
     { role: "assistant" as const, status: "waiting_for_user", content: "### Review 2 imports\n\n1. **iHerb** — $35.53 · Sep 16\n2. **Discover** — $250.00 · Sep 11 · card payment\n\n500 email summaries checked. **Scan paused** in Primary and Updates. Progress is saved for 7 days. 62 known emails remain; more pages may follow. Choose **Continue scan** to resume where this scan stopped. Continuing does not import anything.\n\nChoose **Confirm** to import the reviewed items or **Cancel**." },
@@ -234,6 +235,22 @@ export default async function DesignAppPage({ searchParams }: { searchParams: Pr
       sources: [{ label: "espn.com", url: "https://www.espn.com/cricket/scores" }],
     }) },
   ];
+  const verdictMessages = [
+    { role: "user" as const, content: "Are they good?" },
+    { role: "assistant" as const, content: embedCard("### Verdict on the 5 jackets above", {
+      kind: "verdict", kindLabel: "Verdict on the 5 jackets above", basis: "Based on ratings and reviews",
+      bottomLine: "Around $70, get the Cotopaxi Abrazo. Under $40, Lands\u2019 End over Amazon.",
+      rows: [
+        { name: "Cotopaxi Abrazo", metric: "$74.83", detail: "4.7 \u2605 from 135 reviews, deepest discount", tag: { label: "Good buy", tone: "good" } },
+        { name: "REI Trailmade", metric: "$69.95", detail: "4.6 \u2605, heavier and more durable", tag: { label: "Good buy", tone: "good" } },
+        { name: "Patagonia Better Sweater", metric: "$169", detail: "4.5 \u2605 from 660 reviews, lasts for years", tag: { label: "Best long-term", tone: "highlight" } },
+        { name: "Lands\u2019 End fleece", metric: "from $32.97", detail: "Thicker than most at this price", tag: { label: "Solid budget", tone: "neutral" } },
+        { name: "Amazon full-zip polar fleece", metric: "~$24", detail: "Thin, can pill with washing", tag: { label: "Occasional wear", tone: "catch" } },
+      ],
+      sources: [{ label: "rei.com", url: "https://www.rei.com" }, { label: "landsend.com", url: "https://www.landsend.com" }],
+      chips: ["Compare Abrazo vs Trailmade", "Show Lands\u2019 End options", "Back to all offers"],
+    }) },
+  ];
   const stockMessages = [
     { role: "user" as const, content: "what's Apple stock at" },
     { role: "assistant" as const, content: embedCard("### AAPL · Apple Inc\n\n$254.32 +$1.24 (0.49%)", {
@@ -251,6 +268,6 @@ export default async function DesignAppPage({ searchParams }: { searchParams: Pr
     }) },
   ];
   return <AppShell title={thread ? "iHerb receipts" : "New conversation"} email="you@example.com" signOutAction={signOut} recent={MOCK_RECENT} activeConversationId={thread ? MOCK_RECENT[0].id : undefined}>
-    <Chat key={view ?? "empty"} title={thread ? "iHerb receipts" : undefined} conversationId={thread ? MOCK_RECENT[0].id : undefined} initialMessages={view === "spending-empty" ? emptySpendingMessages : scan ? scanMessages : thread ? MOCK_THREAD : spending ? spendingMessages : spendingSimple ? spendingSimpleMessages : bills ? billsMessages : day ? dayMessages : email ? emailMessages : recall ? recallMessages : calendarQuery ? calendarQueryMessages : weather ? weatherMessages : stock ? stockMessages : score ? scoreMessages : scores ? scoresMessages : []} />
+    <Chat key={view ?? "empty"} title={thread ? "iHerb receipts" : undefined} conversationId={thread ? MOCK_RECENT[0].id : undefined} initialMessages={view === "spending-empty" ? emptySpendingMessages : scan ? scanMessages : thread ? MOCK_THREAD : spending ? spendingMessages : spendingSimple ? spendingSimpleMessages : bills ? billsMessages : day ? dayMessages : email ? emailMessages : recall ? recallMessages : calendarQuery ? calendarQueryMessages : weather ? weatherMessages : stock ? stockMessages : score ? scoreMessages : scores ? scoresMessages : verdict ? verdictMessages : []} />
   </AppShell>;
 }

@@ -2,7 +2,10 @@ import { extractCards } from "@/lib/chat/card-payload";
 /** Cards carry machine-readable data after a complete prose answer. Keep their JSON out of routing context. */
 export function assistantConversationText(content:string) {
   const {text,segments}=extractCards(content);
-  return segments.some(segment=>segment.card) && text ? text : content;
+  if (!(segments.some(segment=>segment.card) && text)) return content;
+  // The card's own JSON is kept out of routing, but what KIND of answer it was isn't noise: a follow-up like "are they good?" only makes
+  // sense to route once the router can see the last answer was a list of suggested options.
+  return segments.some(segment=>segment.card?.kind==="suggestion") ? `${text}\n\n[Daylark showed this as a suggestions card: a top pick plus alternatives.]` : text;
 }
 
 export type ContextTurn = { role: "user" | "assistant"; content: string; choices?: string[] };

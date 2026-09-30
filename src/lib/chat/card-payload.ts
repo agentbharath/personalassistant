@@ -202,13 +202,25 @@ export type SuggestionCardPayload = {
    * generically from the answer's kind (see chat/types.ts's own `followUps`, deliberately a no-op for exactly that reason). */
   chips: string[];
 };
-export type CardPayload = SpendingCardPayload | BillsCardPayload | DayCardPayload | EmailCardPayload | RecallAvailabilityCardPayload | WeatherCardPayload | StockCardPayload | SportsCardPayload | ScoreCardPayload | ScoresCardPayload | SuggestionCardPayload;
+/** A follow-up verdict on the options an earlier suggestions card showed: the conclusion first, then one row per earlier option (its name
+ * and metric carried over from that card), each with a single verdict tag in the same tones as the original card. */
+export type VerdictRow = { name: string; metric: string; detail: string; tag: CardTag };
+export type VerdictCardPayload = {
+  kind: "verdict";
+  kindLabel: string; // "Verdict on the 4 jackets above"
+  basis: string; // header right: "Based on ratings and reviews"
+  bottomLine: string;
+  rows: VerdictRow[];
+  sources: { label: string; url: string }[];
+  chips: string[];
+};
+export type CardPayload = SpendingCardPayload | BillsCardPayload | DayCardPayload | EmailCardPayload | RecallAvailabilityCardPayload | WeatherCardPayload | StockCardPayload | SportsCardPayload | ScoreCardPayload | ScoresCardPayload | SuggestionCardPayload | VerdictCardPayload;
 
 export function embedCard(text: string, payload: CardPayload): string {
   return `${text}\n\n\`\`\`daylark-card\n${JSON.stringify(payload)}\n\`\`\``;
 }
 
-const KNOWN_KINDS = new Set(["spending", "bills", "day", "email", "recall-availability", "weather", "stock", "sports", "score", "scores", "suggestion"]);
+const KNOWN_KINDS = new Set(["spending", "bills", "day", "email", "recall-availability", "weather", "stock", "sports", "score", "scores", "suggestion", "verdict"]);
 
 export type CardSegment = { text: string; card: CardPayload | null };
 
