@@ -175,6 +175,7 @@ export async function fetchCricketTeamSummary(teamQuery: string): Promise<Cricke
 /** One match in a roundup of what's on -- exactly what ESPN's own header feed carries for each currently-active series' matches. */
 export type CricketRoundupEvent = {
   stage: string; // "2nd ODI"
+  series: string; // "West Indies tour of India 2026/27" -- the series/competition this match belongs to
   venue: string; // "Guwahati"
   date: string; // ISO
   status: "final" | "in_progress" | "scheduled";
@@ -189,14 +190,14 @@ export type CricketRoundupEvent = {
 /** Every cricket match ESPN lists as live, finishing within the last day, or starting within the next day -- the real answer to "what
  * cricket is on today", from the same header feed the team lookup already reads. Null only when ESPN itself can't be reached; an empty list
  * means nothing is on. */
-export async function fetchCricketRoundup(now: Date = new Date()): Promise<CricketRoundupEvent[] | null> {
+export async function fetchCricketRoundup(now: Date = new Date(), window: { backHours: number; forwardHours: number } = { backHours: 20, forwardHours: 30 }): Promise<CricketRoundupEvent[] | null> {
   assertToolAllowed("general", "web.search_sports");
   const response = await resilientFetch("espn", "https://site.api.espn.com/apis/personalized/v2/scoreboard/header?sport=cricket", {}, { timeoutMs: 8_000, maxAttempts: 2 });
   if (!response.ok) return null;
   const body = await response.json().catch(() => null) as EspnHeaderResponse | null;
   if (!body) return null;
-  const earliest = now.getTime() - 20 * 3_600_000;
-  const latest = now.getTime() + 30 * 3_600_000;
+  const earliest = now.getTime() - window.backHours * 3_600_000;
+  const latest = now.getTime() + window.forwardHours * 3_600_000;
   const events: CricketRoundupEvent[] = [];
   for (const league of body.sports?.[0]?.leagues ?? []) {
     for (const event of league.events ?? []) {
@@ -210,6 +211,7 @@ export async function fetchCricketRoundup(now: Date = new Date()): Promise<Crick
       const summary = event.fullStatus?.summary ?? "";
       events.push({
         stage: (description.split(",")[0] ?? "").replace(/\s*\([^)]*\)/g, "").trim(),
+        series: league.name ?? "",
         venue: /\bat ([^,]+),/.exec(description)?.[1]?.trim() ?? "",
         date: event.date!, status, international: Boolean(event.class?.internationalClassId && event.class.internationalClassId !== "0"), summary,
         startsAt: status === "scheduled" && /Starts at (\d{1,2}:\d{2}) local time/.test(summary) ? `${/Starts at (\d{1,2}:\d{2})/.exec(summary)![1]} local` : "",

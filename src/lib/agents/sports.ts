@@ -76,9 +76,10 @@ function cricketStageVenue(description: string): { stage: string; venue: string 
   return { stage: parsed?.[1]?.trim() ?? "", venue: parsed?.[2]?.trim() ?? "" };
 }
 
-function shortDate(iso: string) {
-  const { month, day } = dateTile(iso);
-  return `${month[0]}${month.slice(1).toLowerCase()} ${day}`;
+/** "Sep 27" for a cricket match, always in UTC: most venues (South Asia, the Gulf, Africa, Australasia) are far nearer UTC than the
+ * server's own zone, so a 05:00 UTC match in Asia stays on its real day instead of sliding to the previous one on a US-zoned machine. */
+export function shortDate(iso: string) {
+  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 }
 
 /** "1st ODI · Thiruvananthapuram · Sep 27": stage, venue, date. */
@@ -155,7 +156,7 @@ export function buildCricketCard(summary: CricketTeamSummary): SportsCardPayload
 }
 
 /** Split "372/2 (40/50 ov, target 406)" into the big runs/wickets and the small overs beside it (the target is in the chase line). */
-function scoreTeam(name: string, raw: string, lead: boolean): ScoreCardPayload["teams"][number] {
+export function scoreTeam(name: string, raw: string, lead: boolean): ScoreCardPayload["teams"][number] {
   const parsed = /^(.*?)\s*(?:\((.*)\))?$/.exec(raw.trim());
   if (!parsed || !parsed[1]) return { name, score: raw || "—", detail: "", lead };
   const overs = (parsed[2] ?? "").split(",").map((part) => part.trim()).find((part) => part && !part.startsWith("target")) ?? "";
@@ -187,7 +188,7 @@ export function buildCricketScoreCard(summary: CricketTeamSummary, match: Cricke
   const chips: ScoreCardPayload["chips"] = [];
   if (match.scorecardUrl) chips.push({ label: "Full scorecard", url: match.scorecardUrl });
   if (next && nextStage?.stage) chips.push({ label: `Add ${nextStage.stage} to calendar`, act: true, text: `Add ${summary.teamName} vs ${next.opponent}, ${nextStage.stage}${nextStage.venue ? ` at ${nextStage.venue}` : ""} on ${shortDate(next.date)} to my calendar` });
-  chips.push({ label: "Other cricket today", text: "What other cricket matches are on today?" });
+  chips.push({ label: "Other cricket today", text: "Any cricket scores today?" });
 
   return {
     kind: "score",
@@ -200,7 +201,7 @@ export function buildCricketScoreCard(summary: CricketTeamSummary, match: Cricke
 }
 
 /** ESPN's "India won by 8 wkts (50b rem)" as "India won by 8 wickets". */
-function spellOutResult(raw: string) {
+export function spellOutResult(raw: string) {
   return raw.replace(/\s*\([^)]*\)\s*$/, "").replace(/\bwkts\b/g, "wickets").replace(/\bwkt\b/g, "wicket").trim();
 }
 

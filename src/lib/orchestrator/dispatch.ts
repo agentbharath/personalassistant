@@ -16,6 +16,7 @@ import { answerStock } from "@/lib/agents/stocks";
 import { answerSports } from "@/lib/agents/sports";
 import { answerSuggestionsForUser } from "@/lib/agents/suggestions-runtime";
 import { answerVerdictForUser } from "@/lib/agents/verdict-runtime";
+import { answerCricketNewsForUser } from "@/lib/agents/cricket-news-runtime";
 import { repairSearchQueryForUser } from "./search-query";
 import type { RememberSuggestion } from "@/lib/agents/suggestions";
 import { saveSuggestionState } from "@/lib/conversations/suggestion-state";
@@ -244,6 +245,7 @@ export async function dispatchDecision(decision: RouterDecision, ctx: DispatchCo
         if (decision.searchKind === "weather") return answerWeather(input, query || homeRegion || "", userId, Boolean(decision.weatherYesNo), context, today, searchMemory);
         if (decision.searchKind === "stocks") return answerStock(query, searchMemory, today);
         if (decision.searchKind === "sports") return answerSports(query, userId, searchMemory, today);
+        if (decision.searchKind === "cricket_news") return answerCricketNewsForUser(query, userId, searchMemory, today);
         if (decision.searchKind === "verdict") return answerVerdictForUser(query, userId, context, searchMemory, today);
         if (decision.searchKind === "suggestions") return answerSuggestionsForUser(query, userId, searchMemory, today, index === 0 ? rememberSuggestion : undefined);
         return answerPublicSearch(query, index === 0 ? remember : undefined, searchMemory, today, homeRegion);

@@ -1,12 +1,12 @@
 import { assertToolAllowed } from "@/lib/agents/registry";
 import { resilientFetch } from "@/lib/runtime/resilient-fetch";
 
-export type PublicResearch = { answer?: string; sources: Array<{ title: string; url: string; snippet: string }> };
+export type PublicResearch = { answer?: string; sources: Array<{ title: string; url: string; snippet: string; /** Publication date, only when Tavily gives one (its news topic does). */ published?: string }> };
 
 /** `depth`/`maxResults`/`snippetLength` default to a plain single lookup (a restaurant, an opening time). Trip research (`trip-planner.ts`)
  * asks for `"advanced"` and more, longer results: several short-answer facts are not the same job as gathering enough real material to build
  * a multi-day plan from. Depth is real Tavily cost per call; callers that fan out several queries should know that going in. */
-export async function searchPublicWeb(query: string, options: { domains?: string[]; depth?: "basic" | "advanced"; maxResults?: number; snippetLength?: number } = {}): Promise<PublicResearch> {
+export async function searchPublicWeb(query: string, options: { domains?: string[]; depth?: "basic" | "advanced"; maxResults?: number; snippetLength?: number; /** "news" searches recent news articles only, within `days`. */ topic?: "general" | "news"; days?: number } = {}): Promise<PublicResearch> {
   assertToolAllowed("general", "web.search");
   const maxResults = options.maxResults ?? 5;
   const snippetLength = options.snippetLength ?? 500;
@@ -16,9 +16,9 @@ export async function searchPublicWeb(query: string, options: { domains?: string
     // chunks_per_source only applies at "advanced" depth: Tavily then returns the actual passages from each page that match the query,
     // instead of one generic lead-in excerpt -- the snippet is far more likely to actually contain the fact asked for (found live: thin
     // or stale-reading answers traced back to evidence that never had the answer in it, not a synthesis-prompt problem).
-    body: JSON.stringify({ query, search_depth: options.depth ?? "basic", chunks_per_source: options.depth === "advanced" ? 3 : undefined, topic: "general", include_domains: options.domains, include_answer: false, max_results: maxResults, include_raw_content: false, include_images: false }),
+    body: JSON.stringify({ query, search_depth: options.depth ?? "basic", chunks_per_source: options.depth === "advanced" ? 3 : undefined, topic: options.topic ?? "general", days: options.topic === "news" ? options.days ?? 3 : undefined, include_domains: options.domains, include_answer: false, max_results: maxResults, include_raw_content: false, include_images: false }),
   }, { timeoutMs: 8_000, maxAttempts: 2 });
   if (!response.ok) throw new Error(`PUBLIC_SEARCH_${response.status}`);
-  const body = await response.json() as { answer?: string; results?: Array<{ title?: string; url?: string; content?: string }> };
-  return { answer: body.answer, sources: (body.results ?? []).flatMap((result) => result.title && result.url ? [{ title: result.title, url: result.url, snippet: (result.content ?? "").slice(0, snippetLength) }] : []) };
+  const body = await response.json() as { answer?: string; results?: Array<{ title?: string; url?: string; content?: string; published_date?: string }> };
+  return { answer: body.answer, sources: (body.results ?? []).flatMap((result) => result.title && result.url ? [{ title: result.title, url: result.url, snippet: (result.content ?? "").slice(0, snippetLength), ...(result.published_date ? { published: result.published_date } : {}) }] : []) };
 }

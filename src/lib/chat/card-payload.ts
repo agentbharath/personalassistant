@@ -214,13 +214,29 @@ export type VerdictCardPayload = {
   sources: { label: string; url: string }[];
   chips: string[];
 };
-export type CardPayload = SpendingCardPayload | BillsCardPayload | DayCardPayload | EmailCardPayload | RecallAvailabilityCardPayload | WeatherCardPayload | StockCardPayload | SportsCardPayload | ScoreCardPayload | ScoresCardPayload | SuggestionCardPayload | VerdictCardPayload;
+/** A news digest (cricket first): a line or two of news on top, then sections built from real match data -- result blocks, a list of
+ * abandoned matches, date tiles for what's coming up -- then sources and follow-up chips. A section with nothing in it is left out. */
+export type DigestTile = { month: string; day: string; name: string; meta: string; /** The soonest one gets the blue tile. */ next: boolean };
+export type DigestSection =
+  | { kind: "events"; title: string; events: ScoresEvent[] }
+  | { kind: "list"; title: string; rows: { name: string; meta: string; tag: CardTag }[] }
+  | { kind: "tiles"; title: string; tiles: DigestTile[] };
+export type DigestCardPayload = {
+  kind: "digest";
+  kindLabel: string; // "Cricket news"
+  freshness: string; // "As of Sep 30, 10:40 AM"
+  summary: string; // the news line(s), "" when the news search had nothing recent
+  sections: DigestSection[];
+  sources: { label: string; url: string }[];
+  chips: { label: string; text: string; act?: boolean }[];
+};
+export type CardPayload = SpendingCardPayload | BillsCardPayload | DayCardPayload | EmailCardPayload | RecallAvailabilityCardPayload | WeatherCardPayload | StockCardPayload | SportsCardPayload | ScoreCardPayload | ScoresCardPayload | SuggestionCardPayload | VerdictCardPayload | DigestCardPayload;
 
 export function embedCard(text: string, payload: CardPayload): string {
   return `${text}\n\n\`\`\`daylark-card\n${JSON.stringify(payload)}\n\`\`\``;
 }
 
-const KNOWN_KINDS = new Set(["spending", "bills", "day", "email", "recall-availability", "weather", "stock", "sports", "score", "scores", "suggestion", "verdict"]);
+const KNOWN_KINDS = new Set(["spending", "bills", "day", "email", "recall-availability", "weather", "stock", "sports", "score", "scores", "suggestion", "verdict", "digest"]);
 
 export type CardSegment = { text: string; card: CardPayload | null };
 

@@ -26,6 +26,7 @@ export default async function DesignAppPage({ searchParams }: { searchParams: Pr
   const score = view === "score";
   const scores = view === "scores";
   const verdict = view === "verdict";
+  const digest = view === "digest";
   const scanMessages = [
     { role: "user" as const, content: "Import my spending from the last 30 days" },
     { role: "assistant" as const, status: "waiting_for_user", content: "### Review 2 imports\n\n1. **iHerb** — $35.53 · Sep 16\n2. **Discover** — $250.00 · Sep 11 · card payment\n\n500 email summaries checked. **Scan paused** in Primary and Updates. Progress is saved for 7 days. 62 known emails remain; more pages may follow. Choose **Continue scan** to resume where this scan stopped. Continuing does not import anything.\n\nChoose **Confirm** to import the reviewed items or **Cancel**." },
@@ -210,7 +211,7 @@ export default async function DesignAppPage({ searchParams }: { searchParams: Pr
       ],
       facts: [{ label: "Player of the match", value: "Kuldeep Yadav" }, { label: "Toss", value: "India, elected to field first" }, { label: "Series", value: "India led the 3-match series 1-0 · Next: 2nd ODI Sep 30, Guwahati" }],
       sources: [{ label: "espn.com", url: "https://www.espn.com/cricket/" }],
-      chips: [{ label: "Full scorecard", url: "https://www.espn.com/cricket/" }, { label: "Add 2nd ODI to calendar", act: true, text: "Add the 2nd ODI to my calendar" }, { label: "Other cricket today", text: "What other cricket matches are on today?" }],
+      chips: [{ label: "Full scorecard", url: "https://www.espn.com/cricket/" }, { label: "Add 2nd ODI to calendar", act: true, text: "Add the 2nd ODI to my calendar" }, { label: "Other cricket today", text: "Any cricket scores today?" }],
     }) },
     { role: "user" as const, content: "What's the live Ind vs Wi cricket score" },
     { role: "assistant" as const, content: embedCard("### 2nd ODI, Guwahati · Sep 30", {
@@ -220,11 +221,11 @@ export default async function DesignAppPage({ searchParams }: { searchParams: Pr
       tables: [{ title: "Top batters", columns: ["Runs"], rows: [{ player: "Shubman Gill", side: "India", stats: ["216"] }, { player: "Amir Jangoo", side: "West Indies", stats: ["114"] }] }],
       facts: [{ label: "Toss", value: "India, elected to field first" }],
       sources: [{ label: "espn.com", url: "https://www.espn.com/cricket/" }],
-      chips: [{ label: "Other cricket today", text: "What other cricket matches are on today?" }],
+      chips: [{ label: "Other cricket today", text: "Any cricket scores today?" }],
     }) },
   ];
   const scoresMessages = [
-    { role: "user" as const, content: "What other cricket matches are on today?" },
+    { role: "user" as const, content: "Any cricket scores today?" },
     { role: "assistant" as const, content: embedCard("### Cricket scores today", {
       kind: "scores", kindLabel: "Cricket scores today", freshness: "",
       events: [
@@ -251,6 +252,20 @@ export default async function DesignAppPage({ searchParams }: { searchParams: Pr
       chips: ["Compare Abrazo vs Trailmade", "Show Lands\u2019 End options", "Back to all offers"],
     }) },
   ];
+  const digestMessages = [
+    { role: "user" as const, content: "Any cricket news?" },
+    { role: "assistant" as const, content: embedCard("### Cricket news", {
+      kind: "digest", kindLabel: "Cricket news", freshness: "As of Sep 29, 9:40 AM",
+      summary: "India chased down 296 with plenty to spare in the 1st ODI. Rain wiped out both Asian Games quarter-finals yesterday.",
+      sections: [
+        { kind: "events", title: "Result", events: [{ label: "1st ODI \u00b7 Thiruvananthapuram \u00b7 Sep 27", tag: { label: "India won by 8 wickets", tone: "good" }, sides: [{ name: "West Indies", score: "295/7", detail: "50 ov", lead: false }, { name: "India", score: "300/2", detail: "41.4 ov", lead: true }], outcome: "" }] },
+        { kind: "list", title: "Abandoned", rows: [{ name: "India vs Afghanistan", meta: "Asian Games \u00b7 T20I QF \u00b7 Sep 28", tag: { label: "Rain", tone: "catch" } }, { name: "Pakistan vs Hong Kong", meta: "Asian Games \u00b7 T20I QF \u00b7 Sep 28", tag: { label: "Rain", tone: "catch" } }] },
+        { kind: "tiles", title: "Coming up", tiles: [{ month: "SEP", day: "30", name: "India vs West Indies", meta: "2nd ODI \u00b7 Guwahati \u00b7 14:00 local", next: true }, { month: "OCT", day: "1", name: "Asian Games SF 1", meta: "14:00 local", next: false }] },
+      ],
+      sources: [{ label: "hindustantimes.com", url: "https://www.hindustantimes.com" }, { label: "ndtv.com", url: "https://www.ndtv.com" }, { label: "espn.com", url: "https://www.espn.com/cricket/" }],
+      chips: [{ label: "Live score, 2nd ODI", text: "What's the live India vs West Indies cricket score" }, { label: "Add 2nd ODI to calendar", text: "Add the 2nd ODI to my calendar", act: true }, { label: "Other cricket today", text: "Any cricket scores today?" }],
+    }) },
+  ];
   const stockMessages = [
     { role: "user" as const, content: "what's Apple stock at" },
     { role: "assistant" as const, content: embedCard("### AAPL · Apple Inc\n\n$254.32 +$1.24 (0.49%)", {
@@ -268,6 +283,6 @@ export default async function DesignAppPage({ searchParams }: { searchParams: Pr
     }) },
   ];
   return <AppShell title={thread ? "iHerb receipts" : "New conversation"} email="you@example.com" signOutAction={signOut} recent={MOCK_RECENT} activeConversationId={thread ? MOCK_RECENT[0].id : undefined}>
-    <Chat key={view ?? "empty"} title={thread ? "iHerb receipts" : undefined} conversationId={thread ? MOCK_RECENT[0].id : undefined} initialMessages={view === "spending-empty" ? emptySpendingMessages : scan ? scanMessages : thread ? MOCK_THREAD : spending ? spendingMessages : spendingSimple ? spendingSimpleMessages : bills ? billsMessages : day ? dayMessages : email ? emailMessages : recall ? recallMessages : calendarQuery ? calendarQueryMessages : weather ? weatherMessages : stock ? stockMessages : score ? scoreMessages : scores ? scoresMessages : verdict ? verdictMessages : []} />
+    <Chat key={view ?? "empty"} title={thread ? "iHerb receipts" : undefined} conversationId={thread ? MOCK_RECENT[0].id : undefined} initialMessages={view === "spending-empty" ? emptySpendingMessages : scan ? scanMessages : thread ? MOCK_THREAD : spending ? spendingMessages : spendingSimple ? spendingSimpleMessages : bills ? billsMessages : day ? dayMessages : email ? emailMessages : recall ? recallMessages : calendarQuery ? calendarQueryMessages : weather ? weatherMessages : stock ? stockMessages : score ? scoreMessages : scores ? scoresMessages : verdict ? verdictMessages : digest ? digestMessages : []} />
   </AppShell>;
 }

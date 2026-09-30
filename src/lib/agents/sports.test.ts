@@ -179,7 +179,7 @@ describe("the cricket score card (free)", () => {
 });
 
 const roundupEvent = (over: Partial<CricketRoundupEvent> = {}): CricketRoundupEvent => ({
-  stage: "2nd ODI", venue: "Guwahati", date: "2026-09-30T08:30Z", status: "in_progress", international: true, summary: "India require 34 runs", startsAt: "",
+  stage: "2nd ODI", series: "West Indies tour of India", venue: "Guwahati", date: "2026-09-30T08:30Z", status: "in_progress", international: true, summary: "India require 34 runs", startsAt: "",
   sides: [{ name: "West Indies", score: "405/7", winner: false }, { name: "India", score: "372/2 (40/50 ov, target 406)", winner: false }],
   ...over,
 });
