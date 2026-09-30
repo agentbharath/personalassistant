@@ -18,7 +18,7 @@ const game = (over: Partial<TeamGame> = {}): TeamGame => ({
 const summary = (over: Partial<TeamSummary> = {}): TeamSummary => ({ teamName: "San Francisco 49ers", record: "3-0", game: game(), nextGame: null, ...over });
 
 const cricketMatch = (over: Partial<CricketMatch> = {}): CricketMatch => ({
-  teamName: "India", opponent: "West Indies", isHome: true, date: "2026-09-27T08:30Z",
+  teamName: "India", opponent: "West Indies", isHome: true, date: "2026-09-27T08:30Z", description: "1st ODI",
   status: "final", statusDetail: "Final", summary: "India won by 8 wkts (50b rem)",
   myScore: "300/2 (41.4/50 ov, target 296)", opponentScore: "295/7", result: "win",
   ...over,
@@ -28,96 +28,100 @@ const cricketSummary = (over: Partial<CricketTeamSummary> = {}): CricketTeamSumm
 beforeEach(() => { mocks.slots.mockReset(); mocks.summary.mockReset(); mocks.cricketSummary.mockReset(); mocks.publicSearch.mockReset().mockResolvedValue("fallback text"); });
 
 describe("the sports card (free)", () => {
-  it("shows a win in green, with the real score and opponent", () => {
-    const card = buildSportsCard(summary());
-    expect(card.eyebrow).toBe("San Francisco 49ers");
-    expect(card.headline).toBe("36–30");
-    expect(card.statusLabel).toBe("Final · W");
-    expect(card.resultDirection).toBe("up");
-    expect(card.opponentLabel).toBe("vs Arizona Cardinals");
-    expect(card.insight).toBe("Won vs Arizona Cardinals.");
-    expect(card.stats).toEqual([{ label: "Record", value: "3-0" }]);
+  it("shows a win, home team second (matching the away-then-home reading order), with the real score and a computed margin", () => {
+    const card = buildSportsCard(summary(), "football", "nfl");
+    expect(card.kindLabel).toBe("NFL score");
+    expect(card.eventLabel).toBe("NFL · vs Arizona Cardinals");
+    expect(card.statusTag).toEqual({ label: "Final", tone: "neutral" });
+    expect(card.event).toEqual({
+      final: true,
+      sides: [
+        { name: "Arizona Cardinals", score: "30", detail: "", winner: false },
+        { name: "San Francisco 49ers", score: "36", detail: "", winner: true },
+      ],
+      outcome: "San Francisco 49ers won by 6.",
+    });
+    expect(card.summary).toBe("Record: 3-0");
   });
 
-  it("shows a loss in red, never dressed up as a win", () => {
-    const card = buildSportsCard(summary({ game: game({ teamScore: 20, opponentScore: 27, result: "loss", isHome: false }) }));
-    expect(card.headline).toBe("20–27");
-    expect(card.statusLabel).toBe("Final · L");
-    expect(card.resultDirection).toBe("down");
-    expect(card.opponentLabel).toBe("at Arizona Cardinals");
-    expect(card.insight).toBe("Lost at Arizona Cardinals.");
+  it("shows a loss, never dressed up as a win", () => {
+    const card = buildSportsCard(summary({ game: game({ teamScore: 20, opponentScore: 27, result: "loss", isHome: false }) }), "football", "nfl");
+    expect(card.event?.sides).toEqual([
+      { name: "San Francisco 49ers", score: "20", detail: "", winner: false },
+      { name: "Arizona Cardinals", score: "27", detail: "", winner: true },
+    ]);
+    expect(card.event?.outcome).toBe("Arizona Cardinals won by 7.");
   });
 
-  it("shows a live game plainly, never claiming a final result mid-game", () => {
-    const card = buildSportsCard(summary({ game: game({ status: "in_progress", statusDetail: "Q3 8:42", teamScore: 60, opponentScore: 58, result: null }) }));
-    expect(card.headline).toBe("60–58");
-    expect(card.statusLabel).toBe("Q3 8:42");
-    expect(card.resultDirection).toBe("flat");
-    expect(card.insight).toBe("Live now, vs Arizona Cardinals.");
+  it("shows a live game with a live tag, never claiming a final result mid-game", () => {
+    const card = buildSportsCard(summary({ game: game({ status: "in_progress", statusDetail: "Q3 8:42", teamScore: 60, opponentScore: 58, result: null }) }), "basketball", "nba");
+    expect(card.statusTag).toEqual({ label: "Q3 8:42", tone: "live" });
+    expect(card.event).toEqual({ final: false, sides: [
+      { name: "Arizona Cardinals", score: "58", detail: "", winner: false },
+      { name: "San Francisco 49ers", score: "60", detail: "", winner: false },
+    ], outcome: "" });
+    expect(card.summary).toBe("Live now, vs Arizona Cardinals.");
   });
 
-  it("shows the next game plainly when there's no recent or live one to lead with", () => {
-    const card = buildSportsCard(summary({ game: game({ status: "scheduled", statusDetail: "Sat, Oct 4 · 1:00 PM", teamScore: null, opponentScore: null, result: null, opponent: "Denver Broncos" }) }));
-    expect(card.headline).toBe("vs Denver Broncos");
-    expect(card.statusLabel).toBe("Sat, Oct 4 · 1:00 PM");
-    expect(card.resultDirection).toBe("flat");
-    expect(card.insight).toBe("Their next game is at home against Denver Broncos.");
-  });
-
-  it("includes the next game as a stat when it's a different game than the one being led with", () => {
-    const next = game({ status: "scheduled", opponent: "Denver Broncos", date: "2026-10-04T00:00Z", isHome: true });
-    const card = buildSportsCard(summary({ nextGame: next }));
-    expect(card.stats).toContainEqual({ label: "Next game", value: expect.stringContaining("Denver Broncos") });
+  it("shows an upcoming-game tile, not a score row, when nothing has been played yet", () => {
+    const card = buildSportsCard(summary({ game: game({ status: "scheduled", date: "2026-10-04T00:00Z", teamScore: null, opponentScore: null, result: null, opponent: "Denver Broncos" }) }), "football", "nfl");
+    expect(card.event).toBeNull();
+    expect(card.upcoming).toMatchObject({ matchup: "San Francisco 49ers vs Denver Broncos", detail: "NFL · Home" });
   });
 
   it("says plainly when nothing came back, never a blank card", () => {
-    const card = buildSportsCard(summary({ game: null }));
-    expect(card.headline).toBe("No game found");
-    expect(card.insight).toContain("No recent or upcoming game");
+    const card = buildSportsCard(summary({ game: null }), "football", "nfl");
+    expect(card.event).toBeNull();
+    expect(card.upcoming).toBeNull();
+    expect(card.summary).toContain("No recent or upcoming game");
   });
 });
 
 describe("the cricket card (free)", () => {
-  it("shows a win in green, with the real ESPN result summary, never a wickets-vs-runs comparison invented here", () => {
+  it("shows a win with the real ESPN result summary as the outcome line, never a runs/wickets comparison invented here", () => {
     const card = buildCricketCard(cricketSummary());
-    expect(card.eyebrow).toBe("India");
-    expect(card.headline).toBe("300/2 (41.4/50 ov, target 296) vs 295/7");
-    expect(card.statusLabel).toBe("Final · W");
-    expect(card.resultDirection).toBe("up");
-    expect(card.insight).toBe("India won by 8 wkts (50b rem)");
+    expect(card.kindLabel).toBe("Cricket score");
+    expect(card.eventLabel).toBe("Cricket · 1st ODI");
+    expect(card.event).toEqual({
+      final: true,
+      sides: [
+        { name: "West Indies", score: "295/7", detail: "", winner: false },
+        { name: "India", score: "300/2 (41.4/50 ov, target 296)", detail: "", winner: true },
+      ],
+      outcome: "India won by 8 wkts (50b rem)",
+    });
   });
 
-  it("shows a loss in red, never dressed up as a win", () => {
+  it("shows a loss, never dressed up as a win", () => {
     const card = buildCricketCard(cricketSummary({ match: cricketMatch({ result: "loss", summary: "West Indies won by 5 runs", isHome: false }) }));
-    expect(card.statusLabel).toBe("Final · L");
-    expect(card.resultDirection).toBe("down");
-    expect(card.opponentLabel).toBe("at West Indies");
+    expect(card.event?.sides.find((side) => side.name === "West Indies")?.winner).toBe(true);
+    expect(card.event?.outcome).toBe("West Indies won by 5 runs");
   });
 
-  it("shows a rained-off no-result match plainly, never forcing it into a win or a loss", () => {
+  it("shows a rained-off no-result match plainly, never forcing a winner", () => {
     const card = buildCricketCard(cricketSummary({ match: cricketMatch({ result: "no_result", summary: "Match abandoned, no result" }) }));
-    expect(card.statusLabel).toBe("Final");
-    expect(card.resultDirection).toBe("flat");
-    expect(card.insight).toBe("Match abandoned, no result");
+    expect(card.event?.sides.every((side) => !side.winner)).toBe(true);
+    expect(card.event?.outcome).toBe("Match abandoned, no result");
   });
 
-  it("shows a live match plainly, never claiming a final result mid-match", () => {
+  it("shows a live match with a live tag, never claiming a final result mid-match", () => {
     const card = buildCricketCard(cricketSummary({ match: cricketMatch({ status: "in_progress", statusDetail: "Live", myScore: "120/4 (30 ov)", opponentScore: "", result: null, summary: "" }) }));
-    expect(card.headline).toBe("120/4 (30 ov) vs —");
-    expect(card.resultDirection).toBe("flat");
-    expect(card.insight).toBe("Live now, vs West Indies.");
+    expect(card.statusTag).toEqual({ label: "Live", tone: "live" });
+    expect(card.event?.sides.find((side) => side.name === "India")?.score).toBe("120/4 (30 ov)");
+    expect(card.summary).toBe("Live now, vs West Indies.");
   });
 
-  it("shows the next match plainly when there's nothing recent or live", () => {
-    const card = buildCricketCard(cricketSummary({ match: cricketMatch({ status: "scheduled", statusDetail: "Sat, Oct 4", opponent: "Australia", isHome: false, myScore: "", opponentScore: "", result: null, summary: "" }) }));
-    expect(card.headline).toBe("at Australia");
-    expect(card.insight).toBe("Their next match is on the road against Australia.");
+  it("shows an upcoming-match tile when there's nothing recent or live", () => {
+    const card = buildCricketCard(cricketSummary({ match: cricketMatch({ status: "scheduled", opponent: "Australia", isHome: false, myScore: "", opponentScore: "", result: null, summary: "" }) }));
+    expect(card.event).toBeNull();
+    expect(card.upcoming).toMatchObject({ matchup: "India at Australia" });
   });
 
   it("says plainly when nothing came back, never a blank card", () => {
     const card = buildCricketCard(cricketSummary({ match: null }));
-    expect(card.headline).toBe("No match found");
-    expect(card.insight).toContain("No recent or upcoming match");
+    expect(card.event).toBeNull();
+    expect(card.upcoming).toBeNull();
+    expect(card.summary).toContain("No recent or upcoming match");
   });
 });
 
@@ -139,13 +143,12 @@ describe("answerSports (free)", () => {
     expect(answer).toBe("fallback text");
   });
 
-
   it("embeds a real team summary as a card", async () => {
     mocks.slots.mockResolvedValue({ kind: "slots", slots: { sport: "football", league: "nfl", team: "sf" } });
     mocks.summary.mockResolvedValue(summary());
     const answer = await answerSports("what was the score of the niners game", "u1");
     expect(answer).toContain("```daylark-card");
-    expect(answer).toContain("San Francisco 49ers");
+    expect(answer).toContain("NFL score");
     expect(mocks.publicSearch).not.toHaveBeenCalled();
   });
 

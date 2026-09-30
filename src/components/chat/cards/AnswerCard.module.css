@@ -1,0 +1,385 @@
+/* Daylark answer cards: sports, suggestions, news, follow-ups.
+ * Built only on src/styles/tokens.css, so light and dark themes come for free.
+ * Tone meaning is fixed everywhere: good = green, highlight = blue, neutral = gray, catch = amber, live = danger. */
+
+/* ---------- Card shell ---------- */
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-5);
+  max-width: var(--measure);
+  padding: var(--s-6);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-1);
+  animation: arrive var(--dur-2) var(--ease) both;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--s-4);
+}
+
+/* What this answer is, in plain sentence case: "Men's fleece jackets, size M" */
+.kind {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--ink-2);
+}
+
+.freshness {
+  font-size: var(--text-xs);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.summary {
+  margin: 0;
+  font-size: var(--text-base);
+  line-height: var(--leading-body);
+  color: var(--ink-2);
+}
+
+/* ---------- Sections and lists ---------- */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+
+.sectionTitle {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--muted);
+}
+
+/* One container, hairline rows. Never a card per row. */
+.list {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--s-4);
+  padding: var(--s-3) var(--s-4);
+}
+
+.row + .row {
+  border-top: 1px solid var(--line);
+}
+
+.rowMain {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.rowEnd {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  flex-shrink: 0;
+}
+
+.name {
+  font-size: var(--text-base);
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.meta {
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+/* Numbers only: scores, prices, times, gaps. */
+.num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-lg);
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.numMuted {
+  composes: num;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+/* ---------- Tags ---------- */
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  padding: 0 var(--s-2);
+  border-radius: 6px;
+  font-size: var(--text-xs);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.good      { background: var(--green-soft);  color: var(--green); }
+.highlight { background: var(--blue-soft);   color: var(--blue); }
+.neutral   { background: var(--accent-soft); color: var(--ink-2); }
+.catch     { background: var(--amber-soft);  color: var(--amber); }
+.live      { background: var(--danger-soft); color: var(--danger); }
+.pick      { background: var(--accent);      color: var(--on-accent); }
+
+.liveDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: pulse 1.6s ease-in-out infinite;
+}
+
+/* ---------- Suggestions: top pick ---------- */
+.hero {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  padding: var(--s-5);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+}
+
+.heroTop {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--s-4);
+}
+
+.heroName {
+  font-size: var(--text-xl);
+  line-height: var(--leading-tight);
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.heroMetric {
+  composes: num;
+  font-size: 1.625rem;
+}
+
+.heroEnd {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--s-1);
+}
+
+.reason {
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: var(--leading-body);
+  color: var(--ink-2);
+}
+
+.action {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+  padding: 0 var(--s-4);
+  border-radius: var(--r-sm);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  text-decoration: none;
+  transition: background var(--dur-1) var(--ease);
+}
+
+.action:hover { background: var(--accent-hover); }
+.action:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+
+/* ---------- Sports: shared event block ---------- */
+.event {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  padding: var(--s-4);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+}
+
+.eventFinal { background: var(--surface-2); }
+
+.eventHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--s-3);
+}
+
+.outcome {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--green);
+}
+
+/* layout: h2h (cricket, football, basketball, NFL, hockey, baseball) */
+.side {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--s-4);
+}
+
+.sideName { font-size: var(--text-base); color: var(--muted); }
+.sideWinner .sideName { color: var(--ink); font-weight: 600; }
+.sideScore { composes: numMuted; font-size: var(--text-xl); }
+.sideWinner .sideScore { color: var(--ink); font-weight: 500; }
+.sideDetail { font-size: var(--text-xs); color: var(--muted); margin-left: var(--s-1); }
+
+/* layout: sets (tennis, volleyball, badminton, boxing cards) */
+.sets {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) repeat(var(--set-count, 3), 2.5rem);
+  row-gap: var(--s-2);
+  align-items: baseline;
+}
+
+.setCell { composes: numMuted; text-align: center; }
+.setWon  { color: var(--ink); font-weight: 500; }
+
+/* layout: leaderboard (F1, golf, athletics, cycling, league tables) */
+.board {
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: var(--s-3);
+  padding: var(--s-3) var(--s-4);
+}
+
+.board + .board { border-top: 1px solid var(--line); }
+.rank { composes: numMuted; font-size: var(--text-base); }
+.leader .rank { color: var(--ink); font-weight: 500; }
+
+/* status: upcoming */
+.dateTile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 3rem;
+  padding: 6px 0;
+  border-radius: var(--r-sm);
+  background: var(--accent-soft);
+  color: var(--ink-2);
+  font-weight: 600;
+}
+
+.dateTileNext { background: var(--blue-soft); color: var(--blue); }
+.dateMonth { font-size: 0.6875rem; }
+.dateDay { font-size: var(--text-lg); }
+
+/* ---------- Follow-up answers ---------- */
+.replyingTo {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+.bottomLine {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  padding: var(--s-4);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+}
+
+.bottomLineText {
+  font-size: var(--text-lg);
+  line-height: 1.5;
+  font-weight: 500;
+  color: var(--ink);
+}
+
+/* ---------- Footer ---------- */
+.limit {
+  margin: 0;
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-1) var(--s-3);
+  padding-top: var(--s-3);
+  border-top: 1px solid var(--line);
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+.sources a { color: var(--blue); text-decoration: none; }
+.sources a:hover { text-decoration: underline; }
+
+/* ---------- Follow-up chips: narrow, deeper, act, widen ---------- */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+  margin-top: var(--s-3);
+}
+
+.chip {
+  min-height: var(--tap);
+  padding: 0 var(--s-4);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-pill);
+  background: var(--surface);
+  color: var(--ink-2);
+  font: 500 var(--text-sm) var(--font-sans);
+  cursor: pointer;
+  transition: background var(--dur-1) var(--ease), transform var(--dur-1) var(--ease);
+}
+
+.chip:hover { background: var(--surface-2); }
+.chip:active { transform: scale(0.97); }
+.chip:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+
+/* "Act" chips hand off to another agent, so they get the one extra cue. */
+.chipAct { border-color: var(--blue); color: var(--blue); }
+
+/* ---------- Motion ---------- */
+@keyframes arrive {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: none; }
+}
+
+@keyframes pulse {
+  50% { opacity: 0.35; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card, .liveDot { animation: none; }
+  .chip, .action { transition: none; }
+}
+
+/* ---------- Narrow screens ---------- */
+@media (max-width: 480px) {
+  .card { padding: var(--s-4); }
+  .hero { padding: var(--s-4); }
+  .heroTop { flex-direction: column; }
+  .heroEnd { flex-direction: row; align-items: center; }
+  .row { align-items: flex-start; }
+}

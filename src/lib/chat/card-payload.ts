@@ -136,17 +136,22 @@ export type StockCardPayload = {
   stats: { label: string; value: string }[];
   attribution: string; // "twelvedata.com · updated just now"
 };
+/** One side of a head-to-head event -- a team/side's own name and score for one game. */
+export type SportsSide = { name: string; score: string; detail: string; winner: boolean };
 export type SportsCardPayload = {
   kind: "sports";
-  eyebrow: string; // "San Francisco 49ers · NFL"
-  headline: string; // "36–30" / "60–58" / "vs Denver Broncos"
-  statusLabel: string; // "Final · W" / "Q3 8:42" / "Sat, Oct 4 · 1:00 PM"
-  resultDirection: "up" | "down" | "flat"; // win -> up, loss -> down, tie/in-progress/upcoming -> flat
-  opponentLabel: string; // "vs Arizona Cardinals" / "at Seattle Seahawks"
-  insight: string;
-  /** Up to 2: season record, next game. Fewer when a next game isn't known (offseason) or there's no record yet. */
-  stats: { label: string; value: string }[];
-  attribution: string; // "espn.com · updated just now"
+  kindLabel: string; // "NFL score" / "Cricket score" -- header, sentence case
+  freshness: string; // header right: "Just now" / "As of Sep 29, 9:40 AM"
+  /** One optional line of prose framing, shown above the event box -- "Their next match is at home against Denver." for a scheduled
+   * game with nothing else to show, "" when the event box (or its own outcome line) already says everything. */
+  summary: string;
+  eventLabel: string; // "NFL · Week 4 · Levi's Stadium" / "Cricket · 1st ODI · Thiruvananthapuram" -- the event box's own left line
+  statusTag: { label: string; tone: "good" | "highlight" | "neutral" | "catch" | "live" };
+  /** A decided game (final or in-progress) gets the head-to-head event box; a still-scheduled one with nothing to score yet gets the
+   * simpler upcoming-game tile instead -- there is nothing to put in a score row before the game starts. */
+  event: { final: boolean; sides: [SportsSide, SportsSide]; outcome: string } | null;
+  upcoming: { month: string; day: string; matchup: string; detail: string } | null;
+  attribution: string; // footer: "espn.com"
 };
 export type CardPayload = SpendingCardPayload | BillsCardPayload | DayCardPayload | EmailCardPayload | RecallAvailabilityCardPayload | WeatherCardPayload | StockCardPayload | SportsCardPayload;
 

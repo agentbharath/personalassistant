@@ -6,6 +6,8 @@ export type CricketMatch = {
   opponent: string;
   isHome: boolean;
   date: string; // ISO
+  /** "1st ODI,  (D/N) at Thiruvananthapuram" -- ESPN's own stage+venue line, straight from the response. */
+  description: string;
   status: "final" | "in_progress" | "scheduled";
   statusDetail: string; // "Final", "Live", "Scheduled"
   /** The plain-English result ESPN itself gives ("India won by 8 wkts (50b rem)"), never composed from the raw score -- cricket results
@@ -21,7 +23,7 @@ export type CricketTeamSummary = { teamName: string; match: CricketMatch | null 
 type EspnCricketTeamRef = { id?: string; displayName?: string; abbreviation?: string };
 type EspnCricketCompetitor = { team?: EspnCricketTeamRef; homeAway?: string; score?: string; winner?: boolean | string };
 type EspnCricketStatus = { type?: { state?: string; description?: string; shortDetail?: string }; summary?: string };
-type EspnCricketEvent = { date?: string; competitions?: Array<{ status?: EspnCricketStatus; competitors?: EspnCricketCompetitor[] }> };
+type EspnCricketEvent = { date?: string; competitions?: Array<{ status?: EspnCricketStatus; competitors?: EspnCricketCompetitor[]; description?: string; shortDescription?: string }> };
 type EspnCricketScoreboard = { events?: EspnCricketEvent[] };
 type EspnHeaderLeague = { id?: string; name?: string; abbreviation?: string; smartdates?: string[]; events?: Array<{ competitors?: Array<{ displayName?: string; abbreviation?: string }> }> };
 type EspnHeaderResponse = { sports?: Array<{ leagues?: EspnHeaderLeague[] }> };
@@ -69,6 +71,7 @@ function toMatch(event: EspnCricketEvent, teamQuery: string): CricketMatch | nul
     opponent: opponent.team?.displayName ?? "an unlisted opponent",
     isHome: me.homeAway === "home",
     date: event.date,
+    description: comp?.shortDescription ?? comp?.description ?? "",
     status,
     statusDetail: type?.shortDetail ?? type?.description ?? "",
     summary: comp?.status?.summary ?? "",

@@ -1,83 +1,108 @@
-import { embedCard, type SportsCardPayload } from "@/lib/chat/card-payload";
+import { embedCard, type SportsCardPayload, type SportsSide } from "@/lib/chat/card-payload";
 import { fetchTeamSummary, type TeamSummary } from "@/lib/tools/sports/espn";
 import { fetchCricketTeamSummary, type CricketTeamSummary } from "@/lib/tools/sports/espn-cricket";
 import { extractSportsSlotsForUser } from "./sports-query-runtime";
 import { answerPublicSearch } from "./general";
 
-function formatDate(iso: string) {
-  try { return new Date(iso).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }); } catch { return iso; }
+const LEAGUE_LABELS: Record<string, string> = {
+  nfl: "NFL", nba: "NBA", wnba: "WNBA", mlb: "MLB", nhl: "NHL",
+  "eng.1": "Premier League", "esp.1": "La Liga", "ger.1": "Bundesliga", "ita.1": "Serie A", "fra.1": "Ligue 1", "usa.1": "MLS",
+};
+function leagueLabel(league: string) { return LEAGUE_LABELS[league] ?? league.toUpperCase(); }
+
+function dateTile(iso: string) {
+  const date = new Date(iso);
+  return { month: date.toLocaleDateString("en-US", { month: "short" }).toUpperCase(), day: String(date.getDate()) };
 }
+
+const NO_EVENT: Pick<SportsCardPayload, "event" | "upcoming" | "eventLabel" | "statusTag"> = { event: null, upcoming: null, eventLabel: "", statusTag: { label: "", tone: "neutral" } };
 
 /** Every number here comes straight from the schedule, no model in the loop -- the same reasoning R32/R45 already applied to places,
  * fares, weather and stocks. */
-export function buildSportsCard(summary: TeamSummary): SportsCardPayload {
+export function buildSportsCard(summary: TeamSummary, sport: string, league: string): SportsCardPayload {
   const { game, nextGame, teamName, record } = summary;
-  const opponentLabel = game ? `${game.isHome ? "vs" : "at"} ${game.opponent}` : "";
-  const stats: { label: string; value: string }[] = [];
-  if (record) stats.push({ label: "Record", value: record });
-  if (nextGame && nextGame !== game) stats.push({ label: "Next game", value: `${nextGame.isHome ? "vs" : "at"} ${nextGame.opponent}, ${formatDate(nextGame.date)}` });
+  const kindLabel = `${leagueLabel(league)} score`;
+  const attribution = "espn.com";
 
   if (!game) {
-    return {
-      kind: "sports", eyebrow: teamName, headline: "No game found", statusLabel: "", resultDirection: "flat",
-      opponentLabel: "", insight: "No recent or upcoming game came back for this team.", stats, attribution: "espn.com · updated just now",
-    };
+    return { kind: "sports", kindLabel, freshness: "", summary: "No recent or upcoming game came back for this team.", attribution, ...NO_EVENT };
   }
   if (game.status === "scheduled") {
+    const { month, day } = dateTile(game.date);
     return {
-      kind: "sports", eyebrow: teamName, headline: opponentLabel, statusLabel: game.statusDetail, resultDirection: "flat",
-      opponentLabel, insight: `Their next game is ${game.isHome ? "at home" : "on the road"} against ${game.opponent}.`, stats, attribution: "espn.com · updated just now",
+      kind: "sports", kindLabel, freshness: "", summary: "", attribution, event: null,
+      eventLabel: "", statusTag: { label: "", tone: "neutral" },
+      upcoming: { month, day, matchup: `${teamName} ${game.isHome ? "vs" : "at"} ${game.opponent}`, detail: `${leagueLabel(league)} · ${game.isHome ? "Home" : "Away"}` },
     };
   }
-  const headline = `${game.teamScore}–${game.opponentScore}`;
+
+  const mySide: SportsSide = { name: teamName, score: String(game.teamScore ?? ""), detail: "", winner: game.result === "win" };
+  const oppSide: SportsSide = { name: game.opponent, score: String(game.opponentScore ?? ""), detail: "", winner: game.result === "loss" };
+  const sides: [SportsSide, SportsSide] = game.isHome ? [oppSide, mySide] : [mySide, oppSide];
+  const eventLabel = `${leagueLabel(league)} · ${game.isHome ? "vs" : "at"} ${game.opponent}`;
+
   if (game.status === "in_progress") {
     return {
-      kind: "sports", eyebrow: teamName, headline, statusLabel: game.statusDetail, resultDirection: "flat",
-      opponentLabel, insight: `Live now, ${opponentLabel}.`, stats, attribution: "espn.com · updated just now",
+      kind: "sports", kindLabel, freshness: "", summary: `Live now, ${game.isHome ? "vs" : "at"} ${game.opponent}.`, attribution,
+      eventLabel, statusTag: { label: game.statusDetail || "Live", tone: "live" }, event: { final: false, sides, outcome: "" }, upcoming: null,
     };
   }
-  const direction = game.result === "win" ? "up" : game.result === "loss" ? "down" : "flat";
-  const resultWord = game.result === "win" ? "Won" : game.result === "loss" ? "Lost" : "Tied";
+  const winnerName = game.result === "win" ? teamName : game.result === "loss" ? game.opponent : null;
+  const margin = Math.abs((game.teamScore ?? 0) - (game.opponentScore ?? 0));
+  const outcome = winnerName ? `${winnerName} won by ${margin}.` : `${teamName} and ${game.opponent} tied.`;
+  const stats: { label: string; value: string }[] = [];
+  if (record) stats.push({ label: "Record", value: record });
+  if (nextGame && nextGame !== game) stats.push({ label: "Next game", value: `${nextGame.isHome ? "vs" : "at"} ${nextGame.opponent}` });
   return {
-    kind: "sports", eyebrow: teamName, headline, statusLabel: `Final · ${game.result === "win" ? "W" : game.result === "loss" ? "L" : "T"}`,
-    resultDirection: direction, opponentLabel, insight: `${resultWord} ${opponentLabel}.`, stats, attribution: "espn.com · updated just now",
+    kind: "sports", kindLabel, freshness: "",
+    summary: stats.length ? stats.map((stat) => `${stat.label}: ${stat.value}`).join(" · ") : "",
+    attribution, eventLabel, statusTag: { label: "Final", tone: "neutral" }, event: { final: true, sides, outcome }, upcoming: null,
   };
 }
 
 /** Cricket has no equivalent of "the score" (a single number), no fixed win-by-higher-number rule (by wickets, by runs, by an innings, or
  * no result), and no readily-available season record the way a club or franchise does -- so this never reuses buildSportsCard's number
- * comparisons, only the same card shape and status-chip convention. */
+ * comparisons, only the same card shape and status-chip convention. Its own plain-English result sentence (from ESPN, never composed
+ * here) is the outcome line. */
 export function buildCricketCard(summary: CricketTeamSummary): SportsCardPayload {
   const { teamName, match } = summary;
+  const kindLabel = "Cricket score";
+  const attribution = "espn.com";
   if (!match) {
-    return {
-      kind: "sports", eyebrow: teamName, headline: "No match found", statusLabel: "", resultDirection: "flat",
-      opponentLabel: "", insight: "No recent or upcoming match came back for this team.", stats: [], attribution: "espn.com · updated just now",
-    };
+    return { kind: "sports", kindLabel, freshness: "", summary: "No recent or upcoming match came back for this team.", attribution, ...NO_EVENT };
   }
-  const opponentLabel = `${match.isHome ? "vs" : "at"} ${match.opponent}`;
   if (match.status === "scheduled") {
+    const { month, day } = dateTile(match.date);
     return {
-      kind: "sports", eyebrow: teamName, headline: opponentLabel, statusLabel: match.statusDetail, resultDirection: "flat",
-      opponentLabel, insight: `Their next match is ${match.isHome ? "at home" : "on the road"} against ${match.opponent}.`, stats: [], attribution: "espn.com · updated just now",
+      kind: "sports", kindLabel, freshness: "", summary: "", attribution, event: null,
+      eventLabel: "", statusTag: { label: "", tone: "neutral" },
+      upcoming: { month, day, matchup: `${teamName} ${match.isHome ? "vs" : "at"} ${match.opponent}`, detail: `Cricket${match.description ? ` · ${match.description}` : ""}` },
     };
   }
-  const headline = `${match.myScore || "—"} vs ${match.opponentScore || "—"}`;
+
+  const mySide: SportsSide = { name: teamName, score: match.myScore || "—", detail: "", winner: match.result === "win" };
+  const oppSide: SportsSide = { name: match.opponent, score: match.opponentScore || "—", detail: "", winner: match.result === "loss" };
+  const sides: [SportsSide, SportsSide] = match.isHome ? [oppSide, mySide] : [mySide, oppSide];
+  const eventLabel = `Cricket${match.description ? ` · ${match.description}` : ""}`;
+
   if (match.status === "in_progress") {
     return {
-      kind: "sports", eyebrow: teamName, headline, statusLabel: match.statusDetail || "Live", resultDirection: "flat",
-      opponentLabel, insight: match.summary || `Live now, ${opponentLabel}.`, stats: [], attribution: "espn.com · updated just now",
+      kind: "sports", kindLabel, freshness: "", summary: match.summary || `Live now, ${match.isHome ? "vs" : "at"} ${match.opponent}.`, attribution,
+      eventLabel, statusTag: { label: match.statusDetail || "Live", tone: "live" }, event: { final: false, sides, outcome: "" }, upcoming: null,
     };
   }
-  const direction = match.result === "win" ? "up" : match.result === "loss" ? "down" : "flat";
   return {
-    kind: "sports", eyebrow: teamName, headline, statusLabel: `Final${match.result === "win" ? " · W" : match.result === "loss" ? " · L" : ""}`,
-    resultDirection: direction, opponentLabel, insight: match.summary || `${opponentLabel}.`, stats: [], attribution: "espn.com · updated just now",
+    kind: "sports", kindLabel, freshness: "", summary: "", attribution,
+    eventLabel, statusTag: { label: "Final", tone: "neutral" }, event: { final: true, sides, outcome: match.summary }, upcoming: null,
   };
 }
 
 function renderSportsText(card: SportsCardPayload): string {
-  return `### ${card.eyebrow}\n\n${card.headline}${card.statusLabel ? ` · ${card.statusLabel}` : ""}\n\n${card.insight}`;
+  const lines = [`### ${card.kindLabel}`];
+  if (card.summary) lines.push(card.summary);
+  if (card.event) lines.push(`${card.event.sides.map((side) => `${side.name} ${side.score}`).join(" · ")}${card.event.outcome ? `\n\n${card.event.outcome}` : ""}`);
+  if (card.upcoming) lines.push(card.upcoming.matchup);
+  return lines.join("\n\n");
 }
 
 /**
@@ -99,7 +124,7 @@ export async function answerSports(query: string, userId: string, memoryContext 
     }
     const summary = await fetchTeamSummary(outcome.slots.sport, outcome.slots.league, outcome.slots.team);
     if (!summary) return fallback();
-    const card = buildSportsCard(summary);
+    const card = buildSportsCard(summary, outcome.slots.sport, outcome.slots.league);
     return embedCard(renderSportsText(card), card);
   } catch {
     return fallback();

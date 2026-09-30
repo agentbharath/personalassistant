@@ -67,15 +67,17 @@ describe("a message carrying a card payload (free)", () => {
 
   it("renders a sports card instead of markdown, and never leaks the raw JSON fence into the page", () => {
     const sports: SportsCardPayload = {
-      kind: "sports", eyebrow: "San Francisco 49ers", headline: "36–30", statusLabel: "Final · W", resultDirection: "up",
-      opponentLabel: "vs Arizona Cardinals", insight: "Won vs Arizona Cardinals.",
-      stats: [{ label: "Record", value: "3-0" }, { label: "Next game", value: "vs Denver Broncos, Sun, Oct 4" }],
-      attribution: "espn.com · updated just now",
+      kind: "sports", kindLabel: "NFL score", freshness: "", summary: "Record: 3-0",
+      eventLabel: "NFL · vs Arizona Cardinals", statusTag: { label: "Final", tone: "neutral" },
+      event: { final: true, sides: [
+        { name: "Arizona Cardinals", score: "30", detail: "", winner: false },
+        { name: "San Francisco 49ers", score: "36", detail: "", winner: true },
+      ], outcome: "San Francisco 49ers won by 6." },
+      upcoming: null, attribution: "espn.com",
     };
-    const html = renderToStaticMarkup(<AssistantMessage>{embedCard("### San Francisco 49ers\n\n36–30 · Final · W", sports)}</AssistantMessage>);
-    expect(html).toContain("36–30");
-    expect(html).toContain("Won vs Arizona Cardinals");
-    expect(html).toContain("Denver Broncos");
+    const html = renderToStaticMarkup(<AssistantMessage>{embedCard("### NFL score\n\n36-30", sports)}</AssistantMessage>);
+    expect(html).toContain("36");
+    expect(html).toContain("San Francisco 49ers won by 6");
     expect(html).not.toContain("daylark-card");
     expect(html).not.toContain('"kind":"sports"');
   });
