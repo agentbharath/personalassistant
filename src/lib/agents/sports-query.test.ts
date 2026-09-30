@@ -30,6 +30,11 @@ describe("sports slot extraction (R47)", () => {
     expect(outcome).toEqual({ kind: "unresolved" });
   });
 
+  it("stays unresolved for a sport ESPN isn't wired up for, even when the model says resolved", async () => {
+    const outcome = await extractSportsSlots("who won the All Blacks game", complete({ resolved: true, sport: "rugby", league: "rugby-union", team: "new zealand" }));
+    expect(outcome).toEqual({ kind: "unresolved" });
+  });
+
   it("degrades to unavailable, never a crash, on a malformed or missing model response", async () => {
     const malformed = vi.fn().mockResolvedValue({ content: [{ type: "text", text: "{\"resolved\": not valid json" }] });
     expect(await extractSportsSlots("x", malformed)).toEqual({ kind: "unavailable" });
