@@ -66,3 +66,10 @@ it("saves nothing for an empty top pick, so a failed suggestion cannot look like
 it("says nothing when there is nothing saved, rather than an empty record block", () => {
   expect(suggestionRecallContext([])).toBe("");
 });
+
+it("recalls each option with its price and description when the record has them, and still works for older name-only records", () => {
+  const withOptions = suggestionRecallContext([{ subject: "Windbreakers", topPick: "A", alternatives: ["B"], options: [{ name: "A", metric: "$24", meta: "Target · 4.4" }, { name: "B", metric: "$29", meta: "Walmart" }], updatedAt: Date.now() }]);
+  expect(withOptions).toContain("$24");
+  expect(withOptions).toContain("Target");
+  expect(suggestionRecallContext([{ subject: "Windbreakers", topPick: "A", alternatives: ["B"], updatedAt: Date.now() }])).toContain("Windbreakers");
+});

@@ -47,7 +47,7 @@ type Source = { title: string; url: string; snippet: string };
 /** So a later chat can recall this suggestion ("which product did you suggest for strawberry skin") -- optional and never required: a
  * live eval or any other caller with no conversation to save against simply omits it, the same convention research.ts's own
  * RememberResearch already established. */
-export type RememberSuggestion = (state: { subject: string; topPick: string; alternatives: string[] }) => Promise<void>;
+export type RememberSuggestion = (state: { subject: string; topPick: string; alternatives: string[]; options: Array<{ name: string; metric: string; meta: string }> }) => Promise<void>;
 
 function actionLabelFor(url: string) {
   try { return `View at ${new URL(url).hostname.replace(/^www\./, "")}`; } catch { return "View source"; }
@@ -113,7 +113,7 @@ export async function answerSuggestions(query: string, complete: (params: Anthro
     const output = outputSchema.parse(JSON.parse(block.text));
     if (!output.topPick.name.trim()) return fallback();
     const card = buildCard(query, output, sources);
-    if (remember) await remember({ subject: card.kindLabel, topPick: card.topPick.name, alternatives: card.rows.map((row) => row.name) }).catch(() => undefined);
+    if (remember) await remember({ subject: card.kindLabel, topPick: card.topPick.name, alternatives: card.rows.map((row) => row.name), options: [card.topPick, ...card.rows].map((option) => ({ name: option.name, metric: option.metric, meta: option.meta })) }).catch(() => undefined);
     return embedCard(renderSuggestionText(card), card);
   } catch (error) {
     reportFailure("suggestions_failed", error, { query });

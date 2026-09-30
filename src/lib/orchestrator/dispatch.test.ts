@@ -12,6 +12,8 @@ const mocks = vi.hoisted(() => ({
   listMemories: vi.fn(), createMemory: vi.fn(), forgetMemory: vi.fn(), supersedeMemory: vi.fn(),
   extractMemoriesForUser: vi.fn(), findMatchingMemories: vi.fn(), renderMemories: vi.fn(),
 }));
+const repair = vi.hoisted(() => ({ fn: vi.fn() }));
+vi.mock("./search-query", () => ({ repairSearchQueryForUser: repair.fn }));
 vi.mock("@/lib/memory/store", () => ({ listMemories: mocks.listMemories, createMemory: mocks.createMemory, forgetMemory: mocks.forgetMemory, supersedeMemory: mocks.supersedeMemory }));
 vi.mock("@/lib/memory/context", () => ({ buildMemoryContext: () => "" }));
 vi.mock("@/lib/memory/commands", () => ({ findMatchingMemories: mocks.findMatchingMemories, renderMemories: mocks.renderMemories }));
@@ -110,11 +112,21 @@ describe("a web search uses the search the router wrote (free)", () => {
     expect(result?.answer).toContain("Protein bars: go with RXBAR.");
     expect(result?.answer).toContain("Collagen: go with marine collagen.");
   });
-  it("asks rather than searching the raw message when the router wrote no query (R19.5: a web_search always names its own search)", async () => {
+  it("asks rather than searching the raw message when the router wrote no query and the conversation can't supply one (R19.5)", async () => {
+    repair.fn.mockResolvedValue(null);
     const result = await dispatchDecision(decision({ operation: "web_search" }), ctx);
     expect(mocks.answerPublicSearch).not.toHaveBeenCalled();
     expect(result?.answer).toMatch(/what place should i search/i);
     expect(result?.status).toBe("waiting_for_user");
+    const other = await dispatchDecision(decision({ operation: "web_search", searchKind: "general" } as never), ctx);
+    expect(other?.answer).toMatch(/what would you like me to search for/i);
+  });
+  it("writes out a missing query from the conversation instead of asking for a place (found live: a suggestions chip came back with no query)", async () => {
+    repair.fn.mockResolvedValue("men's medium windbreaker jackets size availability Target Walmart");
+    mocks.answerPublicSearch.mockResolvedValue("Medium is in stock.");
+    const result = await dispatchDecision(decision({ operation: "web_search", searchKind: "general" } as never), ctx);
+    expect(mocks.answerPublicSearch.mock.calls[0][0]).toBe("men's medium windbreaker jackets size availability Target Walmart");
+    expect(result?.answer).toContain("Medium is in stock.");
   });
 });
 

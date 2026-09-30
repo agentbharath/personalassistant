@@ -74,7 +74,9 @@ import { reportFailure } from "@/lib/observability/report";
 // v51: a new "verdict" searchKind (R47) for a follow-up that judges the options a suggestions card just showed ("are they good?", "which
 // one should I get?", "is the cheap one worth it") -- a bottom line plus a verdict per earlier option, grounded in a fresh search for
 // reviews of those exact products, instead of a plain search that has lost which options were meant.
-export const ROUTER_VERSION = "router-v51";
+// v52: a web_search always carries a full searchQuery, even a short suggestions chip that only makes sense in its conversation -- found
+// live, R47: "Verify medium size availability" came back with none and dispatch asked for a place. (Dispatch now also repairs a missing one.)
+export const ROUTER_VERSION = "router-v52";
 /** R22: when in doubt, ask. Below this the router's one question is asked and nothing runs. */
 export const ROUTER_CONFIDENCE_THRESHOLD = 0.8;
 
@@ -453,7 +455,7 @@ Two or three genuinely separate subjects in one request ("suggest some protein b
 
 Rules:
 - Choose the most specific operation. Read typos and shorthand using the recent conversation.
-- Resolve the current reply against lastAssistantTurn and recent BEFORE asking. An answer selecting one of your offered options is complete; perform it without asking the same question again. "Yes" after an offered public search means web_search with that offered topic; "search for sudoku solver code" and "yes, search for it" need no confirmation. Carry the subject forward in searchQuery. Never let stale savedEmailSearch override the active question or a clear topic change. A previous mistaken refusal or clarification is not a capability constraint.
+- Resolve the current reply against lastAssistantTurn and recent BEFORE asking. An answer selecting one of your offered options is complete; perform it without asking the same question again. "Yes" after an offered public search means web_search with that offered topic; "search for sudoku solver code" and "yes, search for it" need no confirmation. Carry the subject forward in searchQuery. A web_search ALWAYS has a full, self-contained searchQuery, never null -- including a short tap-to-send follow-up that only makes sense in the conversation ("verify medium size availability", "compare Target vs Walmart", "check the Baleaf option", "the second one"): write it out from the conversation, naming the product or topic. Never let stale savedEmailSearch override the active question or a clear topic change. A previous mistaken refusal or clarification is not a capability constraint.
 - If the user has already clarified the same task, choose the clarified operation. Do not repeat or paraphrase the question they just answered. Only ask for a genuinely missing field that prevents the requested action.
 - Viewing bill reminders or dues is bills_list; generic scheduled alarms are not available.
 - "bills" as documents in the inbox is email; "what do I owe" or "outstanding bills" is bills_list.

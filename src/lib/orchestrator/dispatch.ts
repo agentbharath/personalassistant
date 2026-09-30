@@ -16,6 +16,7 @@ import { answerStock } from "@/lib/agents/stocks";
 import { answerSports } from "@/lib/agents/sports";
 import { answerSuggestionsForUser } from "@/lib/agents/suggestions-runtime";
 import { answerVerdictForUser } from "@/lib/agents/verdict-runtime";
+import { repairSearchQueryForUser } from "./search-query";
 import type { RememberSuggestion } from "@/lib/agents/suggestions";
 import { saveSuggestionState } from "@/lib/conversations/suggestion-state";
 import { runBillsCommand } from "@/lib/agents/bills-agent";
@@ -226,7 +227,10 @@ export async function dispatchDecision(decision: RouterDecision, ctx: DispatchCo
       // R19.5: structure only. A web_search decision always names its own search (the router's own rule); the raw message is never a
       // substitute; it has no location or context that made this a search in the first place, and searching it verbatim searches nothing
       // useful. Missing here means the router itself was unsure, so ask rather than guess.
-      if (!decision.searchQuery?.trim()) return done("What place should I search? Say a city, neighborhood, or ZIP code.", [], "waiting_for_user");
+      // Missing for a follow-up that only makes sense in its conversation (a suggestions chip, "the second one"): written out from that
+      // conversation before anything is asked. Only when even that finds nothing does it ask -- for a place when the kind is a place search.
+      const searchQuery = decision.searchQuery?.trim() || await repairSearchQueryForUser(input, context, userId);
+      if (!searchQuery) return done(decision.searchKind === "places" || !decision.searchKind ? "What place should I search? Say a city, neighborhood, or ZIP code." : "What would you like me to search for?", [], "waiting_for_user");
       prepareAgentStage(["general"], "balanced");
       const searchMemory = buildMemoryContext(await listMemories(userId).catch(() => []));
       const homeRegion = (await loadLearnings(userId).catch(() => NO_LEARNINGS)).homeLocation;
@@ -251,7 +255,7 @@ export async function dispatchDecision(decision: RouterDecision, ctx: DispatchCo
         return done(answers.join("\n\n---\n\n"), ["general"]);
       }
       // Remember what was shown, so "the second one" or "which is open now?" can be read next turn.
-      return done(await runOne(decision.searchQuery, 0), ["general"]);
+      return done(await runOne(searchQuery, 0), ["general"]);
     }
     case "multi": {
       const plan = planClauseInstructions(input, decision.agents);

@@ -66,3 +66,10 @@ it("saves nothing for an empty answer, so a failed turn cannot look like a real,
 it("says nothing when there is nothing saved, rather than an empty record block", () => {
   expect(conversationAnswerRecallContext([])).toBe("");
 });
+
+it("keeps enough of a saved answer that a verdict's last row is still recallable (found live: row 4 of a 673-character verdict sat past the old 400-character cut)", () => {
+  const answer = "### Verdict on the 4 windbreakers above\n\n" + "x".repeat(450) + "\n\n**North End pullover** $21.81 — Skip: no review evidence";
+  const context = conversationAnswerRecallContext([{ query: "are they good?", answer, updatedAt: Date.now() }]);
+  expect(context).toContain("North End pullover");
+  expect(context).toContain("Skip");
+});
