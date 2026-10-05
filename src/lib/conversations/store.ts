@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { decryptText, encryptText } from "@/lib/security/encryption";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-export type StoredMessage = { role: "user" | "assistant"; content: string; choices?: string[]; sequence?: string };
+export type StoredMessage = { role: "user" | "assistant"; content: string; choices?: string[]; notice?: boolean; retryable?: boolean; sequence?: string };
 export type ConversationSummary = { id: string; title: string; updatedAt: string; pinned?: boolean; pinnedAt?: string | null };
 const DISPLAY_MESSAGE_LIMIT = 50;
 const RECENT_CONTEXT_LIMIT = 12;
@@ -45,20 +45,26 @@ export function summarizeConversationTitle(input: string) {
 
 export async function appendMessage(userId: string, conversationId: string, message: StoredMessage) {
   const supabase = await createClient();
-  const { error } = await supabase.rpc(message.role === "assistant" && message.choices?.length ? "append_conversation_message_with_context" : "append_conversation_message", {
+  const metadata = message.role === "assistant" ? {
+    ...(message.choices?.length ? { choices: message.choices } : {}),
+    ...(message.notice ? { notice: true } : {}),
+    ...(typeof message.retryable === "boolean" ? { retryable: message.retryable } : {}),
+  } : {};
+  const hasMetadata = Object.keys(metadata).length > 0;
+  const { error } = await supabase.rpc(hasMetadata ? "append_conversation_message_with_context" : "append_conversation_message", {
     p_user_id: userId,
     p_conversation_id: conversationId,
     p_role: message.role,
     p_content_ciphertext: encryptText(message.content),
-    ...(message.role === "assistant" && message.choices?.length ? {p_context_ciphertext: encryptText(JSON.stringify({choices: message.choices}))} : {}),
+    ...(hasMetadata ? { p_context_ciphertext: encryptText(JSON.stringify(metadata)) } : {}),
   });
-  if (error && message.role === "assistant" && message.choices?.length &&
+  if (error && hasMetadata &&
     ["PGRST202", "42883"].includes(error.code) && error.message.includes("append_conversation_message_with_context")) {
     // During a rolling schema upgrade, preserve the answer and options as encrypted text.
     // Only retry a definitively missing function, never an ambiguous network/write failure.
     const fallback = await supabase.rpc("append_conversation_message", {
       p_user_id: userId, p_conversation_id: conversationId, p_role: message.role,
-      p_content_ciphertext: encryptText(`${message.content}\n\nOptions: ${message.choices.join(" · ")}`),
+      p_content_ciphertext: encryptText(message.content + (message.choices?.length ? `\n\nOptions: ${message.choices.join(" · ")}` : "")),
     });
     if (fallback.error) throw fallback.error;
     return;
@@ -93,7 +99,7 @@ export async function getConversation(userId: string, conversationId: string) {
     oldestSequence: decryptedMessages[0]?.sequence,
     contextMessages: [
       ...(summary ? [{ role: "assistant" as const, content: `Earlier conversation summary:\n${summary}` }] : []),
-      ...decryptedMessages.slice(-RECENT_CONTEXT_LIMIT),
+      ...decryptedMessages.filter(message => !message.notice).slice(-RECENT_CONTEXT_LIMIT),
     ],
   };
 }
@@ -139,7 +145,7 @@ export async function compactConversationContext(userId: string, conversationId:
     .order("sequence_number", { ascending: true });
   if (olderError || !older?.length) return;
   const prior = conversation.context_summary_ciphertext ? decryptText(conversation.context_summary_ciphertext as string) : "";
-  const additions = older.flatMap((message) => message.content_ciphertext && (message.role === "user" || message.role === "assistant")
+  const additions = older.flatMap((message) => message.content_ciphertext && !messageChoices(message.context_ciphertext).notice && (message.role === "user" || message.role === "assistant")
     ? [`${message.role === "user" ? "User" : "Assistant"}: ${decryptText(message.content_ciphertext as string)}${messageChoices(message.context_ciphertext).choices ? " Options: " + messageChoices(message.context_ciphertext).choices!.join(" / ") : ""}`]
     : []);
   const summary = buildContextCheckpoint(prior, additions);

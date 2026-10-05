@@ -46,3 +46,17 @@ it("does not retry uncertain writes and risk duplicate answers",async()=>{
   await expect(appendMessage("user","chat",{role:"assistant",content:"Which?",choices:["A","B"]})).rejects.toMatchObject({message:"Network timeout"});
   expect(db.rpc).toHaveBeenCalledTimes(1);
 });
+
+it.each([true, false])("restores a failure notice with retryable=%s after reopening and excludes it from answer context", async retryable => {
+  await appendMessage("user", "chat", { role: "user", content: "any recent sports news?" });
+  await appendMessage("user", "chat", { role: "assistant", content: "Stopped safely.", notice: true, retryable });
+  expect(db.rpc.mock.calls[1][0]).toBe("append_conversation_message_with_context");
+  const reopened = await getConversation("user", "chat");
+  expect(reopened?.messages.at(-1)).toMatchObject({ content: "Stopped safely.", notice: true, retryable });
+  expect(reopened?.contextMessages).toEqual([expect.objectContaining({ role: "user" })]);
+});
+it("keeps the failure text on older databases without the metadata RPC", async () => {
+  db.rpc.mockResolvedValueOnce({ error: { code: "PGRST202", message: "Could not find public.append_conversation_message_with_context" } });
+  await appendMessage("user", "chat", { role: "assistant", content: "Stopped safely.", notice: true, retryable: true });
+  expect((await getConversation("user", "chat"))?.messages.at(-1)?.content).toBe("Stopped safely.");
+});

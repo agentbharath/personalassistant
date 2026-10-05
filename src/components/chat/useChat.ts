@@ -138,6 +138,10 @@ export function useChat({ conversationId: initialConversationId, initialMessages
         writeDraft(newConversationId, readDraft(undefined));
         writeDraft(undefined, "");
         setConversationId(newConversationId);
+      }
+      // A route change remounts Chat from saved history. Keep an unsaved answer/notice visible;
+      // adopt the saved URL on a later successful retry as well.
+      if (newConversationId && newConversationId !== initialConversationId && !body?.persistenceWarning) {
         router.replace(`/?conversation=${newConversationId}`, { scroll: false });
         router.refresh();
       }

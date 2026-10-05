@@ -70,6 +70,7 @@ export async function callClaude(operation: string, params: Anthropic.MessageCre
         attempt,
         inputTokens: response.usage.input_tokens,
         outputTokens: response.usage.output_tokens,
+        stopReason: response.stop_reason,
         actualCostUsd: Math.round(actualCostUsd * 1_000_000) / 1_000_000,
         durationMs: Math.round(performance.now() - startedAt),
         outcome: "complete",

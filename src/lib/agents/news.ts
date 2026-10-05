@@ -1,3 +1,5 @@
+import { getRequestContext, remainingRequestMs } from "@/lib/runtime/request-context";
+import { QueryBudgetUnavailableError } from "@/lib/runtime/query-budget";
 import { z } from "zod";
 import type Anthropic from "@anthropic-ai/sdk";
 import { searchPublicWeb } from "@/lib/tools/general/tavily-search";
@@ -72,7 +74,11 @@ export function keepRelevantStories(output: Output, sources: Source[], now: Date
  * plain search rather than dressing unrelated news up as an answer.
  */
 export async function answerNews(query: string, complete: (params: Anthropic.MessageCreateParamsNonStreaming) => Promise<Anthropic.Message>, memoryContext = "", today?: string, now: Date = new Date()): Promise<string> {
-  const fallback = () => answerPublicSearch(query, undefined, memoryContext, today);
+  const hasTimeForAnotherPass = () => !getRequestContext()?.signal?.aborted && remainingRequestMs(60_000) >= 30_000;
+  const fallback = () => {
+    if (!hasTimeForAnotherPass()) throw new QueryBudgetUnavailableError("time");
+    return answerPublicSearch(query, undefined, memoryContext, today);
+  };
   try {
     const attempt = async (days: number) => {
       const research = await searchPublicWeb(query, { topic: "news", days, depth: "basic", maxResults: 7, snippetLength: 700 });
@@ -81,12 +87,14 @@ export async function answerNews(query: string, complete: (params: Anthropic.Mes
       const evidence = sources.map((source, index) => `[${index + 1}] ${source.title}${source.published ? ` (published ${source.published})` : ""}\nEvidence: ${source.snippet}`).join("\n\n");
       const response = await complete({
         model: "claude-haiku-4-5-20251001",
-        max_tokens: 800,
+        max_tokens: 1800,
         temperature: 0,
         system: `You turn recent news evidence into a short digest for someone asking "${query}". Today is ${today ?? now.toISOString().slice(0, 10)}. subject: what the person is asking about, in a few words, taken from their question and never from the evidence. The evidence was found by a keyword search and is often about something else that merely shares a word -- a carrier named Cricket is not the sport, a mobile outage elsewhere is not news about a mobile company. stories: up to 5 distinct stories, most recent and notable first; each has source (the evidence number, never reused), headline (a plain one-line headline under 90 characters saying what happened, from that evidence; not the site name, not clickbait), and aboutSubject: true ONLY when the story is actually about the subject, false for anything else (list it as false rather than leaving it out). Skip evidence that isn't recent news at all (a live-scores page, a section front, a review or forum page). kindLabel: "<subject> news" in plain sentence case ("Tech news", "Cricket Wireless news"). summary: one or two short plain sentences, under 200 characters in all, of the most notable thing or two from the aboutSubject stories only -- only what the evidence states, never a name, number or claim that isn't written there; empty when no story is about the subject. chips: 2 or 3 short phrases (3-5 words) for realistic follow-ups grounded in those stories. Return JSON only.`,
         messages: [{ role: "user", content: `News evidence:\n${evidence}` }],
         output_config: { format: { type: "json_schema", schema: JSON_SCHEMA } },
       });
+      // A token-limited response is not completed JSON, even if the HTTP call succeeded.
+      if (response.stop_reason === "max_tokens") throw new Error("NEWS_OUTPUT_TRUNCATED");
       const block = response.content.find((item) => item.type === "text");
       if (!block || block.type !== "text") return null;
       const output = outputSchema.parse(JSON.parse(block.text));
@@ -94,9 +102,15 @@ export async function answerNews(query: string, complete: (params: Anthropic.Mes
     };
 
     let result = await attempt(3);
-    if (!result || result.stories.length < 2) {
-      const wider = await attempt(14);
-      if (wider && wider.stories.length > (result?.stories.length ?? 0)) result = wider;
+    if ((!result || result.stories.length < 2) && hasTimeForAnotherPass()) {
+      try {
+        const wider = await attempt(14);
+        if (wider && wider.stories.length > (result?.stories.length ?? 0)) result = wider;
+      } catch (error) {
+        // An optional expansion must not discard an already grounded story.
+        if (!result?.stories.length || getRequestContext()?.signal?.aborted) throw error;
+        reportFailure("news_expansion_failed", error);
+      }
     }
     if (!result || !result.stories.length) return fallback();
     const { output, sources, stories } = result;
@@ -113,6 +127,7 @@ export async function answerNews(query: string, complete: (params: Anthropic.Mes
     return embedCard(renderNewsText(card), card);
   } catch (error) {
     reportFailure("news_failed", error, { query });
+    if (getRequestContext()?.signal?.aborted || error instanceof QueryBudgetUnavailableError || (error instanceof Error && error.message === "NEWS_OUTPUT_TRUNCATED")) throw error;
     return fallback();
   }
 }

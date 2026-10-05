@@ -43,3 +43,10 @@ export function remainingRequestMs(fallback: number) {
   const deadlineAt = getRequestContext()?.deadlineAt;
   return deadlineAt ? Math.max(0, Math.min(fallback, deadlineAt - Date.now())) : fallback;
 }
+
+/** A known multi-stage read may need longer than a single lookup. Never shorten an existing deadline or raise its cost cap. */
+export function ensureRequestTime(totalMs: number) {
+  const context = getRequestContext();
+  if (!context || context.signal?.aborted) return;
+  context.deadlineAt = Math.max(context.deadlineAt ?? 0, (context.startedAt ?? Date.now()) + totalMs);
+}

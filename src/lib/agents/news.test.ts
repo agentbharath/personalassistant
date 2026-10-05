@@ -6,6 +6,7 @@ vi.mock("./general", () => ({ answerPublicSearch: mocks.publicSearch }));
 vi.mock("./sports-query-runtime", () => ({ extractSportsSlotsForUser: vi.fn() }));
 vi.mock("@/lib/tools/sports/espn-cricket", () => ({ fetchCricketRoundup: vi.fn() }));
 
+import { withRequestContext } from "@/lib/runtime/request-context";
 import { answerNews, storyAge } from "./news";
 import { extractCards } from "@/lib/chat/card-payload";
 
@@ -91,5 +92,47 @@ describe("the news digest (free)", () => {
     const card = extractCards(await answerNews("q", reply(output), "", "2026-09-30", now)).segments[0].card;
     expect(card?.kind).toBe("digest");
     expect(mocks.search.mock.calls.map((call) => call[1].days)).toEqual([3, 14]);
+  });
+});
+
+describe("news deadline handling (R48.2, free)", () => {
+  const oneStory = { ...output, stories: output.stories.slice(0, 1) };
+  const withinBudget = <T>(remaining: number, task: () => Promise<T>, signal?: AbortSignal) => withRequestContext({ requestId: "test", userId: "user", deadlineAt: Date.now() + remaining, signal }, task);
+
+  it("returns a grounded first result without widening when little time remains", async () => {
+    const card = extractCards(await withinBudget(15_000, () => answerNews("q", reply(oneStory)))).segments[0].card;
+    expect(card?.kind).toBe("digest");
+    expect(mocks.search).toHaveBeenCalledTimes(1);
+    expect(mocks.publicSearch).not.toHaveBeenCalled();
+  });
+
+  it("keeps the grounded first result if an optional wider search fails", async () => {
+    mocks.search.mockResolvedValueOnce({ sources }).mockRejectedValueOnce(new Error("search offline"));
+    const card = extractCards(await withinBudget(60_000, () => answerNews("q", reply(oneStory)))).segments[0].card;
+    expect(card?.kind === "digest" && card.sections[0].kind === "stories" && card.sections[0].stories).toHaveLength(1);
+    expect(mocks.publicSearch).not.toHaveBeenCalled();
+  });
+
+  it("does not start a fallback when there is not enough time to finish one", async () => {
+    mocks.search.mockResolvedValue({ sources: [] });
+    await expect(withinBudget(5_000, () => answerNews("q", reply(output)))).rejects.toMatchObject({ reason: "time" });
+    expect(mocks.search).toHaveBeenCalledTimes(1);
+    expect(mocks.publicSearch).not.toHaveBeenCalled();
+  });
+
+  it("does not restart work after the request is aborted", async () => {
+    const controller = new AbortController();
+    mocks.search.mockImplementation(async () => { controller.abort(); throw new DOMException("Timed out", "AbortError"); });
+    await expect(withinBudget(60_000, () => answerNews("q", reply(output)), controller.signal)).rejects.toMatchObject({ name: "AbortError" });
+    expect(mocks.search).toHaveBeenCalledTimes(1);
+    expect(mocks.publicSearch).not.toHaveBeenCalled();
+  });
+
+  it("rejects token-limited output instead of parsing it or restarting the search pipeline", async () => {
+    const complete = vi.fn().mockResolvedValue({ stop_reason: "max_tokens", content: [{ type: "text", text: '{"subject":"sports"' }] });
+    await expect(answerNews("q", complete)).rejects.toThrow("NEWS_OUTPUT_TRUNCATED");
+    expect(complete.mock.calls[0][0].max_tokens).toBe(1800);
+    expect(mocks.search).toHaveBeenCalledTimes(1);
+    expect(mocks.publicSearch).not.toHaveBeenCalled();
   });
 });

@@ -13,7 +13,7 @@ import { resolveRetryMessage } from "@/lib/conversations/retry";
 import { after } from "next/server";
 import { writeMemoriesFromMessage } from "@/lib/memory/extractor-runtime";
 
-/** Normal queries stop at 20 seconds; bulk imports may extend to 270 seconds, leaving time to save the answer. */
+/** Normal queries stop at 20 seconds; news may extend to 60 seconds, bulk imports to 270, leaving time to save the answer. */
 export const maxDuration = 300;
 
 const QUERY_TIMEOUT_MS = 20_000;
@@ -174,7 +174,7 @@ async function handle(request: Request, onProgress?: (agents: string[], scan?: R
       cacheHits: queryContext?.cacheHits,
       cacheMisses: queryContext?.cacheMisses,
     }).catch((telemetryError) => logFailure("query_telemetry", telemetryError));
-    return Response.json({
+    const failure = {
       error: errorCode,
       message: timedOut
         ? "This is taking longer than expected, so I stopped safely. Nothing unconfirmed was changed."
@@ -185,7 +185,19 @@ async function handle(request: Request, onProgress?: (agents: string[], scan?: R
         : "I couldn’t complete that request right now. Nothing unconfirmed was changed.",
       retryable: !costLimited && !tokenLimited,
       conversationId,
-    }, { status: timedOut ? 504 : costLimited || tokenLimited ? 429 : 503 });
+    };
+    let failureSequence: string | undefined;
+    let failurePersistenceWarning: string | undefined;
+    if (conversationId) {
+      try {
+        await appendMessage(userId, conversationId, { role: "assistant", content: failure.message, notice: true, retryable: failure.retryable });
+        failureSequence = await latestSequence(userId, conversationId).catch(() => undefined);
+      } catch (saveError) {
+        logFailure("conversation_write_failure", saveError);
+        failurePersistenceWarning = "This notice couldn’t be saved to chat history.";
+      }
+    }
+    return Response.json({ ...failure, sequence: failureSequence, persistenceWarning: failurePersistenceWarning }, { status: timedOut ? 504 : costLimited || tokenLimited ? 429 : 503 });
   }
 }
 

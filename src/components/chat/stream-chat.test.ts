@@ -30,3 +30,9 @@ it("preserves structured errors from non-streaming responses",async()=>{
   vi.stubGlobal("fetch",vi.fn(async()=>Response.json({message:"Sign in again",retryable:false},{status:401})));
   expect(await streamChat(payload,new AbortController().signal,vi.fn())).toEqual({status:401,body:{message:"Sign in again",retryable:false}});
 });
+
+it("preserves the terminal 504 error inside an HTTP 200 progress stream", async () => {
+  const body = { error: "QUERY_TIMED_OUT", message: "Stopped safely.", retryable: true, conversationId: "chat", sequence: "2" };
+  respond([encoder.encode('{"type":"progress","agents":[]}\n{"type":"progress","agents":["general"]}\n' + JSON.stringify({ type: "result", status: 504, body }) + "\n")]);
+  expect(await streamChat(payload, new AbortController().signal, vi.fn())).toEqual({ status: 504, body });
+});
