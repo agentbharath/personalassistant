@@ -282,3 +282,9 @@ describe("answerSports (free)", () => {
     expect(answer).toBe("fallback text");
   });
 });
+
+it.each(["nfl", "esp.1"])("uses the user's calendar date at a UTC month boundary for %s", (league) => {
+  const scheduled = summary({ game: game({ status: "scheduled", date: "2026-10-01T00:30:00Z" }) });
+  expect(buildSportsCard(scheduled, league === "nfl" ? "football" : "soccer", league, "America/Los_Angeles").upcoming).toMatchObject({ month: "SEP", day: "30" });
+  expect(buildSportsCard(scheduled, league === "nfl" ? "football" : "soccer", league, "Asia/Kolkata").upcoming).toMatchObject({ month: "OCT", day: "1" });
+});

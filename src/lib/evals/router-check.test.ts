@@ -57,3 +57,9 @@ describe("grading a router decision (free; a wrong grader would waste credits)",
     expect(checkDecision(decision({ operation: "web_search" }), { operation: "web_search", searchQueryIncludes: "Sunnyvale" })[0]).toMatch(/wanted it to include/);
   });
 });
+
+it("does not pass an operation that would actually ask a question instead of running", () => {
+  const hesitant = decision({ operation: "email", confidence: 0.4, clarification: "Which bank?" });
+  expect(checkDecision(hesitant, { operation: "email" })).not.toEqual([]);
+  expect(checkDecision(hesitant, { operation: "clarify" })).toEqual([]);
+});

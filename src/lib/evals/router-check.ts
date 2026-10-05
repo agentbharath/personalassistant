@@ -1,4 +1,4 @@
-import type { RouterDecision } from "@/lib/orchestrator/router";
+import { ROUTER_CONFIDENCE_THRESHOLD, type RouterDecision } from "@/lib/orchestrator/router";
 
 export type RouterExpect = {
   operation: string;
@@ -13,6 +13,8 @@ export type RouterExpect = {
   /** R22: the clarifying question should come with two or more tap-to-answer choices. */
   choices?: boolean;
   /** The web search the router wrote: it must include (or leave out) some text, compared without case. */
+  /** web_search only: which real source the router chose (places, sports, news, verdict, ...). */
+  searchKind?: string;
   searchQueryIncludes?: string;
   searchQueryExcludes?: string;
   /** general_answer only: whether the request wants every saved search result enumerated (R29). */
@@ -31,7 +33,10 @@ const MIN_REPLY = 40;
 export function checkDecision(decision: RouterDecision | null, want: RouterExpect): string[] {
   if (!decision) return ["router returned null (the model call failed, so nothing was read)"];
   const problems: string[] = [];
-  if (decision.operation !== want.operation) problems.push(`operation: wanted ${want.operation}, got ${decision.operation}${decision.clarification ? ` (asked: ${decision.clarification})` : ""}`);
+  // Below the confidence threshold the app asks the router's own question instead of acting, whatever operation the decision names --
+  // so for a case that expects a clarification, that counts as one.
+  const asks = decision.operation === "clarify" || (decision.confidence < ROUTER_CONFIDENCE_THRESHOLD && Boolean(decision.clarification));
+  if (want.operation === "clarify" ? !asks : (decision.operation !== want.operation || asks)) problems.push(`operation: wanted ${want.operation}, got ${decision.operation}${decision.clarification ? ` (asked: ${decision.clarification})` : ""}`);
   for (const key of ["sender", "matter", "merchant", "term"] as const) if (want[key] !== undefined && lower(decision[key]) !== lower(want[key])) problems.push(`${key}: wanted ${want[key]}, got ${decision[key]}`);
   if (want.paidOn !== undefined && decision.paidOn !== want.paidOn) problems.push(`paidOn: wanted ${want.paidOn}, got ${decision.paidOn}`);
   if (want.lesson) for (const [key, value] of Object.entries(want.lesson)) if (lower((decision.lesson as Record<string, unknown> | null)?.[key]) !== lower(value)) problems.push(`lesson.${key}: wanted ${String(value)}, got ${String((decision.lesson as Record<string, unknown> | null)?.[key])}`);
@@ -50,6 +55,7 @@ export function checkDecision(decision: RouterDecision | null, want: RouterExpec
 
   if (want.choices && (decision.choices?.length ?? 0) < 2) problems.push(`choices: wanted two or more tap-to-answer choices, got ${decision.choices?.length ?? 0}`);
 
+  if (want.searchKind !== undefined && (decision.searchKind ?? "general") !== want.searchKind) problems.push(`searchKind: wanted ${want.searchKind}, got ${decision.searchKind ?? "none"}`);
   if (want.searchQueryIncludes && !(decision.searchQuery ?? "").toLowerCase().includes(want.searchQueryIncludes.toLowerCase())) problems.push(`searchQuery: wanted it to include ${want.searchQueryIncludes}, got ${JSON.stringify(decision.searchQuery ?? "")}`);
   if (want.searchQueryExcludes && (decision.searchQuery ?? "").toLowerCase().includes(want.searchQueryExcludes.toLowerCase())) problems.push(`searchQuery: should not include ${want.searchQueryExcludes}, got ${JSON.stringify(decision.searchQuery)}`);
   if (want.listSavedSearches !== undefined && Boolean(decision.listSavedSearches) !== want.listSavedSearches) problems.push(`listSavedSearches: wanted ${want.listSavedSearches}, got ${Boolean(decision.listSavedSearches)}`);

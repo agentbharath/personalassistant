@@ -48,3 +48,10 @@ describe("the search answer (free)", () => {
     expect(renderSearchAnswer({ kind: "fares", intro: "", items: [], fares: [], answer: "No fares found.", caveat: "", sufficient: true, missingQuery: "" }, "q", 3)).toBe("No fares found.");
   });
 });
+
+it("trims card text at a word boundary and marks truncation", () => {
+  expect(plain("A lightweight waterproof jacket", 20)).toBe("A lightweight…");
+  expect(plain("Short text", 20)).toBe("Short text");
+  expect(plain("123456789012345", 8)).toBe("1234567…");
+  expect(plain("any text", 0)).toBe("");
+});

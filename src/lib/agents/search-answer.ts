@@ -56,7 +56,14 @@ export const SEARCH_ANSWER_JSON_SCHEMA = {
 } as const;
 
 /** Text from the web or the model that goes into a card: one line, and none of the characters that make markdown links or emphasis. */
-export const plain = (value: string, max = 160) => value.replace(/[\r\n]+/g, " ").replace(/[*_`\[\]()<>#|\\]/g, "").replace(/\s+/g, " ").trim().slice(0, max);
+export function plain(value: string, max = 160): string {
+  const text = value.replace(/[\r\n]+/g, " ").replace(/[*_`\[\]()<>#|\\]/g, "").replace(/\s+/g, " ").trim();
+  if (max <= 0) return "";
+  if (text.length <= max) return text;
+  const prefix = text.slice(0, Math.max(0, max - 1));
+  const boundary = text[prefix.length] === " " ? prefix.length : prefix.lastIndexOf(" ");
+  return (boundary > 0 ? prefix.slice(0, boundary) : prefix).trimEnd() + "…";
+}
 
 /** The place named in the search itself ("Chinese restaurants in Sunnyvale, CA" gives "Sunnyvale, CA"), to point a Maps search at the right town. */
 export function placeContext(query: string) {

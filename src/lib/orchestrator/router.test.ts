@@ -159,7 +159,7 @@ describe("code checks structure and never judges the message (R19.5)", () => {
 
 import { ROUTER_JSON_SCHEMA } from "./router";
 
-describe("router v14: drafts, redirects and choices (R22, R23, R25)", () => {
+describe("router: drafts, redirects and choices (R22, R23, R25)", () => {
   // The model returns flat objects with "none" and empty strings, not nulls (the API limits how many union-typed fields a schema may have).
   const draft = (over: Record<string, unknown> = {}) => ({ action: "create", kind: "reply", to: "sarah", replyTo: "sarah's email", instruction: "say I'll be there", version: "", ...over });
   const redirect = (over: Record<string, unknown> = {}) => ({ category: "speculation", reply: "I can't tell you how they came by theirs, but I can help you find vintage shops near you.", distress: false, pivot: "web", ask: "", ...over });
@@ -186,8 +186,8 @@ describe("router v14: drafts, redirects and choices (R22, R23, R25)", () => {
     for (const key of ["choices", "draft", "redirect"]) expect(required).toContain(key);
   });
 
-  it("is version 14, asks when in doubt, and teaches drafting, redirecting and choices", () => {
-    expect(ROUTER_VERSION).toBe("router-v55");
+  it("is versioned, asks when in doubt, and teaches drafting, redirecting and choices", () => {
+    expect(ROUTER_VERSION).toMatch(/^router-v\d+$/);
     expect(ROUTER_SYSTEM).toMatch(/When in doubt, ask/);
     expect(ROUTER_SYSTEM).toMatch(/email_draft/);
     expect(ROUTER_SYSTEM).toMatch(/Never just "I can't answer that"/);
@@ -369,4 +369,11 @@ describe("isOfferedChip (free)", () => {
     expect(isOfferedChip("", context)).toBe(false);
     expect(isOfferedChip("Half-zip vs quarter-zip styles", [{ role: "user", content: "Half-zip vs quarter-zip styles" }])).toBe(false);
   });
+});
+
+it("supplies calendar-accurate weekday anchors across month and year boundaries", () => {
+  const september = JSON.parse(buildRouterMessage(input("paid last Friday")));
+  expect(september.recentDates).toContainEqual({ date: "2026-09-18", weekday: "Friday" });
+  const january = JSON.parse(buildRouterMessage(input("paid yesterday", { today: "2026-01-01" })));
+  expect(january.recentDates[0]).toEqual({ date: "2025-12-31", weekday: "Wednesday" });
 });

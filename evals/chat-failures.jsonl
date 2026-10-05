@@ -1,0 +1,3 @@
+{"id":"sports-news-timeout-visible","rule":"R48.1","input":"any recent sports news?","failure":"time","status":504,"error":"QUERY_TIMED_OUT","retryable":true}
+{"id":"query-cost-limit-visible","rule":"R48.1","input":"any recent sports news?","failure":"cost","status":429,"error":"QUERY_COST_LIMIT_REACHED","retryable":false}
+{"id":"provider-failure-visible","rule":"R48.1","input":"any recent sports news?","failure":"provider","status":503,"error":"ASSISTANT_TEMPORARILY_UNAVAILABLE","retryable":true}

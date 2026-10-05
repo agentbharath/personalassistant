@@ -10,16 +10,16 @@ const LEAGUE_LABELS: Record<string, string> = {
 };
 function leagueLabel(league: string) { return LEAGUE_LABELS[league] ?? league.toUpperCase(); }
 
-function dateTile(iso: string) {
+function dateTile(iso: string, timeZone = process.env.DEFAULT_USER_TIMEZONE ?? "America/Los_Angeles") {
   const date = new Date(iso);
-  return { month: date.toLocaleDateString("en-US", { month: "short" }).toUpperCase(), day: String(date.getDate()) };
+  return { month: date.toLocaleDateString("en-US", { month: "short", timeZone }).toUpperCase(), day: date.toLocaleDateString("en-US", { day: "numeric", timeZone }) };
 }
 
 const NO_EVENT: Pick<SportsCardPayload, "event" | "upcoming" | "eventLabel" | "statusTag"> = { event: null, upcoming: null, eventLabel: "", statusTag: { label: "", tone: "neutral" } };
 
 /** Every number here comes straight from the schedule, no model in the loop -- the same reasoning R32/R45 already applied to places,
  * fares, weather and stocks. */
-export function buildSportsCard(summary: TeamSummary, sport: string, league: string): SportsCardPayload {
+export function buildSportsCard(summary: TeamSummary, sport: string, league: string, timeZone = process.env.DEFAULT_USER_TIMEZONE ?? "America/Los_Angeles"): SportsCardPayload {
   const { game, nextGame, teamName, record } = summary;
   const kindLabel = `${leagueLabel(league)} score`;
   const attribution = "espn.com";
@@ -28,7 +28,7 @@ export function buildSportsCard(summary: TeamSummary, sport: string, league: str
     return { kind: "sports", kindLabel, freshness: "", summary: "No recent or upcoming game came back for this team.", attribution, ...NO_EVENT };
   }
   if (game.status === "scheduled") {
-    const { month, day } = dateTile(game.date);
+    const { month, day } = dateTile(game.date, timeZone);
     return {
       kind: "sports", kindLabel, freshness: "", summary: "", attribution, event: null,
       eventLabel: "", statusTag: { label: "", tone: "neutral" },
