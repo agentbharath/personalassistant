@@ -12,6 +12,11 @@ import { MOCK_RECENT, MOCK_THREAD } from "../mock";
 export default async function DesignAppPage({ searchParams }: { searchParams: Promise<{ view?: string }> }) {
   if (process.env.NODE_ENV === "production") notFound();
   const view = (await searchParams).view;
+  const timeout = view === "timeout";
+  const timeoutMessages = [
+    { role: "user" as const, content: "any recent sports news?", sequence: "1" },
+    { role: "assistant" as const, content: "This is taking longer than expected, so I stopped safely. Nothing unconfirmed was changed.", notice: true, retryable: true, sequence: "2" },
+  ];
   const thread = view === "thread";
   const scan = view === "scan";
   const spending = view === "spending";
@@ -29,6 +34,7 @@ export default async function DesignAppPage({ searchParams }: { searchParams: Pr
   const digest = view === "digest";
   const suggestion = view === "suggestion";
   const news = view === "news";
+  const multiSport = view === "sports-news";
   const scanMessages = [
     { role: "user" as const, content: "Import my spending from the last 30 days" },
     { role: "assistant" as const, status: "waiting_for_user", content: "### Review 2 imports\n\n1. **iHerb** — $35.53 · Sep 16\n2. **Discover** — $250.00 · Sep 11 · card payment\n\n500 email summaries checked. **Scan paused** in Primary and Updates. Progress is saved for 7 days. 62 known emails remain; more pages may follow. Choose **Continue scan** to resume where this scan stopped. Continuing does not import anything.\n\nChoose **Confirm** to import the reviewed items or **Cancel**." },
@@ -220,6 +226,7 @@ export default async function DesignAppPage({ searchParams }: { searchParams: Pr
       kind: "score", match: "2nd ODI, Guwahati · Sep 30", status: { label: "Live", tone: "live" },
       teams: [{ name: "West Indies", score: "405/7", detail: "", lead: false }, { name: "India", score: "372/2", detail: "40/50 ov", lead: true }],
       outcome: { kind: "chase", text: "India need 34 from 60 balls", detail: "", rates: ["CRR 9.30", "RRR 3.40"] },
+      thisOver: [{ label: "·", kind: "dot" }, { label: "1", kind: "run" }, { label: "4", kind: "boundary" }, { label: "W", kind: "wicket" }, { label: "6", kind: "boundary" }, { label: "", kind: "pending" }],
       tables: [{ title: "Top batters", columns: ["Runs"], rows: [{ player: "Shubman Gill", side: "India", stats: ["216"] }, { player: "Amir Jangoo", side: "West Indies", stats: ["114"] }] }],
       facts: [{ label: "Toss", value: "India, elected to field first" }],
       sources: [{ label: "espn.com", url: "https://www.espn.com/cricket/" }],
@@ -238,10 +245,24 @@ export default async function DesignAppPage({ searchParams }: { searchParams: Pr
       sources: [{ label: "espn.com", url: "https://www.espn.com/cricket/scores" }],
     }) },
   ];
+  const multiSportMessages = [
+    { role: "user" as const, content: "Any sports news?" },
+    { role: "assistant" as const, content: embedCard("Sports scores · design sample", {
+      kind: "scores", kindLabel: "Sports scores", freshness: "As of 9:40 AM",
+      events: [
+        { label: "Cricket · 1st ODI · Thiruvananthapuram", tag: { label: "Final", tone: "neutral" }, sides: [{ name: "West Indies", score: "295/7", detail: "50 ov", lead: false }, { name: "India", score: "300/2", detail: "41.4 ov", lead: true }], outcome: "India won by 8 wickets" },
+        { label: "Football · League · Stadium", tag: { label: "Live · 67′", tone: "live" }, sides: [{ name: "Home team", score: "2", detail: "", lead: true }, { name: "Away team", score: "1", detail: "", lead: false }], outcome: "" },
+        { label: "Tennis · Tournament · Final", tag: { label: "Final", tone: "neutral" }, sides: [{ name: "Player A", score: "", cells: ["6", "4", "6"], detail: "", lead: true }, { name: "Player B", score: "", cells: ["3", "6", "2"], detail: "", lead: false }], outcome: "" },
+        { label: "F1 · Grand Prix · Qualifying", tag: { label: "Delayed · weather", tone: "catch" }, sides: [{ rank: "1", name: "Driver A", score: "1:24.512", detail: "Team A", lead: true }, { rank: "2", name: "Driver B", score: "+0.124", detail: "Team B", lead: false }, { rank: "3", name: "Driver C", score: "+0.302", detail: "Team C", lead: false }], outcome: "" },
+      ],
+      sources: [{ label: "espn.com", url: "https://www.espn.com" }],
+      chips: [{ label: "Only cricket", text: "Any cricket scores today?", purpose: "narrow" }, { label: "Full scorecard", url: "https://www.espn.com/cricket/", purpose: "deeper" }, { label: "Add match to calendar", text: "Add the next match to my calendar", purpose: "act" }, { label: "Other leagues", text: "What other leagues are playing today?", purpose: "widen" }],
+    }) },
+  ];
   const verdictMessages = [
     { role: "user" as const, content: "Are they good?" },
     { role: "assistant" as const, content: embedCard("### Verdict on the 5 jackets above", {
-      kind: "verdict", kindLabel: "Verdict on the 5 jackets above", basis: "Based on ratings and reviews",
+      kind: "verdict", replyingTo: "fleece jacket offers", kindLabel: "Verdict on the 5 jackets above", basis: "Based on ratings and reviews",
       bottomLine: "Around $70, get the Cotopaxi Abrazo. Under $40, Lands\u2019 End over Amazon.",
       rows: [
         { name: "Cotopaxi Abrazo", metric: "$74.83", detail: "4.7 \u2605 from 135 reviews, deepest discount", tag: { label: "Good buy", tone: "good" } },
@@ -271,15 +292,14 @@ export default async function DesignAppPage({ searchParams }: { searchParams: Pr
   const suggestionMessages = [
     { role: "user" as const, content: "Can you find some best offers on men fleece jackets medium size?" },
     { role: "assistant" as const, content: embedCard("### Men's fleece jackets, medium", {
-      kind: "suggestion", kindLabel: "Men's fleece jackets, medium size", freshness: "Just now",
-      topPick: { name: "REI Co-op Trailmade Fleece Jacket - Men's", meta: "REI, medium weight, 4.6 \u2605 from 273 reviews", metric: "$69.95", edgeTag: { label: "Best value", tone: "good" }, reason: "Best rating for the price among well-reviewed jackets.", actionLabel: "View at rei.com", actionUrl: "https://www.rei.com" },
+      kind: "suggestion", kindLabel: "Men’s fleece jackets, size M", freshness: "Prices as of 2:14 PM",
+      topPick: { name: "Cotopaxi Abrazo", meta: "REI · Medium weight · 4.7 ★ (135)", metric: "$74.83", edgeTag: { label: "44–50% off", tone: "good" }, reason: "Biggest real discount among well-reviewed jackets.", actionLabel: "View at REI", actionUrl: "https://www.rei.com" },
       rows: [
-        { name: "Marmot '94 E.C.O. Recycled Fleece Jacket - Men's", meta: "Marmot, recycled material, 4.6 \u2605 34 reviews", metric: "$75.67 41% off", roleTag: { label: "Budget pick", tone: "good" } },
-        { name: "Arc'teryx Covert Cardigan - Men's", meta: "Arc'teryx, medium weight, 4.3 \u2605 102 reviews", metric: "$126.93-$144.93 19% off", roleTag: { label: "Lightweight option", tone: "neutral" } },
-        { name: "Patagonia Better Sweater", meta: "REI, medium weight", metric: "$169", roleTag: { label: "Premium", tone: "neutral" } },
+        { name: "REI Trailmade", meta: "REI · Heavier, tall sizes · 4.6 ★", metric: "$69.95", roleTag: { label: "Cheapest solid", tone: "highlight" } },
+        { name: "Patagonia Better Sweater", meta: "REI · Medium weight · 4.5 ★ (660)", metric: "$169.00", roleTag: { label: "Premium", tone: "neutral" } },
       ],
-      limit: "Coupons, member prices and cashback aren\u2019t included. Confirm size M is in stock at checkout.", sources: [{ label: "rei.com", url: "https://www.rei.com" }],
-      chips: ["Under $40", "Are they good?", "Compare top 2", "Medium fit reviews and sizing"],
+      limit: "Coupons, member prices and cashback aren’t included. Confirm size M is in stock at checkout.", sources: [{ label: "rei.com", url: "https://www.rei.com" }],
+      chips: [{ label: "Under $40", text: "Find fleece jackets under $40", purpose: "narrow" }, { label: "Are they good?", text: "Are they good?", purpose: "deeper" }, { label: "Remember size M", text: "Remember that my fleece jacket size is medium", purpose: "act" }, { label: "More fleece jackets", text: "Find more fleece jacket options", purpose: "widen" }],
     }) },
   ];
   const newsMessages = [
@@ -313,6 +333,6 @@ export default async function DesignAppPage({ searchParams }: { searchParams: Pr
     }) },
   ];
   return <AppShell title={thread ? "iHerb receipts" : "New conversation"} email="you@example.com" signOutAction={signOut} recent={MOCK_RECENT} activeConversationId={thread ? MOCK_RECENT[0].id : undefined}>
-    <Chat key={view ?? "empty"} title={thread ? "iHerb receipts" : undefined} conversationId={thread ? MOCK_RECENT[0].id : undefined} initialMessages={view === "spending-empty" ? emptySpendingMessages : scan ? scanMessages : thread ? MOCK_THREAD : spending ? spendingMessages : spendingSimple ? spendingSimpleMessages : bills ? billsMessages : day ? dayMessages : email ? emailMessages : recall ? recallMessages : calendarQuery ? calendarQueryMessages : weather ? weatherMessages : stock ? stockMessages : score ? scoreMessages : scores ? scoresMessages : verdict ? verdictMessages : digest ? digestMessages : suggestion ? suggestionMessages : news ? newsMessages : []} />
+    <Chat key={view ?? "empty"} title={thread ? "iHerb receipts" : undefined} conversationId={timeout ? "00000000-0000-4000-8000-000000000048" : thread ? MOCK_RECENT[0].id : undefined} initialMessages={timeout ? timeoutMessages : view === "spending-empty" ? emptySpendingMessages : scan ? scanMessages : thread ? MOCK_THREAD : spending ? spendingMessages : spendingSimple ? spendingSimpleMessages : bills ? billsMessages : day ? dayMessages : email ? emailMessages : recall ? recallMessages : calendarQuery ? calendarQueryMessages : weather ? weatherMessages : stock ? stockMessages : score ? scoreMessages : scores ? scoresMessages : verdict ? verdictMessages : digest ? digestMessages : suggestion ? suggestionMessages : news ? newsMessages : multiSport ? multiSportMessages : []} />
   </AppShell>;
 }

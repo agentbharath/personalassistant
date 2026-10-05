@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/Button";
 import { windowMessages } from "@/lib/ui/grouping";
 import { AssistantMessage, PendingMessage, UserMessage } from "./Message";
 import styles from "./MessageList.module.css";
+import { extractCards } from "@/lib/chat/card-payload";
 import { answerChoices, followUps, hasApprovalActions, hasScanActions, type Message } from "./types";
 
 const VISIBLE = 120;
@@ -53,7 +54,12 @@ export function MessageList({ messages, pending, progress, takingLonger, hasEarl
       const absolute = offset + index;
       const highlight = activeMatch === absolute ? "active" : matches.includes(absolute) ? "match" : undefined;
       const id = `message-${absolute}`;
-      if (message.role === "user") return <UserMessage key={message.sequence ? `s${message.sequence}` : `i${absolute}`} id={id} highlight={highlight} busy={pending} onResend={() => onFollowUp(message.content)}>{message.content}</UserMessage>;
+      const verdict = message.role === "user" && messages[absolute + 1]?.role === "assistant"
+        ? extractCards(messages[absolute + 1].content).segments.find(segment => segment.card?.kind === "verdict")?.card : null;
+      const previousSuggestion = verdict?.kind === "verdict" && !verdict.replyingTo
+        ? messages.slice(0, absolute).reverse().flatMap(turn => turn.role === "assistant" ? extractCards(turn.content).segments : []).find(segment => segment.card?.kind === "suggestion")?.card : null;
+      const replyingTo = verdict?.kind === "verdict" ? verdict.replyingTo || (previousSuggestion?.kind === "suggestion" ? previousSuggestion.kindLabel : undefined) : undefined;
+      if (message.role === "user") return <UserMessage replyingTo={replyingTo} key={message.sequence ? `s${message.sequence}` : `i${absolute}`} id={id} highlight={highlight} busy={pending} onResend={() => onFollowUp(message.content)}>{message.content}</UserMessage>;
       const latest = absolute === lastIndex;
       return <AssistantMessage
         key={message.sequence ? `s${message.sequence}` : `i${absolute}`}

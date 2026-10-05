@@ -156,6 +156,9 @@ export type SportsCardPayload = {
 /** The one-match score card (cricket is the reference layout): a scoreboard, the result or live chase under it, stat tables, match facts,
  * sources and follow-up chips. Covers a finished, live or disrupted match; a not-yet-started one stays a SportsCardPayload upcoming tile,
  * since there is nothing to put on a scoreboard before the game starts. */
+export type CardFollowUp = { label: string; text?: string; url?: string; act?: boolean; purpose?: "narrow" | "deeper" | "act" | "widen" };
+export type CardChip = string | CardFollowUp;
+export type ScoreBall = { label: string; kind: "dot" | "run" | "boundary" | "wicket" | "pending" };
 export type ScoreTeam = { name: string; score: string; detail: string; /** The winner, or the batting side while live. */ lead: boolean };
 export type ScoreCardPayload = {
   kind: "score";
@@ -165,18 +168,22 @@ export type ScoreCardPayload = {
   /** Under the scoreboard: a finished match's result ("India won by 8 wickets" / "with 50 balls left"), or a live chase ("India need 34
    * from 60 balls" with current/required run rate). Null when ESPN has nothing to say. */
   outcome: { kind: "result" | "chase"; text: string; detail: string; rates: string[] } | null;
-  tables: { title: string; columns: string[]; rows: { player: string; side: string; stats: string[] }[] }[];
+  /** Render only ball-by-ball evidence supplied by the source; never synthesize an over from a total. */
+  thisOver?: ScoreBall[];
+  limit?: string;
+  tables: { title: string; columns: string[]; rows: { player: string; side: string; stats: string[]; onStrike?: boolean }[] }[];
   facts: { label: string; value: string }[];
   sources: { label: string; url: string }[];
   /** `url` opens a real page; `text` is sent as a follow-up message; `act` marks the one that hands off to another agent (blue). */
-  chips: { label: string; url?: string; text?: string; act?: boolean }[];
+  chips: CardFollowUp[];
 };
 /** A roundup of several matches at once ("what cricket is on today"): the shared event blocks stacked in one card, most relevant first.
  * A side with an empty score is a not-yet-started match, shown as names only. */
 export type ScoresEvent = {
   label: string; // "Cricket · 1st ODI · Thiruvananthapuram"
   tag: { label: string; tone: "good" | "highlight" | "neutral" | "catch" | "live" };
-  sides: [ScoreTeam, ScoreTeam];
+  sides: Array<ScoreTeam & { rank?: string; cells?: string[] }>;
+  final?: boolean;
   outcome: string; // a finished match's result line, "" otherwise
 };
 export type ScoresCardPayload = {
@@ -184,6 +191,8 @@ export type ScoresCardPayload = {
   kindLabel: string; // "Cricket scores today"
   freshness: string;
   events: ScoresEvent[];
+  limit?: string;
+  chips?: CardChip[];
   sources: { label: string; url: string }[];
 };
 /** A tone tag used across the answer-card family: good = green, highlight = blue, neutral = gray, catch = amber. */
@@ -194,13 +203,13 @@ export type SuggestionCardPayload = {
   kindLabel: string; // "Men's fleece jackets, size M" -- header, sentence case
   freshness: string; // "Prices as of 2:14 PM"
   topPick: { name: string; meta: string; metric: string; edgeTag: CardTag | null; reason: string; actionLabel: string; actionUrl: string };
-  /** 1 to 3 more options, each with its own single verdict tag -- never the top pick repeated. */
+  /** 2 to 4 more options when supported by the evidence, each with its own single verdict tag -- never the top pick repeated. */
   rows: SuggestionRow[];
   limit: string; // "Coupons, member prices and cashback aren't included. Confirm size M is in stock at checkout."
   sources: { label: string; url: string }[];
   /** Up to 4 tap-to-send follow-ups this specific answer suggests, decided by the same extraction that built the card -- never inferred
    * generically from the answer's kind (see chat/types.ts's own `followUps`, deliberately a no-op for exactly that reason). */
-  chips: string[];
+  chips: CardChip[];
 };
 /** A follow-up verdict on the options an earlier suggestions card showed: the conclusion first, then one row per earlier option (its name
  * and metric carried over from that card), each with a single verdict tag in the same tones as the original card. */
@@ -210,9 +219,11 @@ export type VerdictCardPayload = {
   kindLabel: string; // "Verdict on the 4 jackets above"
   basis: string; // header right: "Based on ratings and reviews"
   bottomLine: string;
+  replyingTo?: string;
+  limit?: string;
   rows: VerdictRow[];
   sources: { label: string; url: string }[];
-  chips: string[];
+  chips: CardChip[];
 };
 /** A news digest (cricket first): a line or two of news on top, then sections built from real match data -- result blocks, a list of
  * abandoned matches, date tiles for what's coming up -- then sources and follow-up chips. A section with nothing in it is left out. */
@@ -229,6 +240,7 @@ export type DigestCardPayload = {
   freshness: string; // "As of Sep 30, 10:40 AM"
   summary: string; // the news line(s), "" when the news search had nothing recent
   sections: DigestSection[];
+  limit?: string;
   sources: { label: string; url: string }[];
   chips: { label: string; text: string; act?: boolean }[];
 };
@@ -262,9 +274,8 @@ export function extractCards(content: string): { text: string; segments: CardSeg
       const parsed = JSON.parse(match[1]) as { kind?: string };
       if (parsed.kind && KNOWN_KINDS.has(parsed.kind)) card = parsed as CardPayload;
     } catch { /* malformed: this segment's own text still stands, just with no card */ }
-    // A fence whose card didn't parse/recognize is kept as literal text (the same "unstripped" fallback the
-    // single-card version always had), rejoined onto this segment's own leading prose rather than dropped.
-    segments.push(card ? { text: before, card } : { text: content.slice(cursor, match.index + match[0].length).trim(), card: null });
+    // The prose is the compatibility fallback; internal payloads must never leak into the chat.
+    segments.push({ text: before || (card ? "" : "This saved card couldn't be displayed."), card });
     cursor = match.index! + match[0].length;
   }
   const trailing = content.slice(cursor).trim();

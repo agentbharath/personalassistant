@@ -1,8 +1,9 @@
+import { CardChips, CardFooter } from "./CardParts";
 import type { SuggestionCardPayload } from "@/lib/chat/card-payload";
-import styles from "./AnswerCard.module.css";
+import styles from "./DaylarkCards.module.css";
 
-/** The suggestions card: a top-pick hero (name, metric, an edge tag, one reason, an action link) and 1-3 compact rows below it,
- * each with its own single verdict tag. Built on the shared AnswerCard family, same as the sports card. */
+/** The suggestions card: a top-pick hero (name, metric, an edge tag, one reason, an action link) and 2-4 compact rows below it,
+ * each with its own single verdict tag. Built on the shared DaylarkCards family, same as the sports card. */
 export function SuggestionCard({ payload, onFollowUp, busy }: { payload: SuggestionCardPayload; onFollowUp?: (text: string) => void; busy?: boolean }) {
   const { kindLabel, freshness, topPick, rows, limit, sources, chips } = payload;
 
@@ -29,7 +30,7 @@ export function SuggestionCard({ payload, onFollowUp, busy }: { payload: Suggest
         {topPick.actionUrl && <a className={styles.action} href={topPick.actionUrl} target="_blank" rel="noopener noreferrer">{topPick.actionLabel}</a>}
       </div>
 
-      {rows.length > 0 && <div className={styles.list}>{rows.map((row) => <div key={row.name} className={styles.row}>
+      {rows.length > 0 && <div className={styles.list}>{rows.slice(0, 4).map((row) => <div key={row.name} className={styles.row}>
         <div className={styles.rowMain}>
           <span className={styles.name}>{row.name}</span>
           <span className={styles.meta}>{row.meta}</span>
@@ -40,11 +41,8 @@ export function SuggestionCard({ payload, onFollowUp, busy }: { payload: Suggest
         </div>
       </div>)}</div>}
 
-      {limit && <p className={styles.limit}>{limit}</p>}
-      {sources.length > 0 && <div className={styles.sources}>Sources {sources.map((source, index) => <span key={source.url}>
-        {index > 0 && " · "}<a href={source.url} target="_blank" rel="noopener noreferrer">{source.label}</a>
-      </span>)}</div>}
+      <CardFooter limit={limit} sources={sources} />
     </section>
-    {onFollowUp && chips.length > 0 && <div className={styles.chips}>{chips.map((chip) => <button key={chip} type="button" className={styles.chip} disabled={busy} onClick={() => onFollowUp(chip)}>{chip}</button>)}</div>}
+    <CardChips chips={chips} onFollowUp={onFollowUp} busy={busy} />
   </>;
 }

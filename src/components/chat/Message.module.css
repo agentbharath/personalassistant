@@ -26,3 +26,6 @@
 .note textarea { width: 100%; resize: vertical; padding: var(--s-2); border: 1px solid var(--line-strong); border-radius: var(--r-sm); background: var(--bg); color: var(--ink); font: inherit; font-size: var(--text-sm); }
 .noteActions { display: flex; align-items: center; gap: var(--s-2); }
 @keyframes appear { from { opacity: 0; transform: translateY(6px); } }
+
+/* The card supplies its own 4px arrival; do not animate the parent a second time. */
+.cardAnswer { animation: none; }

@@ -3,7 +3,7 @@ import { extractCards } from "@/lib/chat/card-payload";
  * the chips that send a message count. */
 export function offeredChips(content: string): string[] {
   return extractCards(content).segments.flatMap((segment) => {
-    const chips = segment.card && "chips" in segment.card ? segment.card.chips as Array<string | { text?: string }> : [];
+    const chips = segment.card && "chips" in segment.card ? (segment.card.chips ?? []) as Array<string | { text?: string }> : [];
     return chips.flatMap((chip) => { const text = typeof chip === "string" ? chip : chip.text; return text?.trim() ? [text.trim()] : []; });
   });
 }
@@ -11,7 +11,7 @@ export function offeredChips(content: string): string[] {
 /** Cards carry machine-readable data after a complete prose answer. Keep their JSON out of routing context. */
 export function assistantConversationText(content:string) {
   const {text,segments}=extractCards(content);
-  if (!(segments.some(segment=>segment.card) && text)) return content;
+  if (!segments.some(segment=>segment.card)) return text;
   // The card's own JSON is kept out of routing, but what KIND of answer it was, and which buttons it offered, isn't noise: a follow-up like
   // "are they good?" only makes sense to route once the router can see the last answer was a list of suggested options, and a message that
   // is exactly one of the offered buttons is a tap -- a complete request, never a question back (found live: "Half-zip vs quarter-zip styles"

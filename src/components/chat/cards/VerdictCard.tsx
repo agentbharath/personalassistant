@@ -1,8 +1,9 @@
+import { CardChips, CardFooter } from "./CardParts";
 import type { VerdictCardPayload } from "@/lib/chat/card-payload";
-import styles from "./AnswerCard.module.css";
+import styles from "./DaylarkCards.module.css";
 
 /** A follow-up verdict: the conclusion first on the sunken "bottom line" block, then one hairline row per earlier option with its own
- * single verdict tag, sources, and follow-up chips outside the card. Built on the shared AnswerCard family. */
+ * single verdict tag, sources, and follow-up chips outside the card. Built on the shared DaylarkCards family. */
 export function VerdictCard({ payload, onFollowUp, busy }: { payload: VerdictCardPayload; onFollowUp?: (text: string) => void; busy?: boolean }) {
   const { kindLabel, basis, bottomLine, rows, sources, chips } = payload;
 
@@ -26,10 +27,8 @@ export function VerdictCard({ payload, onFollowUp, busy }: { payload: VerdictCar
         <div className={styles.rowEnd}><span className={`${styles.tag} ${styles[row.tag.tone]}`}>{row.tag.label}</span></div>
       </div>)}</div>}
 
-      {sources.length > 0 && <div className={styles.sources}>Sources {sources.map((source, index) => <span key={source.url}>
-        {index > 0 && " · "}<a href={source.url} target="_blank" rel="noopener noreferrer">{source.label}</a>
-      </span>)}</div>}
+      <CardFooter limit={payload.limit} sources={sources} />
     </section>
-    {onFollowUp && chips.length > 0 && <div className={styles.chips}>{chips.map((chip) => <button key={chip} type="button" className={styles.chip} disabled={busy} onClick={() => onFollowUp(chip)}>{chip}</button>)}</div>}
+    <CardChips chips={chips} onFollowUp={onFollowUp} busy={busy} />
   </>;
 }

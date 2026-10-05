@@ -34,13 +34,20 @@ describe("extracting one or more cards from a message (free)", () => {
     for (const segment of segments) expect(segment.text).not.toContain('"kind"');
   });
 
-  it("keeps a malformed or unrecognized card fence as literal (odd-looking) text for just that one segment, never the whole message", () => {
+  it("uses the prose fallback for a malformed card while preserving neighboring cards", () => {
     const bad = "First part.\n\n```daylark-card\nnot valid json\n```";
     const good = embedCard("Second part.", stock("AAPL"));
     const { segments } = extractCards(`${bad}\n\n---\n\n${good}`);
     expect(segments).toHaveLength(2);
     expect(segments[0].card).toBeNull();
-    expect(segments[0].text).toContain("not valid json");
+    expect(segments[0].text).toBe("First part.");
     expect(segments[1].card).toEqual(stock("AAPL"));
   });
+});
+
+it("hides unknown card payloads and keeps their readable fallback", () => {
+  const { text, segments } = extractCards('Saved answer.\n\n```daylark-card\n{"kind":"future-card","internal":"secret implementation"}\n```');
+  expect(text).toBe("Saved answer.");
+  expect(segments).toEqual([{ text: "Saved answer.", card: null }]);
+  expect(extractCards('```daylark-card\n{"kind":"future-card"}\n```').text).toBe("This saved card couldn't be displayed.");
 });

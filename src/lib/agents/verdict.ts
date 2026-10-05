@@ -1,3 +1,4 @@
+import { cardFollowUpSchema, CARD_FOLLOW_UP_JSON_SCHEMA, CARD_FOLLOW_UP_RULES, cleanCardFollowUps } from "@/lib/chat/card-followups";
 import { z } from "zod";
 import type Anthropic from "@anthropic-ai/sdk";
 import { searchPublicWeb } from "@/lib/tools/general/tavily-search";
@@ -11,7 +12,7 @@ const outputSchema = z.object({
   kindLabel: z.string(),
   bottomLine: z.string(),
   rows: z.array(z.object({ item: z.number(), detail: z.string(), verdictLabel: z.string(), verdictTone: z.enum(TONE), source: z.number() })),
-  chips: z.array(z.string()),
+  chips: z.array(cardFollowUpSchema),
 });
 type Output = z.infer<typeof outputSchema>;
 const JSON_SCHEMA = {
@@ -25,7 +26,7 @@ const JSON_SCHEMA = {
       required: ["item", "detail", "verdictLabel", "verdictTone", "source"],
       properties: { item: { type: "number" }, detail: { type: "string" }, verdictLabel: { type: "string" }, verdictTone: { type: "string", enum: TONE as unknown as string[] }, source: { type: "number" } },
     } },
-    chips: { type: "array", items: { type: "string" } },
+    chips: CARD_FOLLOW_UP_JSON_SCHEMA,
   },
 } as const;
 
@@ -48,7 +49,7 @@ export function lastSuggestionItems(context: ContextTurn[]): { subject: string; 
   return null;
 }
 
-function buildCard(items: Item[], output: Output, sources: Source[]): VerdictCardPayload {
+function buildCard(items: Item[], output: Output, sources: Source[], subject: string): VerdictCardPayload {
   const sourceUrl = (n: number) => Number.isInteger(n) && n >= 1 && n <= sources.length ? sources[n - 1].url : "";
   const cited: number[] = [];
   const rows = items.map((item, index) => {
@@ -63,9 +64,10 @@ function buildCard(items: Item[], output: Output, sources: Source[]): VerdictCar
     kindLabel: label || `Verdict on the ${items.length} options above`,
     basis: "Based on ratings and reviews",
     bottomLine: plain(output.bottomLine, 200),
+    replyingTo: subject,
     rows,
     sources: [...new Set(cited)].map((n) => ({ label: plain(new URL(sources[n - 1].url).hostname.replace(/^www\./, ""), 60), url: sources[n - 1].url })),
-    chips: output.chips.filter((chip) => chip.trim()).map((chip) => plain(chip, 40)).slice(0, 4),
+    chips: cleanCardFollowUps(output.chips),
   };
 }
 
@@ -97,7 +99,7 @@ export async function answerVerdict(query: string, context: ContextTurn[], compl
       model: "claude-haiku-4-5-20251001",
       max_tokens: 1200,
       temperature: 0,
-      system: `The user was just shown these ${items.length} options for "${subject}" and asks: "${query}". Always refer to an option by its name, never by its number (the user never sees numbers). When the question names a specific aspect (fit, sizing, warmth, durability, price, comfort), the whole verdict is about THAT aspect: bottomLine answers it directly, each detail reports what the evidence says about it, and verdictLabel says how that option does on it (\"True to size\", \"Runs large\", \"Runs small\", \"Warm\"); an option whose evidence says nothing about that aspect is skipped, never filled with generic praise. For a general question (\"are they good?\") judge overall. Judge each one from the real review evidence given -- never from memory, never inventing a rating, review count or claim the evidence doesn't contain. kindLabel: a short title for what is judged: "Verdict on the ${items.length} <plural noun for what they are> above" for a general question ("Verdict on the 4 jackets above"), or for a specific aspect "<Aspect> on the ${items.length} <plural noun> above" ("Fit on the 4 jackets above"). bottomLine: one or two short sentences, under 120 characters in all, that answer the question directly and name what to get at what price or situation ("Around $70, get the Cotopaxi Abrazo. Under $40, Lands' End over Amazon."). rows: one per option, item = its number above, detail = one short line, under 60 characters, of what the reviews actually say (a rating and review count when the evidence gives them: "4.7 from 135 reviews, deepest discount"; else one real downside or strength: "Runs large, not very warm"), verdictLabel = one or two words ("Good buy", "Best long-term", "Solid budget", "Occasional wear"), verdictTone = "good" for a recommendation, "highlight" for a standout on one dimension, "neutral" for fine-but-unremarkable, "catch" for a real downside worth flagging, source = the evidence number behind the detail (0 if none). Skip an option the evidence says nothing about rather than guessing. chips: 2 to 4 short phrases (3-5 words) for realistic next steps -- compare two of them, narrow by price, go back to the list. Return JSON only.`,
+      system: `The user was just shown these ${items.length} options for "${subject}" and asks: "${query}". Always refer to an option by its name, never by its number (the user never sees numbers). When the question names a specific aspect (fit, sizing, warmth, durability, price, comfort), the whole verdict is about THAT aspect: bottomLine answers it directly, each detail reports what the evidence says about it, and verdictLabel says how that option does on it (\"True to size\", \"Runs large\", \"Runs small\", \"Warm\"); an option whose evidence says nothing about that aspect is skipped, never filled with generic praise. For a general question (\"are they good?\") judge overall. Judge each one from the real review evidence given -- never from memory, never inventing a rating, review count or claim the evidence doesn't contain. kindLabel: a short title for what is judged: "Verdict on the ${items.length} <plural noun for what they are> above" for a general question ("Verdict on the 4 jackets above"), or for a specific aspect "<Aspect> on the ${items.length} <plural noun> above" ("Fit on the 4 jackets above"). bottomLine: one or two short sentences, under 120 characters in all, that answer the question directly and name what to get at what price or situation ("Around $70, get the Cotopaxi Abrazo. Under $40, Lands' End over Amazon."). rows: one per option, item = its number above, detail = one short line, under 60 characters, of what the reviews actually say (a rating and review count when the evidence gives them: "4.7 from 135 reviews, deepest discount"; else one real downside or strength: "Runs large, not very warm"), verdictLabel = one or two words ("Good buy", "Best long-term", "Solid budget", "Occasional wear"), verdictTone = "good" for a recommendation, "highlight" for a standout on one dimension, "neutral" for fine-but-unremarkable, "catch" for a real downside worth flagging, source = the evidence number behind the detail (0 if none). Skip an option the evidence says nothing about rather than guessing. ${CARD_FOLLOW_UP_RULES} Return JSON only.`,
       messages: [{ role: "user", content: `Options:\n${options}\n\nEvidence:\n${evidence}` }],
       output_config: { format: { type: "json_schema", schema: JSON_SCHEMA } },
     });
@@ -105,7 +107,7 @@ export async function answerVerdict(query: string, context: ContextTurn[], compl
     if (!block || block.type !== "text") return fallback();
     const output = outputSchema.parse(JSON.parse(block.text));
     if (!output.bottomLine.trim() || !output.rows.some((row) => row.verdictLabel.trim())) return fallback();
-    const card = buildCard(items, output, sources);
+    const card = buildCard(items, output, sources, subject);
     return embedCard(renderVerdictText(card), card);
   } catch (error) {
     reportFailure("verdict_failed", error, { query });

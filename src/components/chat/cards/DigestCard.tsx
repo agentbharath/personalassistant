@@ -1,8 +1,9 @@
+import { CardChips, CardFooter, SportsEvent } from "./CardParts";
 import type { DigestCardPayload } from "@/lib/chat/card-payload";
-import styles from "./AnswerCard.module.css";
+import styles from "./DaylarkCards.module.css";
 
 /** A news digest: the news line, then titled sections -- result/live event blocks, a hairline list of abandoned matches, date tiles for
- * what's coming up -- then sources, with follow-up chips outside the card. Built on the shared AnswerCard family. */
+ * what's coming up -- then sources, with follow-up chips outside the card. Built on the shared DaylarkCards family. */
 export function DigestCard({ payload, onFollowUp, busy }: { payload: DigestCardPayload; onFollowUp?: (text: string) => void; busy?: boolean }) {
   const { kindLabel, freshness, summary, sections, sources, chips } = payload;
 
@@ -17,19 +18,7 @@ export function DigestCard({ payload, onFollowUp, busy }: { payload: DigestCardP
       {sections.map((section) => <div key={section.title} className={styles.section}>
         <span className={styles.sectionTitle}>{section.title}</span>
 
-        {section.kind === "events" && section.events.map((event) => <div key={`${event.label}-${event.sides[0].name}`} className={`${styles.event} ${event.tag.tone === "live" ? "" : styles.eventFinal}`}>
-          <div className={styles.eventHead}>
-            <span className={styles.meta}>{event.label}</span>
-            <span className={`${styles.tag} ${styles[event.tag.tone]}`}>
-              {event.tag.tone === "live" && <span className={styles.liveDot} aria-hidden="true" />}
-              {event.tag.label}
-            </span>
-          </div>
-          {event.sides.map((side) => <div key={side.name} className={`${styles.side} ${side.lead ? styles.sideWinner : ""}`}>
-            <span className={styles.sideName}>{side.name}{side.detail && <span className={styles.sideDetail}>{side.detail}</span>}</span>
-            <span className={styles.sideScore}>{side.score}</span>
-          </div>)}
-        </div>)}
+        {section.kind === "events" && section.events.map((event, index) => <SportsEvent key={`${event.label}-${index}`} event={event} />)}
 
         {section.kind === "list" && <div className={styles.list}>{section.rows.map((row) => <div key={row.name} className={styles.row}>
           <div className={styles.rowMain}>
@@ -46,7 +35,7 @@ export function DigestCard({ payload, onFollowUp, busy }: { payload: DigestCardP
           </div>
         </a>)}</div>}
 
-        {section.kind === "tiles" && <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(14rem, 1fr))", gap: "var(--s-3)" }}>{section.tiles.map((tile) => <div key={tile.name} className={styles.event} style={{ flexDirection: "row", alignItems: "center", gap: "var(--s-4)" }}>
+        {section.kind === "tiles" && <div className={styles.tiles}>{section.tiles.map((tile) => <div key={tile.name} className={styles.event} style={{ flexDirection: "row", alignItems: "center", gap: "var(--s-4)" }}>
           <div className={`${styles.dateTile} ${tile.next ? styles.dateTileNext : ""}`}>
             <span className={styles.dateMonth}>{tile.month}</span>
             <span className={styles.dateDay}>{tile.day}</span>
@@ -58,10 +47,8 @@ export function DigestCard({ payload, onFollowUp, busy }: { payload: DigestCardP
         </div>)}</div>}
       </div>)}
 
-      {sources.length > 0 && <div className={styles.sources}>Sources {sources.map((source, index) => <span key={source.url}>
-        {index > 0 && " · "}<a href={source.url} target="_blank" rel="noopener noreferrer">{source.label}</a>
-      </span>)}</div>}
+      <CardFooter limit={payload.limit} sources={sources} />
     </section>
-    {onFollowUp && chips.length > 0 && <div className={styles.chips}>{chips.map((chip) => <button key={chip.label} type="button" className={`${styles.chip} ${chip.act ? styles.chipAct : ""}`} disabled={busy} onClick={() => onFollowUp(chip.text)}>{chip.label}</button>)}</div>}
+    <CardChips chips={chips} onFollowUp={onFollowUp} busy={busy} />
   </>;
 }

@@ -19,6 +19,7 @@ import { SportsCard } from "./cards/SportsCard";
 import { SuggestionCard } from "./cards/SuggestionCard";
 import { VerdictCard } from "./cards/VerdictCard";
 import styles from "./Message.module.css";
+import cardStyles from "./cards/DaylarkCards.module.css";
 
 /** One segment of a possibly-multi-part answer (a compound question, or several agents in one turn): its own
  * prose paired with its own card, in the order they were written -- never all the text lumped above all the
@@ -35,7 +36,7 @@ function CardSegmentView({ segment, onFollowUp, busy }: { segment: CardSegment; 
   if (card?.kind === "weather") return <WeatherCard payload={card} />;
   if (card?.kind === "stock") return <StockCard payload={card} />;
   if (card?.kind === "sports") return <SportsCard payload={card} />;
-  if (card?.kind === "scores") return <ScoresCard payload={card} />;
+  if (card?.kind === "scores") return <ScoresCard payload={card} onFollowUp={onFollowUp} busy={busy} />;
   if (card?.kind === "score") return <ScoreCard payload={card} onFollowUp={onFollowUp} busy={busy} />;
   if (card?.kind === "digest") return <DigestCard payload={card} onFollowUp={onFollowUp} busy={busy} />;
   if (card?.kind === "verdict") return <VerdictCard payload={card} onFollowUp={onFollowUp} busy={busy} />;
@@ -44,7 +45,7 @@ function CardSegmentView({ segment, onFollowUp, busy }: { segment: CardSegment; 
 }
 
 /** Your own message, with Copy and Ask again underneath. Ask again sends the same words as a new message. */
-export function UserMessage({ children, id, highlight, busy, onResend }: { children: string; id?: string; highlight?: "match" | "active"; busy?: boolean; onResend?: () => void }) {
+export function UserMessage({ children, id, highlight, busy, onResend, replyingTo }: { replyingTo?: string; children: string; id?: string; highlight?: "match" | "active"; busy?: boolean; onResend?: () => void }) {
   const [copied, setCopied] = useState(false);
   async function copy() {
     try {
@@ -54,6 +55,7 @@ export function UserMessage({ children, id, highlight, busy, onResend }: { child
     } catch { /* clipboard blocked: nothing to do */ }
   }
   return <div className={styles.userGroup}>
+    {replyingTo && <div className={cardStyles.replyingTo}><span aria-hidden="true">↳</span>Replying to: {replyingTo}</div>}
     <article id={id} className={`${styles.user} ${highlight ? styles[highlight] : ""}`} aria-label="You said">{children}</article>
     <div className={styles.userTools}>
       <span className={styles.copied} role="status">{copied ? "Copied" : ""}</span>
@@ -112,7 +114,7 @@ export function AssistantMessage({ children, id, highlight, approval, resumable,
     } catch { /* clipboard blocked: nothing to do */ }
   }
 
-  return <article id={id} className={`${styles.assistant} ${highlight ? styles[highlight] : ""}`} aria-label={notice ? "Daylark notice" : "Daylark replied"}>
+  return <article id={id} className={`${styles.assistant} ${segments.some(segment => segment.card) ? styles.cardAnswer : ""} ${highlight ? styles[highlight] : ""}`} aria-label={notice ? "Daylark notice" : "Daylark replied"}>
     <header className={styles.head}>Daylark</header>
     <div className={notice ? styles.notice : undefined} style={segments.length > 1 ? { display: "grid", gap: "var(--s-4)" } : undefined}>
       {segments.map((segment, index) => <CardSegmentView key={index} segment={segment} onFollowUp={onFollowUp} busy={busy} />)}

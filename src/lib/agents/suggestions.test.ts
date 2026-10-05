@@ -10,10 +10,10 @@ const source = (n: number, host = "rei.com") => ({ title: `Guide ${n}`, url: `ht
 const modelReply = (value: unknown) => ({ content: [{ type: "text", text: JSON.stringify(value) }] });
 const output = (over: Partial<Record<string, unknown>> = {}) => ({
   kindLabel: "Men's fleece jackets, size M",
-  topPick: { name: "Cotopaxi Abrazo", meta: "REI · Medium weight · 4.7 (135)", metric: "$74.83", source: 1, edgeLabel: "44-50% off", edgeTone: "good", reason: "Biggest real discount among well-reviewed jackets." },
+  topPick: { name: "Cotopaxi Abrazo", meta: "REI · Medium weight · 4.7 (135)", metric: "$74.83", source: 1, relevant: true, edgeLabel: "44-50% off", edgeTone: "good", reason: "Biggest real discount among well-reviewed jackets." },
   rows: [
-    { name: "REI Trailmade", meta: "REI · Heavier, tall sizes · 4.6", metric: "$69.95", source: 2, roleLabel: "Cheapest solid", roleTone: "highlight" },
-    { name: "Patagonia Better Sweater", meta: "REI · Medium weight · 4.5 (660)", metric: "$169.00", source: 3, roleLabel: "Premium", roleTone: "neutral" },
+    { name: "REI Trailmade", meta: "REI · Heavier, tall sizes · 4.6", metric: "$69.95", source: 2, relevant: true, roleLabel: "Cheapest solid", roleTone: "highlight" },
+    { name: "Patagonia Better Sweater", meta: "REI · Medium weight · 4.5 (660)", metric: "$169.00", source: 3, relevant: true, roleLabel: "Premium", roleTone: "neutral" },
   ],
   limit: "Coupons, member prices and cashback aren't included.",
   chips: ["Under $40", "Are they good?", "Compare top 2"],
@@ -35,17 +35,15 @@ describe("answerSuggestions (R47)", () => {
     expect(mocks.publicSearch).not.toHaveBeenCalled();
   });
 
-  it("grounds every source to a real cited number, never inventing a link for an out-of-range citation", async () => {
+  it("falls back when the top recommendation has no valid citation", async () => {
     const answer = await answerSuggestions("q", complete(output({ topPick: { ...output().topPick, source: 99 } })));
-    const card = JSON.parse(answer.match(/```daylark-card\n([\s\S]*?)\n```/)![1]);
-    expect(card.topPick.actionUrl).toBe("");
-    expect(card.topPick.actionLabel).toBe("");
+    expect(answer).toBe("fallback text");
   });
 
-  it("caps rows at 3 and chips at 4, and derives a real domain-based action label", async () => {
-    const answer = await answerSuggestions("q", complete(output({ rows: [...output().rows, { name: "Extra", meta: "m", metric: "$1", source: 1, roleLabel: "Extra", roleTone: "neutral" }] })));
+  it("caps rows at 4 and chips at 4, and derives a real domain-based action label", async () => {
+    const answer = await answerSuggestions("q", complete(output({ rows: [...output().rows, ...[1, 2, 3].map(n => ({ name: `Extra ${n}`, meta: "m", metric: "$1", source: 1, relevant: true, roleLabel: "Extra", roleTone: "neutral" }))] })));
     const card = JSON.parse(answer.match(/```daylark-card\n([\s\S]*?)\n```/)![1]);
-    expect(card.rows).toHaveLength(3);
+    expect(card.rows).toHaveLength(4);
     expect(card.topPick.actionLabel).toBe("View at rei.com");
   });
 
@@ -88,4 +86,21 @@ describe("answerSuggestions (R47)", () => {
     const answer = await answerSuggestions("q", complete(output()), "", undefined, failing);
     expect(answer).toContain("Cotopaxi Abrazo");
   });
+});
+
+it("does not render or remember an irrelevant top pick, and passes constraints to extraction", async () => {
+  const remember = vi.fn();
+  const model = complete(output({ topPick: { ...output().topPick, relevant: false } }));
+  expect(await answerSuggestions("men's jackets, medium", model, "Budget under $100", "2026-09-30", remember)).toBe("fallback text");
+  expect(remember).not.toHaveBeenCalled();
+  expect(model.mock.calls[0][0].messages[0].content).toContain("Budget under $100");
+});
+
+it("removes irrelevant and uncited alternatives from both the card and recall", async () => {
+  const remember = vi.fn().mockResolvedValue(undefined);
+  const rows = [{ ...output().rows[0], relevant: false }, { ...output().rows[1], source: 99 }];
+  const answer = await answerSuggestions("jackets", complete(output({ rows })), "", undefined, remember);
+  expect(answer).not.toContain("REI Trailmade");
+  expect(answer).not.toContain("Patagonia");
+  expect(remember.mock.calls[0][0].alternatives).toEqual([]);
 });
