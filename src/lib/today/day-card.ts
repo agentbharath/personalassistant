@@ -14,6 +14,12 @@ const clock = (iso: string) => {
   return `${hour}:${String(zdt.minute).padStart(2, "0")} ${zdt.hour < 12 ? "AM" : "PM"}`;
 };
 const minutesBetween = (from: string, to: string) => Math.round((Temporal.Instant.from(to).epochMilliseconds - Temporal.Instant.from(from).epochMilliseconds) / 60_000);
+/** Who's in the meeting, in a few words -- found live: "Invite 1" with just a time told the person nothing about
+ * whether it was worth keeping. Null when nobody else is listed, not an empty string. */
+const peopleLabel = (event: CalendarEvent): string | null => {
+  if (!event.attendeeNames?.length) return null;
+  return event.moreAttendeeCount ? `${event.attendeeNames.join(", ")} +${event.moreAttendeeCount}` : event.attendeeNames.join(", ");
+};
 const duration = (minutes: number): string => {
   const hours = Math.floor(minutes / 60), rest = minutes % 60;
   if (hours && rest) return `${hours} hr ${rest} min`;
@@ -43,20 +49,20 @@ export function buildTimelineCard(events: CalendarEvent[], dateLabel: string, no
   const timed = events.filter((event) => !event.allDay).sort((a, b) => Temporal.Instant.compare(a.start, b.start));
   const allDay = events.filter((event) => event.allDay);
 
-  const timeline: DayCardPayload["timeline"] = allDay.map((event) => ({ time: "", label: event.summary, duration: null, kind: "allday", startingIn: null, past: false, location: event.location ?? null }));
+  const timeline: DayCardPayload["timeline"] = allDay.map((event) => ({ time: "", label: event.summary, duration: null, kind: "allday", startingIn: null, past: false, location: event.location ?? null, people: peopleLabel(event), videoCall: Boolean(event.meetingLink) }));
 
   let longestGap: { from: string; to: string; minutes: number } | null = null;
   let busyEnd = "";
   timed.forEach((event, index) => {
     const minutesUntilStart = minutesBetween(now, event.start);
     const startingIn = minutesUntilStart > 0 && minutesUntilStart <= SOON_WINDOW_MIN ? `in ${minutesUntilStart} min` : null;
-    timeline.push({ time: clock(event.start), label: event.summary, duration: duration(minutesBetween(event.start, event.end)), kind: "meeting", startingIn, past: Temporal.Instant.compare(event.end, now) <= 0, location: event.location ?? null });
+    timeline.push({ time: clock(event.start), label: event.summary, duration: duration(minutesBetween(event.start, event.end)), kind: "meeting", startingIn, past: Temporal.Instant.compare(event.end, now) <= 0, location: event.location ?? null, people: peopleLabel(event), videoCall: Boolean(event.meetingLink) });
     if (!busyEnd || Temporal.Instant.compare(event.end, busyEnd) > 0) busyEnd = event.end;
     const next = timed[index + 1];
     if (!next) return;
     const gapMinutes = minutesBetween(busyEnd, next.start);
     if (gapMinutes < FOCUS_THRESHOLD_MIN) return;
-    timeline.push({ time: clock(busyEnd), label: "Free", duration: duration(gapMinutes), kind: "free", startingIn: null, past: Temporal.Instant.compare(next.start, now) <= 0, location: null });
+    timeline.push({ time: clock(busyEnd), label: "Free", duration: duration(gapMinutes), kind: "free", startingIn: null, past: Temporal.Instant.compare(next.start, now) <= 0, location: null, people: null, videoCall: false });
     if (!longestGap || gapMinutes > longestGap.minutes) longestGap = { from: busyEnd, to: next.start, minutes: gapMinutes };
   });
 

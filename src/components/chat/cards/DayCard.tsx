@@ -15,7 +15,11 @@ export function DayCard({ payload }: { payload: DayCardPayload }) {
         <span className={styles.time}>{item.time}</span>
         <div className={`${styles.info} ${item.kind === "meeting" && !item.past ? styles.upcoming : ""} ${item.startingIn ? styles.soon : ""}`}>
           <span className={styles.label} title={item.label}>{item.kind === "allday" && "All day · "}{item.label}</span>
-          {item.duration && <small title={item.location ?? undefined}>{item.duration}{item.location && (item.past || item.kind !== "meeting") ? ` · ${item.location}` : ""}</small>}
+          {(item.duration || item.people) && <small title={[item.location, item.people].filter(Boolean).join(" · ") || undefined}>
+            {item.duration}
+            {item.location && (item.past || item.kind !== "meeting") ? ` · ${item.location}` : item.videoCall ? " · Video call" : ""}
+            {item.people ? `${item.duration ? " · " : ""}${item.people}` : ""}
+          </small>}
           {item.startingIn && <span className={styles.tag}>{item.startingIn}</span>}
         </div>
       </div>

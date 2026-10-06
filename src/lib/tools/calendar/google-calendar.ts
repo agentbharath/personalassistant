@@ -10,6 +10,15 @@ export type CalendarEvent = {
   end: string;
   location?: string;
   allDay: boolean;
+  /** First names only, self excluded -- just enough to show who's in the meeting, never full addresses in a card.
+   * Optional (defaults applied where read): most fixtures across the codebase predate this field and only care
+   * about timing, not attendees. */
+  attendeeNames?: string[];
+  /** Guests invited but not named above, when there are more than attendeeNames keeps. */
+  moreAttendeeCount?: number;
+  meetingLink?: string | null;
+  /** Plain text, HTML tags stripped, short -- the event's own notes/agenda when it has one. */
+  description?: string | null;
 };
 
 export class GoogleCalendarAccessError extends Error {
@@ -75,6 +84,13 @@ export async function deleteApprovedCalendarEvent(userId: string, eventId: strin
   });
 }
 
+/** An event description can carry raw HTML (Google Meet notes, Zoom invites paste their own markup in). Strips tags
+ * and entities down to a short, plain first line -- a card line, not the full agenda. */
+function plainDescription(raw: string): string | null {
+  const text = raw.replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/\s+/g, " ").trim();
+  return text ? text.slice(0, 160) : null;
+}
+
 export async function listCalendarEvents(userId: string, timeMin: string, timeMax: string): Promise<CalendarEvent[]> {
   assertToolAllowed("calendar", "calendar.list_events");
   return withGoogleCredential(userId, "calendar", async (accessToken) => {
@@ -89,12 +105,26 @@ export async function listCalendarEvents(userId: string, timeMin: string, timeMa
       if (response.status === 403) throw new GoogleCalendarAccessError("forbidden");
       throw new GoogleCalendarAccessError("unavailable");
     }
-    const body = await response.json() as { items?: Array<{ id?: string; summary?: string; location?: string; start?: { date?: string; dateTime?: string }; end?: { date?: string; dateTime?: string } }> };
+    const body = await response.json() as {
+      items?: Array<{
+        id?: string; summary?: string; location?: string; description?: string;
+        start?: { date?: string; dateTime?: string }; end?: { date?: string; dateTime?: string };
+        attendees?: Array<{ email?: string; displayName?: string; self?: boolean; resource?: boolean }>;
+        hangoutLink?: string; conferenceData?: { entryPoints?: Array<{ entryPointType?: string; uri?: string }> };
+      }>;
+    };
     return (body.items ?? []).flatMap((event) => {
       const start = event.start?.dateTime ?? event.start?.date;
       const end = event.end?.dateTime ?? event.end?.date;
       if (!event.id || !start || !end) return [];
-      return [{ id: event.id, summary: event.summary ?? "Busy", start, end, location: event.location, allDay: Boolean(event.start?.date) }];
+      const guests = (event.attendees ?? []).filter((attendee) => !attendee.self && !attendee.resource);
+      const names = guests.map((attendee) => (attendee.displayName || attendee.email?.split("@")[0] || "").trim()).filter(Boolean);
+      const meetingLink = event.hangoutLink || event.conferenceData?.entryPoints?.find((entry) => entry.entryPointType === "video")?.uri || null;
+      const description = event.description ? plainDescription(event.description) : null;
+      return [{
+        id: event.id, summary: event.summary ?? "Busy", start, end, location: event.location, allDay: Boolean(event.start?.date),
+        attendeeNames: names.slice(0, 4), moreAttendeeCount: Math.max(0, names.length - 4), meetingLink, description,
+      }];
     });
   });
 }

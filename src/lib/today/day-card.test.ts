@@ -48,7 +48,7 @@ describe("the day card's timeline (free)", () => {
   it("keeps all-day events out of the timed gap math, listed as their own row with no time", () => {
     const view = baseView({ state: "ok", value: [event("Company holiday", "2026-09-28", "2026-09-29", { allDay: true })] });
     const card = buildDayCard(view, "2026-09-28T15:00:00Z");
-    expect(card!.timeline).toEqual([{ time: "", label: "Company holiday", duration: null, kind: "allday", startingIn: null, past: false, location: null }]);
+    expect(card!.timeline).toEqual([{ time: "", label: "Company holiday", duration: null, kind: "allday", startingIn: null, past: false, location: null, people: null, videoCall: false }]);
   });
 
   it("reads a fully free day plainly, without inventing a busy/free split", () => {

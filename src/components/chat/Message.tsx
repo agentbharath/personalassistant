@@ -8,6 +8,7 @@ import { extractCards, type CardSegment } from "@/lib/chat/card-payload";
 import { SpendingCard } from "./cards/SpendingCard";
 import { BillsCard } from "./cards/BillsCard";
 import { DayCard } from "./cards/DayCard";
+import { CalendarRangeCard } from "./cards/CalendarRangeCard";
 import { EmailCard } from "./cards/EmailCard";
 import { RecallAvailabilityCard } from "./cards/RecallAvailabilityCard";
 import { WeatherCard } from "./cards/WeatherCard";
@@ -31,6 +32,7 @@ function CardSegmentView({ segment, onFollowUp, busy }: { segment: CardSegment; 
   // A standalone day card (calendar_query, any single day) is the whole answer; daily_view's isn't -- its card
   // only covers Meetings, with Bills/Spending still coming from the markdown below it, not a fallback duplicate.
   if (card?.kind === "day") return card.standalone ? <DayCard payload={card} /> : <div style={{ display: "grid", gap: "var(--s-4)" }}><DayCard payload={card} />{text && <Markdown>{text}</Markdown>}</div>;
+  if (card?.kind === "calendar_range") return <CalendarRangeCard payload={card} />;
   if (card?.kind === "email") return <EmailCard payload={card} />;
   if (card?.kind === "recall-availability") return <RecallAvailabilityCard payload={card} onFollowUp={onFollowUp} busy={busy} />;
   if (card?.kind === "weather") return <WeatherCard payload={card} />;

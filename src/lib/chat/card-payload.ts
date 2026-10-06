@@ -60,7 +60,16 @@ export type DayCardPayload = {
    * them (no row before the first meeting or after the last -- there is no fixed workday boundary to measure
    * against). `past`/`startingSoon` are computed once, at answer time; like the rest of a chat message, this
    * reads as a snapshot of that moment, not a live view. */
-  timeline: { time: string; label: string; duration: string | null; kind: "meeting" | "free" | "allday"; startingIn: string | null; past: boolean; location: string | null }[];
+  timeline: { time: string; label: string; duration: string | null; kind: "meeting" | "free" | "allday"; startingIn: string | null; past: boolean; location: string | null; people: string | null; videoCall: boolean }[];
+};
+export type CalendarRangeCardPayload = {
+  kind: "calendar_range";
+  rangeLabel: string; // "next week" / "this week"
+  count: number;
+  insight: string;
+  /** Only days that actually have something on them -- a 7-day card with three quiet days doesn't print three
+   * empty headers; the insight line says which days are free instead. */
+  days: { dateLabel: string; events: { time: string; label: string; duration: string | null; location: string | null; people: string | null; videoCall: boolean; allDay: boolean }[] }[];
 };
 export type EmailCardPayload = {
   kind: "email";
@@ -250,13 +259,13 @@ export type DigestCardPayload = {
   sources: { label: string; url: string }[];
   chips: { label: string; text: string; act?: boolean }[];
 };
-export type CardPayload = SpendingCardPayload | BillsCardPayload | DayCardPayload | EmailCardPayload | RecallAvailabilityCardPayload | WeatherCardPayload | StockCardPayload | SportsCardPayload | ScoreCardPayload | ScoresCardPayload | SuggestionCardPayload | VerdictCardPayload | DigestCardPayload;
+export type CardPayload = SpendingCardPayload | BillsCardPayload | DayCardPayload | CalendarRangeCardPayload | EmailCardPayload | RecallAvailabilityCardPayload | WeatherCardPayload | StockCardPayload | SportsCardPayload | ScoreCardPayload | ScoresCardPayload | SuggestionCardPayload | VerdictCardPayload | DigestCardPayload;
 
 export function embedCard(text: string, payload: CardPayload): string {
   return `${text}\n\n\`\`\`daylark-card\n${JSON.stringify(payload)}\n\`\`\``;
 }
 
-const KNOWN_KINDS = new Set(["spending", "bills", "day", "email", "recall-availability", "weather", "stock", "sports", "score", "scores", "suggestion", "verdict", "digest"]);
+const KNOWN_KINDS = new Set(["spending", "bills", "day", "calendar_range", "email", "recall-availability", "weather", "stock", "sports", "score", "scores", "suggestion", "verdict", "digest"]);
 
 export type CardSegment = { text: string; card: CardPayload | null };
 

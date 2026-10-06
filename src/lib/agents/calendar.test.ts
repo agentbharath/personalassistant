@@ -9,7 +9,7 @@ import { answerCalendar } from "./calendar";
 
 const TZ = "America/Los_Angeles";
 const window = (startISO: string, endISO: string, label: string) => ({ start: Temporal.ZonedDateTime.from(`${startISO}[${TZ}]`), end: Temporal.ZonedDateTime.from(`${endISO}[${TZ}]`), label });
-const event = (id: string, summary: string, start: string, end: string) => ({ id, summary, start, end, allDay: false });
+const event = (id: string, summary: string, start: string, end: string, extra: Partial<{ attendeeNames: string[]; moreAttendeeCount: number; meetingLink: string | null; location: string }> = {}) => ({ id, summary, start, end, allDay: false, ...extra });
 
 beforeEach(() => vi.clearAllMocks());
 
@@ -39,12 +39,48 @@ describe("a single day's worth of window gets the same timeline card as daily_vi
     expect(card.count).toBe(0);
   });
 
-  it("does not embed a card for a genuinely multi-day range -- there's no design for that yet, so it keeps the plain list", async () => {
+  it("embeds a day-grouped calendar_range card for a genuinely multi-day range, with the plain list as its copy/older-client text", async () => {
     mocks.interpretTime.mockResolvedValue({ kind: "window", window: window("2026-09-28T00:00:00", "2026-10-05T00:00:00", "next week"), moment: null, place: null });
-    mocks.listEvents.mockResolvedValue([event("1", "Standup", "2026-09-29T16:00:00Z", "2026-09-29T16:15:00Z")]);
+    mocks.listEvents.mockResolvedValue([
+      event("1", "Standup", "2026-09-29T16:00:00Z", "2026-09-29T16:15:00Z"),
+      event("2", "1:1", "2026-10-01T18:00:00Z", "2026-10-01T18:30:00Z", { attendeeNames: ["Priya"] }),
+    ]);
     const answer = await answerCalendar("what's on my calendar next week", "u1");
-    expect(answer).toContain("Standup");
-    expect(answer).not.toContain("daylark-card");
+    expect(answer).toContain("Standup"); // plain-text fallback still present
+    const card = JSON.parse(answer.match(/```daylark-card\n([\s\S]*?)\n```/)![1]);
+    expect(card.kind).toBe("calendar_range");
+    expect(card.count).toBe(2);
+    expect(card.days).toHaveLength(2); // two distinct days, each its own group
+    expect(card.days[0].dateLabel).toBe("Tue, Sep 29");
+    expect(card.days[1].events[0]).toMatchObject({ label: "1:1", people: "Priya" });
+  });
+
+  it("still has no card for a single day with no events at all -- an empty week shouldn't invent day groups to show", async () => {
+    mocks.interpretTime.mockResolvedValue({ kind: "window", window: window("2026-09-28T00:00:00", "2026-10-05T00:00:00", "next week"), moment: null, place: null });
+    mocks.listEvents.mockResolvedValue([]);
+    const answer = await answerCalendar("what's on my calendar next week", "u1");
+    const card = JSON.parse(answer.match(/```daylark-card\n([\s\S]*?)\n```/)![1]);
+    expect(card.days).toEqual([]);
+    expect(card.insight).toBe("Nothing on your calendar next week.");
+  });
+});
+
+describe("who's in a meeting and how to join it (found live: 'Invite 1 — Tue, Oct 6, 4:00 PM–5:00 PM' alone wasn't enough to tell a meeting apart from a placeholder)", () => {
+  it("names attendees and flags a video call in the single-day card's timeline row", async () => {
+    mocks.interpretTime.mockResolvedValue({ kind: "window", window: window("2026-09-29T00:00:00", "2026-09-30T00:00:00", "tomorrow"), moment: null, place: null });
+    mocks.listEvents.mockResolvedValue([event("1", "Design review", "2026-09-29T18:00:00Z", "2026-09-29T19:00:00Z", { attendeeNames: ["Sam", "Alex"], moreAttendeeCount: 2, meetingLink: "https://meet.google.com/abc" })]);
+    const answer = await answerCalendar("what's on my calendar tomorrow", "u1");
+    const card = JSON.parse(answer.match(/```daylark-card\n([\s\S]*?)\n```/)![1]);
+    const row = card.timeline.find((r: { label: string }) => r.label === "Design review");
+    expect(row.people).toBe("Sam, Alex +2");
+    expect(row.videoCall).toBe(true);
+  });
+
+  it("adds the same detail to the plain-list fallback a multi-day range still uses", async () => {
+    mocks.interpretTime.mockResolvedValue({ kind: "window", window: window("2026-09-28T00:00:00", "2026-10-05T00:00:00", "next week"), moment: null, place: null });
+    mocks.listEvents.mockResolvedValue([event("1", "Standup", "2026-09-29T16:00:00Z", "2026-09-29T16:15:00Z", { attendeeNames: ["Priya"], meetingLink: "https://meet.google.com/xyz" })]);
+    const answer = await answerCalendar("what's on my calendar next week", "u1");
+    expect(answer).toContain("Standup — Tue, Sep 29, 9:00 AM–9:15 AM with Priya");
   });
 });
 
