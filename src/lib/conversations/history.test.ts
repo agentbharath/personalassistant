@@ -44,6 +44,15 @@ it("finds a saved search from a different conversation (found live: a restaurant
  expect(result.references[0]?.id).toBe("sushi-search");
  expect(result.text).toContain("Katana Sushi");
 });
+it("ranks a real suggestion above Daylark's own wrong echo of the same question (found live: 'out of all the headphones you suggest which was the cheapest?' kept re-finding a prior turn's wrong 'I haven't suggested any headphones' answer instead of the real suggestion card, because that wrong answer's own saved query field is the person's exact words, an unbeatable word-overlap match against itself -- a self-reinforcing loop on every retry)", async () => {
+ db.refs = [
+   { id: "wrong-echo", kind: "answer_results", created_at: "2026-10-06T20:41:00Z", payload_ciphertext: JSON.stringify({ query: "out of all the headphones you suggest which was the cheapest?", answer: "I haven't suggested any headphones to you in our conversation. The saved search records show restaurant and activity searches, but no headphone recommendations." }) },
+   { id: "real-suggestion", kind: "suggestion_results", created_at: "2026-10-06T20:39:03Z", payload_ciphertext: JSON.stringify({ subject: "Noise cancelling headphones under $200", topPick: "Sony WH-CH720N", alternatives: ["JLab JBuds Lux ANC"], options: [{ name: "Sony WH-CH720N", metric: "Under $100", meta: "Rolling Stone, over-ear" }] }) },
+ ];
+ const result = await recallConversation("user", "chat", "out of all the headphones you suggest which was the cheapest?", []);
+ expect(result.references[0]?.id).toBe("real-suggestion");
+ expect(result.text).toContain("Sony WH-CH720N");
+});
 it("does not read another user's or a deleted conversation", async () => {
  db.owner = false;
  const result = await recallConversation("other", "chat", "resume", []);

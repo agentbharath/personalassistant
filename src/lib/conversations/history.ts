@@ -75,7 +75,25 @@ async function readConversation(userId: string, conversationId: string, query: s
   if (outcomes[0].status === "rejected") complete = false;
   turns.reverse();
   const retrieved = selectHistory(turns, query, recent);
-  const chosen = references.sort((a, b) => historyScore(JSON.stringify(b.state), query) - historyScore(JSON.stringify(a.state), query) || b.createdAt.localeCompare(a.createdAt)).slice(0, 5);
+  // Found live, a self-reinforcing loop: "out of all the headphones you suggest which was the cheapest?" right
+  // after Daylark wrongly answered "I haven't suggested any headphones" saved THAT WRONG ANSWER as its own
+  // answer_results row -- whose own stored `query` field is the person's raw message verbatim, an exact match
+  // against itself on every word. That beat the real suggestion_results record outright, so the same wrong
+  // answer kept winning on every retry, however the question was reworded, instead of the real data that would
+  // have answered it. Two fixes, both scoped to this ranking step only (historyScore itself, used elsewhere for
+  // message-turn selection, is unchanged): an answer_results record is scored on its answer text alone, never
+  // its own triggering query, since matching a past QUESTION to the current one is meaningless -- what matters is
+  // whether the past ANSWER is relevant; and short connector words ("the", "you", "was") are excluded from the
+  // match, since historyScore has no stopword weighting and they pad a generic saved answer's score to rival a
+  // compact structured record that actually names the thing being asked about. A structured kind (an actual
+  // suggestion, research comparison, email or place search) also gets a small tiebreaker over the generic
+  // answer_results catch-all on a genuine near-tie, since it is the authoritative record and answer_results only
+  // exists for when nothing richer was saved.
+  const RANKING_STOPWORDS = new Set(["the", "and", "for", "are", "was", "you", "your", "out", "all", "which", "that", "this", "with", "from", "have", "has", "had", "not", "but", "can", "will", "what", "when", "where", "who", "how", "why", "did", "does", "were"]);
+  const scoreText = (ref: ConversationReference) => JSON.stringify(ref.kind === "answer_results" ? { answer: ref.state.answer } : ref.state);
+  const specificScore = (text: string, q: string) => { const document = new Set(words(text)); return words(q).filter((word) => !RANKING_STOPWORDS.has(word)).reduce((score, word) => score + (document.has(word) ? 1 : 0), 0); };
+  const rank = (ref: ConversationReference) => specificScore(scoreText(ref), query) + (ref.kind === "answer_results" ? 0 : 1);
+  const chosen = references.sort((a, b) => rank(b) - rank(a) || b.createdAt.localeCompare(a.createdAt)).slice(0, 5);
   const referenceText = chosen.map(ref => JSON.stringify(
     ref.kind === "email_results" ? { id: ref.id, kind: ref.kind, createdAt: ref.createdAt, request: ref.state.request, results: ref.state.results.slice(0, 8) }
     : ref.kind === "research_results" ? { id: ref.id, kind: ref.kind, createdAt: ref.createdAt, subject: ref.state.subject, recommendation: ref.state.recommendation, options: ref.state.options.slice(0, 6) }
