@@ -5,7 +5,20 @@ import styles from "./WeatherCard.module.css";
 /** The weather card: hero reading (a temperature, or a plain Yes/No for a rain/snow question), an insight
  * sentence, a min-max range with today's reading marked on it, an hourly strip, and up to 3 relevant stats. */
 export function WeatherCard({ payload }: { payload: WeatherCardPayload }) {
-  const { eyebrow, headline, condition, insight, rangeLow, rangeHigh, current, hourly, hourlyUnit, stats, attribution } = payload;
+  const { eyebrow, headline, condition, insight, rangeLow, rangeHigh, current, hourly, hourlyUnit, stats, attribution, days } = payload;
+  if (days?.length) return <section className={styles.card} aria-label={`${eyebrow}. ${insight}`}>
+    <p className={styles.eyebrow}>{eyebrow}</p>
+    {insight && <p className={styles.insight}>{insight}</p>}
+    <div className={styles.days}>{days.map((day, index) => <div key={index} className={styles.dayRow}>
+      <span className={styles.dayLabel}>{day.label}</span>
+      <span className={styles.dayCondition}>{day.condition}</span>
+      {day.precipPercent >= 30 && <span className={styles.dayRain}>{day.precipPercent}%</span>}
+      <span className={styles.dayLow}>{day.low}°</span>
+      <span className={styles.dayHigh}>{day.high}°</span>
+    </div>)}</div>
+    <p className={styles.foot}>{attribution}</p>
+  </section>;
+
   const span = Math.max(1, rangeHigh - rangeLow);
   const dotPercent = Math.min(100, Math.max(0, ((current - rangeLow) / span) * 100));
   const low = Math.min(...hourly.map(point => point.value)) - 5;

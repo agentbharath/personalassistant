@@ -100,9 +100,10 @@ export type RecallAvailabilityCardPayload = {
   planQuery: string;
   noneQuery: string;
 };
+export type WeatherAppearance = "sun" | "cloud" | "rain" | "snow" | "fog" | "night";
 export type WeatherCardPayload = {
   kind: "weather";
-  appearance?: "sun" | "cloud" | "rain" | "snow" | "fog" | "night";
+  appearance?: WeatherAppearance;
   hourlyLabel?: string;
   eyebrow: string; // "Now · Sunnyvale" / "Tomorrow · 6 to 8 AM" / "Thursday · chance of rain" / "Tonight · Sunnyvale"
   /** A temperature reading ("77°") normally; a plain "Yes"/"No" when the request was a yes/no rain/snow question (weatherYesNo). */
@@ -119,6 +120,11 @@ export type WeatherCardPayload = {
   /** Exactly 3, chosen for what's actually relevant to this question (wind/UV/humidity normally; visibility/wind/humidity for fog; total precipitation/wind/gusts for a rain yes/no; wind/humidity/sunrise for tonight). */
   stats: { label: string; value: string }[];
   attribution: string; // "open-meteo.com · updated just now"
+  /** Present only for a multi-day range request ("weather for the next 7 days", "this week's forecast") -- each
+   * day's own high/low/condition from Open-Meteo's daily data, rendered as a day-by-day list instead of the
+   * hourly strip and range dot, which only ever mean one day. Absent for every single-day/moment/tonight/yes-no
+   * reading, which keeps using those fields exactly as before. */
+  days?: { label: string; high: number; low: number; condition: string; appearance: WeatherAppearance; precipPercent: number }[];
 };
 export type StockCardPayload = {
   kind: "stock";

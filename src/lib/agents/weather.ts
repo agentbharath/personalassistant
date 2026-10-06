@@ -1,6 +1,6 @@
 import { extractPlaceForUser } from "./weather-place";
 import { Temporal } from "@js-temporal/polyfill";
-import { embedCard, type WeatherCardPayload } from "@/lib/chat/card-payload";
+import { embedCard, type WeatherCardPayload, type WeatherAppearance } from "@/lib/chat/card-payload";
 import { conditionFor, fetchForecast, geocodeLocation, FOG_CODES, RAIN_CODES, type Forecast } from "@/lib/tools/weather/open-meteo";
 import { answerPublicSearch } from "./general";
 import { TIME_UNAVAILABLE } from "./time-interpreter";
@@ -129,6 +129,51 @@ export function buildWeatherCard({ forecast, placeName, timeZone, window, yesNo,
   };
 }
 
+function dailyAppearance(code: number): WeatherAppearance {
+  return FOG_CODES.has(code) ? "fog" : RAIN_CODES.has(code) ? "rain" : [71, 73, 75, 77, 85, 86].includes(code) ? "snow" : code >= 2 ? "cloud" : "sun";
+}
+
+/** The highest hourly chance of precipitation actually inside this calendar day -- Open-Meteo's daily fields have no
+ * precipitation-probability of their own, only a total inches figure, which doesn't answer "will it rain Wednesday". */
+function dayPrecipPercent(hourly: Forecast["hourly"], dateKey: string): number {
+  const values = hourly.time.flatMap((time, i) => (time.startsWith(dateKey) ? [hourly.precipitationProbability[i]] : []));
+  return values.length ? Math.max(...values) : 0;
+}
+
+/** A genuine multi-day range ("the next 7 days", "this week") -- found live: a 7-day window used to be read as if it
+ * were a single, unusually long "now", because the single-day card's own includesNow check only ever looked at
+ * whether the CURRENT MOMENT fell inside the window, which a week starting today always does. Built from the same
+ * forecast.daily data buildWeatherCard already has in hand -- no second API call. Only days Open-Meteo actually
+ * forecasts (up to 16) are shown; a request that reaches further than that says so honestly rather than inventing
+ * a day with no real data behind it. */
+function buildOutlookCard({ forecast, placeName, window, now }: { forecast: Forecast; placeName: string; window: BuildInput["window"]; now: string }): WeatherCardPayload {
+  const startKey = window.start.toPlainDate().toString();
+  const endKey = window.end.toPlainDate().toString(); // exclusive
+  const indices = forecast.daily.time.map((_, i) => i).filter((i) => forecast.daily.time[i] >= startKey && forecast.daily.time[i] < endKey);
+  if (!indices.length) throw new Error("FORECAST_WINDOW_UNAVAILABLE");
+  const days = indices.map((i) => {
+    const code = forecast.daily.weatherCode[i];
+    return {
+      label: Temporal.PlainDate.from(forecast.daily.time[i]).toLocaleString("en-US", { weekday: "short" }),
+      high: round(forecast.daily.tempMax[i]), low: round(forecast.daily.tempMin[i]),
+      condition: conditionFor(code), appearance: dailyAppearance(code),
+      precipPercent: round(dayPrecipPercent(forecast.hourly, forecast.daily.time[i])),
+    };
+  });
+  const highs = days.map((day) => day.high), lows = days.map((day) => day.low);
+  const rainyDays = days.filter((day) => day.precipPercent >= 40).map((day) => day.label);
+  const clipped = forecast.daily.time[forecast.daily.time.length - 1] < endKey;
+  const insight = `Highs ${Math.min(...highs)}° to ${Math.max(...highs)}°, lows ${Math.min(...lows)}° to ${Math.max(...lows)}°.`
+    + (rainyDays.length ? ` Rain chance on ${rainyDays.join(", ")}.` : "")
+    + (clipped ? " Real forecasts only reach about two weeks out, so this covers what's available." : "");
+  const asOf = Temporal.Instant.from(now).toZonedDateTimeISO(window.start.timeZoneId).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  return {
+    kind: "weather", eyebrow: `${days.length}-day outlook · ${placeName}`, headline: `${Math.min(...lows)}°–${Math.max(...highs)}°`, condition: `${days.length} days`,
+    insight, rangeLow: Math.min(...lows), rangeHigh: Math.max(...highs), current: round(forecast.current.temperature),
+    hourly: [], hourlyUnit: "temp", stats: [], attribution: `Open-Meteo · as of ${asOf} · °F`, days,
+  };
+}
+
 function renderWeatherText(card: WeatherCardPayload): string {
   return `### ${card.eyebrow}\n\n${card.headline} ${card.condition}\n\n${card.insight}`;
 }
@@ -154,7 +199,12 @@ export async function answerWeather(input: string, place: string, userId: string
     if (reading.kind === "unavailable") return TIME_UNAVAILABLE;
     if (reading.kind === "ask") return askAboutTime(reading.question, reading.choices);
     const forecast = await fetchForecast(geo.latitude, geo.longitude, geo.timezone);
-    const card = buildWeatherCard({ forecast, placeName: geo.name, timeZone: geo.timezone, window: reading.window, yesNo, now });
+    // A window spanning several real calendar days ("the next 7 days", "this week") needs a day-by-day outlook,
+    // never the single-day card -- a 2-day window ("the weekend") still reads fine as one blended day for now.
+    const spanDays = Math.round(reading.window.start.until(reading.window.end, { largestUnit: "hours" }).hours / 24);
+    const card = spanDays >= 3
+      ? buildOutlookCard({ forecast, placeName: geo.name, window: reading.window, now })
+      : buildWeatherCard({ forecast, placeName: geo.name, timeZone: geo.timezone, window: reading.window, yesNo, now });
     return embedCard(renderWeatherText(card), card);
   } catch {
     return answerPublicSearch(`${place} weather`, undefined, memoryContext, today);

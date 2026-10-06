@@ -67,7 +67,7 @@ type ForecastResponse = {
 /** Imperial units throughout (°F, mph, inches) -- matches how a US person reads a forecast, and how the mockup itself is written. Visibility
  * comes back in feet under imperial wind units (Open-Meteo ties it to wind_speed_unit, not its own param); converted to miles here so callers
  * never touch the raw unit. forecastDays bounds how many days out the daily/hourly arrays reach (max 16 on the free tier). */
-export async function fetchForecast(latitude: number, longitude: number, timezone: string, forecastDays = 10): Promise<Forecast> {
+export async function fetchForecast(latitude: number, longitude: number, timezone: string, forecastDays = 16): Promise<Forecast> {
   assertToolAllowed("general", "web.search_weather");
   const url = new URL("https://api.open-meteo.com/v1/forecast");
   url.searchParams.set("latitude", String(latitude));

@@ -119,6 +119,54 @@ describe("tonight", () => {
   });
 });
 
+describe("a multi-day range (\"the next 7 days\") -- found live: this used to be read as if it were one unusually long \"now\", because the single-day card's includesNow check only asked whether the current moment fell inside the window, which a week starting today always does", () => {
+  /** Concatenates one hoursFor() day per date, each with its own weather code and a rain spike on the one date flagged "rainy". */
+  function sevenDaysHourly(dates: string[], codes: number[], rainyDate: string) {
+    const merged = { time: [] as string[], temperature: [] as number[], precipitationProbability: [] as number[], windSpeed: [] as number[], visibilityMiles: [] as number[], uvIndex: [] as number[], weatherCode: [] as number[] };
+    dates.forEach((date, i) => {
+      const day = hoursFor(date, (h) => ({ temp: 70, precip: date === rainyDate && h === 16 ? 70 : 5, wind: 5, visibility: 10, uv: 4, code: codes[i] }));
+      for (const key of Object.keys(merged) as (keyof typeof merged)[]) (merged[key] as unknown[]).push(...(day[key] as unknown[]));
+    });
+    return merged;
+  }
+  it("renders a day-by-day outlook instead of collapsing to today's hourly card", async () => {
+    mocks.geocode.mockResolvedValue(GEO);
+    mocks.interpretTime.mockResolvedValue({ kind: "window", window: window("2026-09-28T00:00:00", "2026-10-05T00:00:00", "the next 7 days"), moment: null, place: null });
+    const dates = ["2026-09-28", "2026-09-29", "2026-09-30", "2026-10-01", "2026-10-02", "2026-10-03", "2026-10-04"];
+    const codes = [0, 0, 61, 0, 0, 2, 0];
+    mocks.forecast.mockResolvedValue({
+      current: { time: "2026-09-28T15:00", temperature: 77, humidity: 38, weatherCode: 0, windSpeed: 7, windDirection: 315, windGusts: 12, isDay: true },
+      hourly: sevenDaysHourly(dates, codes, "2026-09-30"),
+      daily: {
+        time: dates, tempMax: dates.map((_, i) => 82 + i), tempMin: dates.map((_, i) => 60 + i),
+        sunrise: dates.map((d) => `${d}T07:00`), sunset: dates.map((d) => `${d}T19:00`), precipitationInches: dates.map(() => 0), uvIndexMax: dates.map(() => 6), weatherCode: codes,
+      },
+    });
+    const answer = await answerWeather("Weather for next 7 days", "Sunnyvale, CA", "u1", false, [], "2026-09-28", "", "2026-09-28T22:00:00Z");
+    const card = JSON.parse(answer.match(/```daylark-card\n([\s\S]*?)\n```/)![1]);
+    expect(card.eyebrow).toBe("7-day outlook · Sunnyvale, CA");
+    expect(card.days).toHaveLength(7);
+    expect(card.days[0]).toMatchObject({ high: 82, low: 60 });
+    expect(card.days[2].precipPercent).toBeGreaterThanOrEqual(40); // the one rainy day (code 61) should be flagged
+    expect(card.insight).toContain("Rain chance on");
+    expect(card.hourly).toEqual([]);
+  });
+
+  it("still treats a 2-day window (\"the weekend\") as the existing single-day-shaped card, unchanged", async () => {
+    mocks.geocode.mockResolvedValue(GEO);
+    mocks.interpretTime.mockResolvedValue({ kind: "window", window: window("2026-10-03T00:00:00", "2026-10-05T00:00:00", "the weekend"), moment: null, place: null });
+    const sat = hoursFor("2026-10-03", () => ({ temp: 70, precip: 0, wind: 5, visibility: 10, uv: 4, code: 0 }));
+    mocks.forecast.mockResolvedValue({
+      current: { time: "2026-09-28T15:00", temperature: 77, humidity: 38, weatherCode: 0, windSpeed: 7, windDirection: 315, windGusts: 12, isDay: true },
+      hourly: sat,
+      daily: { time: ["2026-10-03", "2026-10-04"], tempMax: [80, 81], tempMin: [58, 59], sunrise: ["2026-10-03T07:00", "2026-10-04T07:01"], sunset: ["2026-10-03T19:00", "2026-10-04T18:58"], precipitationInches: [0, 0], uvIndexMax: [5, 5], weatherCode: [0, 0] },
+    });
+    const answer = await answerWeather("weather this weekend", "Sunnyvale, CA", "u1", false, [], "2026-09-28", "", "2026-09-28T22:00:00Z");
+    const card = JSON.parse(answer.match(/```daylark-card\n([\s\S]*?)\n```/)![1]);
+    expect(card.days).toBeUndefined();
+  });
+});
+
 describe("degradation, never a crash", () => {
   it("asks which city or ZIP when geocoding finds nothing, even for the place pulled out of the phrase", async () => {
     mocks.geocode.mockResolvedValue(null);
