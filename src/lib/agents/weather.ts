@@ -1,3 +1,4 @@
+import { extractPlaceForUser } from "./weather-place";
 import { Temporal } from "@js-temporal/polyfill";
 import { embedCard, type WeatherCardPayload } from "@/lib/chat/card-payload";
 import { conditionFor, fetchForecast, geocodeLocation, FOG_CODES, RAIN_CODES, type Forecast } from "@/lib/tools/weather/open-meteo";
@@ -138,9 +139,16 @@ function renderWeatherText(card: WeatherCardPayload): string {
  * framings: now, a narrowed daypart tomorrow, a yes/no rain question days out, or tonight. Falls back to the
  * existing Tavily-backed general search on any failure -- a plain, if less structured, answer beats nothing.
  */
-export async function answerWeather(input: string, place: string, userId: string, yesNo: boolean, context: { role: "user" | "assistant"; content: string }[] = [], today?: string, memoryContext = "", now: string = Temporal.Now.instant().toString()): Promise<string> {
+export async function answerWeather(input: string, place: string, userId: string, yesNo: boolean, context: { role: "user" | "assistant"; content: string }[] = [], today?: string, memoryContext = "", now: string = Temporal.Now.instant().toString(), homeRegion = "", extract: (text: string) => Promise<string> = (text) => extractPlaceForUser(text, userId)): Promise<string> {
   try {
-    const geo = await geocodeLocation(place);
+    // The place as given; failing that, just the place pulled out of a messy phrase; failing that -- only when the text names no place at
+    // all -- the saved home. A place that IS named but can't be found is asked about, never swapped for home (that would answer the wrong city).
+    let geo = await geocodeLocation(place);
+    if (!geo) {
+      const extracted = await extract(place);
+      if (extracted && extracted.toLowerCase() !== place.trim().toLowerCase()) geo = await geocodeLocation(extracted);
+      if (!geo && !extracted && homeRegion) geo = await geocodeLocation(homeRegion);
+    }
     if (!geo) return `I couldn't find a location for "${place}". Which city or ZIP code did you mean?`;
     const reading = await interpretTimeForUser({ message: input, today: today ?? Temporal.Now.zonedDateTimeISO(DEFAULT_TIME_ZONE).toPlainDate().toString(), timeZone: geo.timezone, userId, context });
     if (reading.kind === "unavailable") return TIME_UNAVAILABLE;

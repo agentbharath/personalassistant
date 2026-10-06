@@ -243,7 +243,7 @@ export async function dispatchDecision(decision: RouterDecision, ctx: DispatchCo
       const runOne = (query: string, index: number) => {
         if (decision.searchKind === "places") return answerPlacesSearch(query, index === 0 ? remember : undefined, searchMemory);
         if (decision.searchKind === "fares") return answerFlightFares(query, today, userId);
-        if (decision.searchKind === "weather") return answerWeather(input, query || homeRegion || "", userId, Boolean(decision.weatherYesNo), context, today, searchMemory);
+        if (decision.searchKind === "weather") return answerWeather(input, query || homeRegion || "", userId, Boolean(decision.weatherYesNo), context, today, searchMemory, undefined, homeRegion ?? "");
         if (decision.searchKind === "stocks") return answerStock(query, searchMemory, today);
         if (decision.searchKind === "sports") return answerSports(query, userId, searchMemory, today);
         if (decision.searchKind === "news") return answerNewsForUser(query, userId, searchMemory, today);

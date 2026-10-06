@@ -120,11 +120,36 @@ describe("tonight", () => {
 });
 
 describe("degradation, never a crash", () => {
-  it("asks which city or ZIP when geocoding finds nothing", async () => {
+  it("asks which city or ZIP when geocoding finds nothing, even for the place pulled out of the phrase", async () => {
     mocks.geocode.mockResolvedValue(null);
-    const answer = await answerWeather("what's the weather", "Nowhereville", "u1", false, []);
+    const answer = await answerWeather("what's the weather", "Nowhereville", "u1", false, [], undefined, "", undefined, "Sunnyvale, CA", async () => "Nowhereville Heights");
     expect(answer).toContain("couldn't find a location");
     expect(answer).not.toContain("daylark-card");
+    expect(mocks.geocode).not.toHaveBeenCalledWith("Sunnyvale, CA");
+  });
+
+  it("pulls just the place out of a messy phrase the geocoder can't read (found live: \"weather forecast Sunnyvale, CA next 7 days\" dead-ended)", async () => {
+    mocks.geocode.mockImplementation(async (query: string) => (query === "Sunnyvale, CA" ? GEO : null));
+    mocks.interpretTime.mockResolvedValue({ kind: "window", window: window("2026-09-28T00:00:00", "2026-09-29T00:00:00", "today"), moment: null, place: null });
+    mocks.forecast.mockRejectedValue(new Error("stop after place resolution"));
+    mocks.publicSearch.mockResolvedValue("plain search");
+    const extract = vi.fn().mockResolvedValue("Sunnyvale, CA");
+    await answerWeather("Weather for next 7 days", "weather forecast Sunnyvale, CA next 7 days", "u1", false, [], undefined, "", undefined, "Sunnyvale, CA", extract);
+    expect(extract).toHaveBeenCalledWith("weather forecast Sunnyvale, CA next 7 days");
+    expect(mocks.forecast).toHaveBeenCalled();
+  });
+
+  it("uses the saved home only when the text names no place at all", async () => {
+    mocks.geocode.mockImplementation(async (query: string) => (query === "Sunnyvale, CA" ? GEO : null));
+    mocks.interpretTime.mockResolvedValue({ kind: "window", window: window("2026-09-28T00:00:00", "2026-09-29T00:00:00", "today"), moment: null, place: null });
+    mocks.forecast.mockRejectedValue(new Error("stop after place resolution"));
+    mocks.publicSearch.mockResolvedValue("plain search");
+    await answerWeather("Weather for next 7 days", "next 7 days", "u1", false, [], undefined, "", undefined, "Sunnyvale, CA", async () => "");
+    expect(mocks.forecast).toHaveBeenCalled();
+    mocks.forecast.mockClear();
+    const none = await answerWeather("Weather", "next 7 days", "u1", false, [], undefined, "", undefined, "", async () => "");
+    expect(none).toContain("couldn't find a location");
+    expect(mocks.forecast).not.toHaveBeenCalled();
   });
 
   it("asks about the time instead of guessing when it's ambiguous", async () => {
