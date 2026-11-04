@@ -2,14 +2,14 @@
 
 **Your day, in one conversation.** A private personal assistant that understands my calendar, email, and spending together, and never changes anything without my approval.
 
-**Live:** [personalassistant-delta.vercel.app](https://personalassistant-delta.vercel.app) (sign-in is restricted to me, since it runs on my real Gmail, calendar, and finances) · **Demo:** [2-minute walkthrough](DEMO_LINK)
+**Live:** [personalassistant-delta.vercel.app](https://personalassistant-delta.vercel.app) (sign-in is restricted to me, since it runs on my real Gmail, calendar, and finances) ·
 
-<!-- Add 2-3 screenshots here: a chat answer, the Perch day view, an approval card -->
 <p align="center">
-  <img src="docs/images/chat.png" width="32%" alt="Chat answer" />
-  <img src="docs/images/perch.png" width="32%" alt="Perch day view" />
-  <img src="docs/images/approval.png" width="32%" alt="Approval card" />
+  <img src="https://github.com/user-attachments/assets/9314d207-7682-424d-908c-cd03c087ea7b" width="30%" alt="Home" />
+  <img src="https://github.com/user-attachments/assets/df24badd-691f-46f6-8a29-4280cf8138ff" width="30%" alt="Styled answer card" />
+  <img src="https://github.com/user-attachments/assets/1a7d0212-ca9a-4b14-9b4b-c3079c0a0698" width="30%" alt="Perch spending view" />
 </p>
+
 
 ---
 
